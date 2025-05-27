@@ -3,10 +3,10 @@ import argparse
 import networkx as nx
 import pickle
 from tqdm import tqdm
-
 from registry.extractor_registry import get_extractor
 from utils.networkx_graph import load_components, build_graph_from_schema
 from adapters.haskell_adapter import adapt_haskell_components
+from adapters.python_adapter import adapt_python_components
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -25,7 +25,8 @@ LANGUAGE         = args.LANGUAGE.lower()
 os.makedirs(OUTPUT_BASE, exist_ok=True)
 os.makedirs(GRAPH_OUTPUT_DIR, exist_ok=True)
 
-EXT = { 'haskell': '.hs' }.get(LANGUAGE, '')
+EXT_MAP = {'haskell': '.hs', 'python':  '.py',}
+EXT = EXT_MAP.get(LANGUAGE, '')
 extractor = get_extractor(LANGUAGE)
 
 hs_files = []
@@ -47,6 +48,8 @@ print(f"Done! All outputs in: {OUTPUT_BASE}/")
 raw_funcs = list(load_components(OUTPUT_BASE).values())
 if LANGUAGE == 'haskell':
     unified_schema = adapt_haskell_components(raw_funcs)
+elif LANGUAGE == 'python':
+    unified_schema = adapt_python_components(raw_funcs)
 else:
     raise RuntimeError(f"No adapter for language: {LANGUAGE}")
 
