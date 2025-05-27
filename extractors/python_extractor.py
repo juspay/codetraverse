@@ -6,22 +6,17 @@ from base.component_extractor import ComponentExtractor
 
 class PythonComponentExtractor(ComponentExtractor):
     def __init__(self):
-        # ⬇️ DO NOT CHANGE THESE TWO LINES ⬇️
         self.PY_LANGUAGE = Language(tree_sitter_python.language())
         self.parser     = Parser(self.PY_LANGUAGE)
-        # ——————————————————————————————
         self.import_map = {}
         self.all_components = []
 
     def process_file(self, file_path):
-        # Read raw bytes
         src = open(file_path, "rb").read()
         tree = self.parser.parse(src)
 
-        # 1) imports
         self.import_map = self._collect_imports(tree.root_node, src)
 
-        # 2) top-level defs
         self.all_components = []
         for node in tree.root_node.named_children:
             if node.type in ("import_statement", "import_from_statement"):
@@ -38,7 +33,6 @@ class PythonComponentExtractor(ComponentExtractor):
     def extract_all_components(self):
         return self.all_components
 
-    # ——— Helpers ———
 
     def _collect_imports(self, root: Node, src: bytes):
         imports = defaultdict(list)
@@ -78,7 +72,6 @@ class PythonComponentExtractor(ComponentExtractor):
         return dict(imports)
 
     def _process_function(self, node: Node, src: bytes):
-        # name & lines
         name_node  = node.child_by_field_name("name")
         name       = src[name_node.start_byte:name_node.end_byte]\
                          .decode("utf-8", errors="replace")
@@ -86,8 +79,6 @@ class PythonComponentExtractor(ComponentExtractor):
         end_line   = node.end_point[0] + 1
         code       = src[node.start_byte:node.end_byte]\
                          .decode("utf-8", errors="replace")
-
-        # parameters
         params = []
         params_node = node.child_by_field_name("parameters")
         if params_node:
@@ -96,8 +87,6 @@ class PythonComponentExtractor(ComponentExtractor):
                            .decode("utf-8", errors="replace")\
                            .strip()
                 params.append(text)
-
-        # calls
         calls = []
         def walk_calls(n: Node):
             if n.type == "call":
@@ -109,7 +98,6 @@ class PythonComponentExtractor(ComponentExtractor):
             for c in n.children:
                 walk_calls(c)
         walk_calls(node)
-
         return {
             "kind":            "function",
             "name":            name,
@@ -122,7 +110,6 @@ class PythonComponentExtractor(ComponentExtractor):
         }
 
     def _process_class(self, node: Node, src: bytes):
-        # name & lines
         name_node  = node.child_by_field_name("name")
         name       = src[name_node.start_byte:name_node.end_byte]\
                          .decode("utf-8", errors="replace")
@@ -130,23 +117,18 @@ class PythonComponentExtractor(ComponentExtractor):
         end_line   = node.end_point[0] + 1
         code       = src[node.start_byte:node.end_byte]\
                          .decode("utf-8", errors="replace")
-
-        # base classes
         bases = []
         bases_node = node.child_by_field_name("superclasses")
         if bases_node:
             for b in bases_node.named_children:
                 bases.append(src[b.start_byte:b.end_byte]\
                                  .decode("utf-8", errors="replace"))
-
-        # methods
         methods = []
         body = node.child_by_field_name("body")
         if body:
             for stmt in body.named_children:
                 if stmt.type == "function_definition":
                     methods.append(self._process_function(stmt, src))
-
         return {
             "kind":           "class",
             "name":           name,
