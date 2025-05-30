@@ -92,7 +92,10 @@ class RescriptComponentExtractor(ComponentExtractor):
         return dict(imports)
 
     def _extract_module(self, node: Node):
-        name_node = node.child(1).child(0)
+        if node.child(1).type == "type":
+            name_node = node.child(2).child(0)
+        else:
+            name_node = node.child(1).child(0)
         if not name_node or node.type != "module_declaration":
             return None
         name = self._get_node_text(name_node)
