@@ -197,6 +197,16 @@ class RescriptComponentExtractor(ComponentExtractor):
                     components.append(component)
         return components if components else None
 
+    def is_function(self, code: str) -> bool:
+        passed_equal = False
+        for i in range(0, len(code)-1):
+            if code[i] == "=" and code[i+1]!=">":
+                passed_equal = True
+            elif code[i] == "(" or code[i]+code[i+1] == "=>" and passed_equal:
+                return True
+            elif passed_equal and (code[i] == "{" or code[i].isalnum()):
+                return False
+        return False
 
     def _extract_let_binding_details(self, node: Node): # Renamed from _extract_value_binding
         pattern_node = node.child_by_field_name("pattern")
@@ -275,7 +285,7 @@ class RescriptComponentExtractor(ComponentExtractor):
         if fn_body_for_walk:
             walk(fn_body_for_walk)
         
-        kind = "function" if is_function else "variable"
+        kind = "function" if self.is_function(self._get_node_text(node)) else "variable"
         
         result = {
             "kind": kind, "name": name,
