@@ -7,6 +7,7 @@ from registry.extractor_registry import get_extractor
 from utils.networkx_graph import load_components, build_graph_from_schema
 from adapters.haskell_adapter import adapt_haskell_components
 from adapters.python_adapter import adapt_python_components
+from adapters.rescript_adapter import adapt_rescript_components
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -25,7 +26,7 @@ LANGUAGE         = args.LANGUAGE.lower()
 os.makedirs(OUTPUT_BASE, exist_ok=True)
 os.makedirs(GRAPH_OUTPUT_DIR, exist_ok=True)
 
-EXT_MAP = {'haskell': '.hs', 'python':  '.py',}
+EXT_MAP = {'haskell': '.hs', 'python':  '.py', 'rescript': '.res'}
 EXT = EXT_MAP.get(LANGUAGE, '')
 extractor = get_extractor(LANGUAGE)
 
@@ -50,6 +51,8 @@ if LANGUAGE == 'haskell':
     unified_schema = adapt_haskell_components(raw_funcs)
 elif LANGUAGE == 'python':
     unified_schema = adapt_python_components(raw_funcs)
+elif LANGUAGE == 'rescript':
+    unified_schema = adapt_rescript_components(raw_funcs)
 else:
     raise RuntimeError(f"No adapter for language: {LANGUAGE}")
 
