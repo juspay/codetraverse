@@ -1,63 +1,90 @@
-# adapters/python_adapter.py
-
 def adapt_python_components(raw_components):
     nodes = []
     edges = []
 
+    def add_node(name, category, extra=None):
+        node = {"id": name, "category": category}
+        if extra:
+            node.update(extra)
+        if name not in seen_nodes:
+            seen_nodes[name] = node
+            nodes.append(node)
+        return node
+
+    seen_nodes = {}
+
     for comp in raw_components:
-        nodes.append({
-            "id":       comp["name"],
-            "category": comp.get("kind", "unknown"),
-            "signature": None,
-            "location": {
-                "start": comp.get("start_line"),
-                "end":   comp.get("end_line")
-            }
-        })
-
-        if comp["kind"] == "class":
-            for method in comp.get("methods", []):
-                nodes.append({
-                    "id":       method["name"],
-                    "category": "function",
-                    "signature": None,
-                    "location": {
-                        "start": method.get("start_line"),
-                        "end":   method.get("end_line")
-                    }
-                })
-                edges.append({
-                    "from":     comp["name"],
-                    "to":       method["name"],
-                    "relation": "defines"
-                })
-                for call in method.get("function_calls", []):
-                    callee = call["name"] if isinstance(call, dict) else call
-                    edges.append({
-                        "from":     method["name"],
-                        "to":       callee,
-                        "relation": "calls"
-                    })
-
         if comp["kind"] == "function":
+            fn_node = add_node(comp["name"], "function", {
+                "signature": comp.get("parameters", []),
+                "location": {
+                    "start": comp["start_line"],
+                    "end": comp["end_line"]
+                }
+            })
+
             for call in comp.get("function_calls", []):
-                callee = call["name"] if isinstance(call, dict) else call
+                add_node(call, "function")
                 edges.append({
-                    "from":     comp["name"],
-                    "to":       callee,
+                    "from": comp["name"],
+                    "to": call,
                     "relation": "calls"
                 })
 
-    seen = {n["id"] for n in nodes}
-    for e in edges:
-        for node_id in (e["from"], e["to"]):
-            if node_id not in seen:
-                nodes.append({
-                    "id":       node_id,
-                    "category": "unknown",
-                    "signature": None,
-                    "location": {"start": None, "end": None}
+            # embed parameters and any inferred variable references
+            for param in comp.get("parameters", []):
+                add_node(f"{comp['name']}::{param}", "parameter")
+                edges.append({
+                    "from": comp["name"],
+                    "to": f"{comp['name']}::{param}",
+                    "relation": "defines"
                 })
-                seen.add(node_id)
+
+        elif comp["kind"] == "class":
+            class_node = add_node(comp["name"], "class", {
+                "location": {
+                    "start": comp["start_line"],
+                    "end": comp["end_line"]
+                }
+            })
+
+            for base in comp.get("base_classes", []):
+                add_node(base, "class")
+                edges.append({
+                    "from": comp["name"],
+                    "to": base,
+                    "relation": "inherits"
+                })
+
+            for method in comp.get("methods", []):
+                method_node = add_node(f"{comp['name']}::{method['name']}", "method", {
+                    "signature": method.get("parameters", []),
+                    "location": {
+                        "start": method["start_line"],
+                        "end": method["end_line"]
+                    }
+                })
+
+                edges.append({
+                    "from": comp["name"],
+                    "to": f"{comp['name']}::{method['name']}",
+                    "relation": "has_method"
+                })
+
+                for call in method.get("function_calls", []):
+                    add_node(call, "function")
+                    edges.append({
+                        "from": f"{comp['name']}::{method['name']}",
+                        "to": call,
+                        "relation": "calls"
+                    })
+
+                for param in method.get("parameters", []):
+                    add_node(f"{comp['name']}::{method['name']}::{param}", "parameter")
+                    edges.append({
+                        "from": f"{comp['name']}::{method['name']}",
+                        "to": f"{comp['name']}::{method['name']}::{param}",
+                        "relation": "defines"
+                    })
 
     return {"nodes": nodes, "edges": edges}
