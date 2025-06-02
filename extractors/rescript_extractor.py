@@ -92,18 +92,30 @@ class RescriptComponentExtractor(ComponentExtractor):
         return dict(imports)
 
     def _extract_module(self, node: Node):
-        if node.child(1).type == "type":
-            name_node = node.child(2).child(0)
-        else:
-            name_node = node.child(1).child(0)
-        if not name_node or node.type != "module_declaration":
+        """
+        Extract a module declaration node safely, handling cases where the AST shape
+        doesn’t match exactly the “child(1).child(0)” pattern.
+        """
+        name_node = node.child_by_field_name("name")
+
+        if not name_node:
+            for child in node.named_children:
+                if child.type in ("module_identifier", "module_identifier_path"):
+                    name_node = child
+                    break
+
+        if not name_node:
             return None
+
         name = self._get_node_text(name_node)
-        start, end = node.start_point[0] + 1, node.end_point[0] + 1
+
+        start_line = node.start_point[0] + 1
+        end_line   = node.end_point[0] + 1
+
         code = self._get_node_text(node)
 
         children_components = []
-        body_node = node.child_by_field_name("body") 
+        body_node = node.child_by_field_name("body")
         if body_node and body_node.type == "module_items":
             for stmt_node in body_node.named_children:
                 extractor = self._get_extractor(stmt_node)
@@ -114,13 +126,17 @@ class RescriptComponentExtractor(ComponentExtractor):
                             children_components.extend(child_comp)
                         else:
                             children_components.append(child_comp)
-        
+
         return {
-            "kind": "module", "name": name,
-            "start_line": start, "end_line": end, "code": code,
-            "import_map": self.import_map, 
+            "kind": "module",
+            "name": name,
+            "start_line": start_line,
+            "end_line": end_line,
+            "code": code,
+            "import_map": self.import_map,
             "elements": children_components
         }
+
 
     def _extract_type(self, node: Node):
         name_node = node.child_by_field_name("name") 
