@@ -36,6 +36,11 @@ def adapt_rescript_components(raw_components):
             if return_type:
                 node["return_type"] = return_type
 
+        literals = comp.get("literals", [])
+        if literals:
+            node["literals"] = literals
+            node["literal_count"] = len(literals)
+
         nodes.append(node)
 
         if parent_name:
@@ -49,15 +54,37 @@ def adapt_rescript_components(raw_components):
         for fn_call in function_calls:
             if isinstance(fn_call, dict):
                 target = fn_call.get("name", str(fn_call))
+            elif isinstance(fn_call, str):
+                target = fn_call
             else:
                 target = str(fn_call)
             
-            if target and target != name:
+            target = target.strip()
+            
+            if target and target != name and target != "":
                 edges.append({
                     "from": name,
                     "to": target,
                     "relation": "calls"
                 })
+
+
+        literals = comp.get("literals", [])
+        for literal in literals:
+            if isinstance(literal, str):
+                literal = literal.strip()
+        
+                if (literal and 
+                    len(literal) > 2 and
+                    not literal.startswith('"') and
+                    not literal.isdigit() and
+                    literal not in ["true", "false", "()"]):
+                    
+                    edges.append({
+                        "from": name,
+                        "to": f"literal_{literal}",
+                        "relation": "uses_literal"
+                    })
 
         local_vars = comp.get("local_variables", [])
         for local_var in local_vars:
@@ -112,9 +139,19 @@ def adapt_rescript_components(raw_components):
     for edge in edges:
         for endpoint in (edge["from"], edge["to"]):
             if endpoint not in seen_nodes:
+                category = "external_reference"
+                
+        
+                if endpoint.startswith("literal_"):
+                    category = "literal"
+                elif "." in endpoint:
+                    category = "module_function"
+                elif edge["relation"] == "calls":
+                    category = "external_function"
+                
                 nodes.append({
                     "id": endpoint,
-                    "category": "external_reference"
+                    "category": category
                 })
                 seen_nodes.add(endpoint)
 
@@ -131,6 +168,8 @@ def adapt_rescript_components(raw_components):
                 })
 
     print(f"Created {len(nodes)} nodes and {len(edges)} edges")
-    print(f"Sample edges: {edges[:5] if edges else 'No edges created'}")
-    
+    function_call_edges = [e for e in edges if e["relation"] == "calls"]
+    literal_edges = [e for e in edges if e["relation"] == "uses_literal"]
+    print(f"Function call edges: {len(function_call_edges)}")
+    print(f"Literal usage edges: {len(literal_edges)}")
     return {"nodes": nodes, "edges": edges}
