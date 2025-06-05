@@ -38,7 +38,6 @@ def resolve_component_name(G, component_spec):
         return None
     
     # Search for a node that matches both file_name and component_name
-    matches = []
     for node_id in G.nodes():
         attrs = G.nodes[node_id]
         node_file = attrs.get("file_name")
@@ -48,24 +47,11 @@ def resolve_component_name(G, component_spec):
             return node_id
         
         # Also check if the node_id itself contains the component name
+        # (in case the node_id is like "ClassName.method_name" and we're looking for "method_name")
         if node_file == file_name and component_name in node_id:
-            matches.append(node_id)
-        
-        # Store potential matches for debugging
-        if node_file and (file_name in node_file or node_file in file_name):
-            if component_name in node_id:
-                matches.append(f"POTENTIAL: {node_id} in file {node_file}")
-    
-    # If we have exact matches, return the first one
-    exact_matches = [m for m in matches if not m.startswith("POTENTIAL:")]
-    if exact_matches:
-        return exact_matches[0]
-    
-    # Print debug info if no exact match found
-    if matches:
-        print(f"DEBUG: Potential matches for {component_spec}:")
-        for match in matches:
-            print(f"  {match}")
+            # For exact match, we could be more strict here
+            if node_id.endswith(component_name) or node_id == component_name:
+                return node_id
     
     return None
 

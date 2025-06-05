@@ -70,48 +70,32 @@ class RescriptComponentExtractor(ComponentExtractor):
 
         def traverse_for_calls(n: Node):
             if n.type == 'call_expression':
-                fn_node = None
-                for child in n.named_children:
-                    if child.type in ('value_identifier', 'value_identifier_path', 'member_expression'):
-                        fn_node = child
-                        break
-                if fn_node:
-                    txt = self._get_node_text(fn_node).strip()
-                    if txt:
-                        function_calls.append(txt)
-
+                function_node = n.child_by_field_name('function')
+                if function_node:
+                    call_name = self._get_node_text(function_node).strip()
+                    if call_name:
+                        function_calls.append(call_name)
+            
             elif n.type == 'pipe_expression':
-                for child in n.named_children:
-                    if child.type in ('call_expression', 'value_identifier', 'value_identifier_path'):
-                        txt = self._get_node_text(child).strip()
-                        if txt:
-                            function_calls.append(txt)
+                right_operand = n.child_by_field_name('right')
+                if right_operand:
+                    if right_operand.type in ('value_identifier', 'value_identifier_path', 'member_expression'):
+                        call_name = self._get_node_text(right_operand).strip()
+                        if call_name:
+                            function_calls.append(call_name)
+            
+            for child_node in n.children: 
+                traverse_for_calls(child_node)
 
-            elif n.type == 'value_identifier_path':
-                parent = n.parent
-                if parent and parent.type in ('call_expression', 'pipe_expression'):
-                    txt = self._get_node_text(n).strip()
-                    if txt:
-                        function_calls.append(txt)
+        traverse_for_calls(node) 
 
-            elif n.type == 'value_identifier':
-                parent = n.parent
-                if parent and parent.type in ('call_expression', 'pipe_expression'):
-                    txt = self._get_node_text(n).strip()
-                    if txt:
-                        function_calls.append(txt)
-
-            for c in n.children:
-                traverse_for_calls(c)
-
-        traverse_for_calls(node)
         seen = set()
-        unique = []
-        for fn in function_calls:
-            if fn not in seen:
-                seen.add(fn)
-                unique.append(fn)
-        return unique
+        unique_calls = []
+        for call in function_calls:
+            if call not in seen: 
+                seen.add(call)
+                unique_calls.append(call)
+        return unique_calls
 
     def extract_literals(self, node: Node) -> list:
         literals = []
@@ -182,6 +166,8 @@ class RescriptComponentExtractor(ComponentExtractor):
             "type_declaration": self._extract_type,
             "external_declaration": self._extract_external,
             "let_declaration": self._extract_let_declaration,
+            "jsx_element": self._extract_jsx_element,
+            "jsx_self_closing_element": self._extract_jsx_element,
         }.get(node.type)
 
     def _collect_imports(self, root: Node):
@@ -238,31 +224,34 @@ class RescriptComponentExtractor(ComponentExtractor):
         end_line = node.end_point[0] + 1
         code = self._get_node_text(node)
         children = []
-        for binding in node.named_children:
-            if binding.type == "module_binding":
-                for block_or_stmt in binding.named_children:
-                    if block_or_stmt.type == "block":
-                        for stmt in block_or_stmt.named_children:
-                            ext = self._get_extractor(stmt)
-                            if ext:
-                                child_comp = ext(stmt)
-                                if child_comp:
-                                    if isinstance(child_comp, list):
-                                        children.extend(child_comp)
-                                    else:
-                                        children.append(child_comp)
-                    else:
-                        ext = self._get_extractor(block_or_stmt)
-                        if ext:
-                            child_comp = ext(block_or_stmt)
-                            if child_comp:
-                                if isinstance(child_comp, list):
-                                    children.extend(child_comp)
-                                else:
-                                    children.append(child_comp)
+        module_body_node = None
+        for child in node.named_children:
+            if child.type == "module_binding":
+                for item_node in child.named_children: 
+                    if item_node.type == "block": 
+                        module_body_node = item_node
+                        break
+                if module_body_node is None : 
+                    module_body_node = child 
+                break
+        
+        if module_body_node is None and node.child_by_field_name("body"): 
+            module_body_node = node.child_by_field_name("body")
 
-        func_calls = self.extract_function_calls(node)
-        lits = self.extract_literals(node)
+
+        if module_body_node:
+            for item_node in module_body_node.named_children:
+                extractor = self._get_extractor(item_node)
+                if extractor:
+                    child_comp = extractor(item_node)
+                    if child_comp:
+                        if isinstance(child_comp, list):
+                            children.extend(child_comp)
+                        else:
+                            children.append(child_comp)
+        
+        func_calls = self.extract_function_calls(node) 
+        lits = self.extract_literals(node) 
 
         comp = {
             "kind": "module",
@@ -270,12 +259,12 @@ class RescriptComponentExtractor(ComponentExtractor):
             "start_line": start_line,
             "end_line": end_line,
             "code": code,
-            "import_map": self.import_map,
-            "elements": children,
+            "import_map": self.import_map, 
+            "elements": children, 
             "function_calls": func_calls,
             "literals": lits,
         }
-        comp["module_name"] = mod_name
+        comp["module_name"] = mod_name 
         comp["file_name"] = self.file_module_name
         return comp
 
@@ -400,24 +389,25 @@ class RescriptComponentExtractor(ComponentExtractor):
                     return True
         return False
 
-    def _extract_let_binding_details(self, node: Node):
-        pattern_node = node.child_by_field_name("pattern")
+    def _extract_let_binding_details(self, let_binding_node: Node): 
+        pattern_node = let_binding_node.child_by_field_name("pattern")
         if not pattern_node:
             return None
         name = self._get_node_text(pattern_node).strip()
 
-        start, end = node.start_point[0] + 1, node.end_point[0] + 1
-        code = self._get_node_text(node)
+        start, end = let_binding_node.start_point[0] + 1, let_binding_node.end_point[0] + 1
+        code = self._get_node_text(let_binding_node)
 
         params = []
         param_annotations = {}
         return_type_annotation = None
 
-        value_node = node.child_by_field_name("value")
+        value_node = let_binding_node.child_by_field_name("body")
         is_explicit_fn = value_node and value_node.type == "function"
+        
         fn_body_for_walk = None
-
         if is_explicit_fn:
+            # print("Found explicit function definition")
             parameters_node = value_node.child_by_field_name("parameters")
             if parameters_node:
                 for param_container in parameters_node.named_children:
@@ -426,71 +416,76 @@ class RescriptComponentExtractor(ComponentExtractor):
                         if (param_container.named_children and
                             param_container.named_children[0].type == "labeled_parameter"):
                             actual = param_container.named_children[0]
-
                         param_name_text = ""
-                        cand = actual.child_by_field_name("name")
-                        if not cand and actual.type == "parameter":
-                            cand = actual.child_by_field_name("pattern")
-
+                        cand = actual.child_by_field_name("name") or actual.child_by_field_name("pattern")
                         if cand:
                             param_name_text = self._get_node_text(cand).strip()
                         if param_name_text:
                             params.append(param_name_text)
-                            param_type_ann = actual.child_by_field_name("type")
-                            if param_type_ann and param_type_ann.type == "type_annotation":
-                                actual_type_n = param_type_ann.child_by_field_name("type")
-                                if actual_type_n:
-                                    ttext = self._get_node_text(actual_type_n).strip()
-                                    if ttext:
-                                        param_annotations[param_name_text] = ttext
-
-            return_type_node = value_node.child_by_field_name("type")
-            if return_type_node and return_type_node.type == "type_annotation":
-                actual_return = return_type_node.child_by_field_name("type")
-                if actual_return:
-                    rtext = self._get_node_text(actual_return).strip()
-                    if rtext:
-                        return_type_annotation = rtext
-
+                            param_type_ann_node = actual.child_by_field_name("type")
+                            if param_type_ann_node and param_type_ann_node.type == "type_annotation":
+                                actual_type_node = param_type_ann_node.child_by_field_name("type")
+                                if actual_type_node:
+                                    type_text = self._get_node_text(actual_type_node).strip()
+                                    if type_text:
+                                        param_annotations[param_name_text] = type_text
+            return_type_ann_node = value_node.child_by_field_name("type")
+            if return_type_ann_node and return_type_ann_node.type == "type_annotation":
+                actual_return_node = return_type_ann_node.child_by_field_name("type")
+                if actual_return_node:
+                    return_type_text = self._get_node_text(actual_return_node).strip()
+                    if return_type_text:
+                        return_type_annotation = return_type_text
+            
             fn_body_for_walk = value_node.child_by_field_name("body")
         else:
             fn_body_for_walk = value_node
+        # print(fn_body_for_walk)
 
-        calls = self.extract_function_calls(node)
-        lits = self.extract_literals(node)
+        calls = self.extract_function_calls(let_binding_node)
+        lits = self.extract_literals(let_binding_node)
 
-        local_vars, jsx_elems = [], []
+        local_vars = []
+        jsx_elems = []
 
-        def walk_recursive(cur: Node, depth: int = 0):
-            if depth > 50:
+        def walk_recursive(current_node: Node, current_depth: int = 0):
+            # print("got current_node")
+            if current_depth > 50: return
+            if current_node is None: 
                 return
-            if cur.type == "let_declaration":
-                for bind in cur.named_children:
-                    if bind.type == "let_binding" and bind != node:
-                        lv = self._extract_let_binding_details(bind)
-                        if lv:
-                            local_vars.append(lv)
-                        continue
-
-            elif cur.type == "let_binding" and cur != node:
-                lv = self._extract_let_binding_details(cur)
-                if lv:
-                    local_vars.append(lv)
-                return
-
-            elif cur.type in ("jsx_element", "jsx_self_closing_element"):
-                jsx_comp = self._extract_jsx_element(cur)
+            if current_node.type in ("jsx_element", "jsx_self_closing_element"):
+                jsx_comp = self._extract_jsx_element(current_node)
                 if jsx_comp:
                     jsx_elems.append(jsx_comp)
-
-            for child in cur.named_children:
-                walk_recursive(child, depth+1)
-
+                    # print("added jsx element")
+            elif current_node.type == "let_declaration":
+                for binding_child in current_node.named_children:
+                    if binding_child.type == "let_binding":
+                        if binding_child != let_binding_node :
+                            local_var_comp = self._extract_let_binding_details(binding_child)
+                            if local_var_comp:
+                                local_vars.append(local_var_comp)
+            for child in current_node.children:
+                walk_recursive(child, current_depth + 1)
+        
         if fn_body_for_walk:
             walk_recursive(fn_body_for_walk)
+        
+        for jsx_comp_item in jsx_elems:
+            tag_name = jsx_comp_item.get("tag_name")
+            if tag_name and tag_name != "UnknownJSX": 
+                if tag_name not in calls: 
+                    calls.append(tag_name)
+        
+        final_unique_calls = []
+        seen_call_names = set()
+        for call_item in calls:
+            if call_item not in seen_call_names:
+                seen_call_names.add(call_item)
+                final_unique_calls.append(call_item)
 
         kind = "variable"
-        if is_explicit_fn or self.is_function(node, code):
+        if is_explicit_fn or self.is_function(let_binding_node, code):
             kind = "function"
 
         comp = {
@@ -499,61 +494,99 @@ class RescriptComponentExtractor(ComponentExtractor):
             "start_line": start,
             "end_line": end,
             "code": code,
-            "literals": lits,
-            "function_calls": calls,
-            "local_variables": local_vars,
-            "jsx_elements": jsx_elems,
-            "import_map": self.import_map
+            "literals": lits, 
+            "function_calls": final_unique_calls, 
+            "local_variables": local_vars, 
+            "jsx_elements": jsx_elems, 
+            "import_map": self.import_map 
         }
+        
         if kind == "function":
             comp["parameters"] = params
             comp["parameter_type_annotations"] = param_annotations
             comp["return_type_annotation"] = return_type_annotation
 
-        module_name = self._find_enclosing_module_name(node)
-        comp["module_name"] = module_name
+        comp["module_name"] = self._find_enclosing_module_name(let_binding_node)
         comp["file_name"] = self.file_module_name
         return comp
 
     def _extract_jsx_element(self, node: Node):
         tag_name = "UnknownJSX"
         attributes = []
+        start_line = node.start_point[0] + 1
+        end_line = node.end_point[0] + 1
+        code = self._get_node_text(node)
 
+        attribute_nodes_container = None
         if node.type == "jsx_element":
             opening = node.child_by_field_name("open_tag")
             if opening:
                 name_node = opening.child_by_field_name("name")
                 if name_node:
-                    tag_name = self._get_node_text(name_node)
-                for attr_node in opening.named_children:
-                    if attr_node.type == "jsx_attribute":
-                        an = attr_node.child_by_field_name("name")
-                        av = attr_node.child_by_field_name("value")
-                        a_name = self._get_node_text(an) if an else None
-                        a_val  = self._get_node_text(av) if av else None
-                        attributes.append({"name": a_name, "value": a_val})
-
+                    tag_name = self._get_node_text(name_node).strip()
+                attribute_nodes_container = opening
         elif node.type == "jsx_self_closing_element":
             name_node = node.child_by_field_name("name")
             if name_node:
-                tag_name = self._get_node_text(name_node)
-            for attr_node in node.named_children:
-                if attr_node.type == "jsx_attribute": 
-                    an = attr_node.child_by_field_name("name")
-                    av = attr_node.child_by_field_name("value")
-                    a_name = self._get_node_text(an) if an else None
-                    a_val  = self._get_node_text(av) if av else None
-                    attributes.append({"name": a_name, "value": a_val})
+                tag_name = self._get_node_text(name_node).strip()
+            attribute_nodes_container = node
 
-        func_calls = self.extract_function_calls(node)
-        lits = self.extract_literals(node)
+        if attribute_nodes_container:
+            actual_attribute_nodes = []
+            for child_of_container in attribute_nodes_container.children:
+                if child_of_container.type == "jsx_attribute":
+                    actual_attribute_nodes.append(child_of_container)
+
+            for attr_node in actual_attribute_nodes: # attr_node is a jsx_attribute
+                a_name_str = None
+                # Default to Python boolean True for valueless attributes (e.g. <button disabled />)
+                a_val_processed = True 
+
+                if attr_node.named_child_count > 0:
+                    name_child_node = attr_node.named_child(0)
+                    # Check if the first named child is a typical attribute name type
+                    if name_child_node.type in ("property_identifier", "jsx_identifier", "identifier", "value_identifier"):
+                        a_name_str = self._get_node_text(name_child_node).strip()
+
+                        # If there's a second named child, it's the value
+                        if attr_node.named_child_count > 1:
+                            value_child_node = attr_node.named_child(1)
+                            val_text = ""
+                            # If value is a jsx_expression_container, get its content
+                            if value_child_node.type == 'jsx_expression_container':
+                                if value_child_node.named_child_count > 0:
+                                    actual_value_expr_node = value_child_node.named_child(0)
+                                    val_text = self._get_node_text(actual_value_expr_node).strip()
+                                else: # Empty JSX expression e.g. attr={}
+                                    val_text = "{}" # Or handle as needed
+                            else: # Direct value like string literal, number, true/false keyword
+                                val_text = self._get_node_text(value_child_node).strip()
+                            
+                            # Convert common string boolean representations to Python booleans
+                            if val_text.lower() == "true":
+                                a_val_processed = True
+                            elif val_text.lower() == "false":
+                                a_val_processed = False
+                            else:
+                                a_val_processed = val_text # Keep as string if not "true" or "false"
+                        # If only one named child (the name), it's a boolean attribute like 'disabled'.
+                        # a_val_processed remains True by default.
+                
+                if a_name_str: # Only add attribute if a name was extracted
+                    attributes.append({"name": a_name_str, "value": a_val_processed})
+
+        func_calls_within_jsx = self.extract_function_calls(node)
+        lits_within_jsx = self.extract_literals(node)
 
         comp = {
             "kind": "jsx",
             "tag_name": tag_name,
+            "start_line": start_line,
+            "end_line": end_line,
+            "code": code,
             "attributes": attributes,
-            "function_calls": func_calls,
-            "literals": lits
+            "function_calls": func_calls_within_jsx, 
+            "literals": lits_within_jsx
         }
         comp["module_name"] = self._find_enclosing_module_name(node)
         comp["file_name"] = self.file_module_name
