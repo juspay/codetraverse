@@ -1,3 +1,5 @@
+import argparse
+import os
 import pickle
 import networkx as nx
 
@@ -13,7 +15,7 @@ def load_graph(graph_path):
 def format_path(G, node_list):
     """
     Annotate each node in node_list with its module_name (if present) or file_name.
-    We stored those as node‐attributes.  If neither exists (unlikely), just print the ID.
+    We stored those as node‐attributes. If neither exists, just print the ID itself.
     """
     enriched = []
     for nid in node_list:
@@ -26,17 +28,6 @@ def format_path(G, node_list):
         else:
             enriched.append(nid)
     return " → ".join(enriched)
-
-def find_from_any_root(G, target):
-    paths = {}
-    roots = [n for (n, deg) in G.in_degree() if deg == 0]
-    for r in roots:
-        try:
-            p = nx.shortest_path(G, source=r, target=target)
-            paths[r] = p
-        except (nx.NetworkXNoPath, nx.NodeNotFound):
-            continue
-    return paths
 
 def find_from_single_source(G, source, target):
     return nx.shortest_path(G, source=source, target=target)
@@ -64,13 +55,34 @@ def find_path(graph_path, component, source=None, quiet=True):
             print(f"No path found from '{source}' to '{target}'.")
             return
     else:
-        paths = find_from_any_root(G, target)
-        if not paths:
-            print(f"No path found from any root to '{target}'.")
-            return
-        if not quiet:
-            print(f"Found path(s) to '{target}' from root node(s):")
-            for root, p in paths.items():
-                print(f"• Root = '{root}':")
-                print("    " + format_path(G, p))
-        return paths
+        preds = list(G.predecessors(target))
+        preds_str_arr = []
+
+        succs = list(G.successors(target))
+        succs_str_arr = []
+
+        if preds:
+            if not quiet:
+                print(f"\nNodes with edges INTO '{target}' ({len(preds)}):")
+            for p in preds:
+                rel = G.get_edge_data(p, target).get("relation", "")
+                edge = f"{p} --[{rel}]--> {target}"
+                if not quiet:
+                    print(f"  {edge}")
+                preds_str_arr.append(edge)
+        else:
+            if not quiet:
+                print(f"\nNo incoming edges to '{target}'.")
+
+        if succs:
+            if not quiet:
+                print(f"\nNodes with edges OUT OF '{target}' ({len(succs)}):")
+            for s in succs:
+                rel = G.get_edge_data(target, s).get("relation", "")
+                edge = f"{target} --[{rel}]--> {s}"
+                if not quiet:
+                    print(f"  {edge}")
+                succs_str_arr.append(edge)
+        else:
+            if not quiet:
+                print(f"\nNo outgoing edges from '{target}'.")
