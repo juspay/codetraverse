@@ -2,6 +2,7 @@ import os
 import json
 import networkx as nx
 from tqdm import tqdm
+from codetraverse.adapters.rescript_adapter import extract_id
 
 def load_components(fdep_dir):
     """
@@ -9,7 +10,6 @@ def load_components(fdep_dir):
     then add them into a dict keyed by extract_id(comp) so that each
     component is uniquely identified by "module::name".
     """
-    from adapters.rescript_adapter import extract_id
 
     funcs = {}
     for dirpath, _, files in os.walk(fdep_dir):

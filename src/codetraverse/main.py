@@ -25,20 +25,17 @@ def create_fdep_data(root_dir, output_base="fdep", graph_output_dir="graph", lan
         for fn in filenames:
             if fn.endswith(EXT):
                 hs_files.append(os.path.join(dirpath, fn))
-
-    if os.path.isdir('fdep'):
-        print("Skipping file processing because 'fdep' directory exists.")
-        print("Run `rm -rf fdep` to reprocess files.")
-    else:
-        for code_path in tqdm(hs_files, desc="Processing files"):
-            extractor.process_file(code_path)
-            rel_path = os.path.relpath(code_path, root_dir)
-            json_rel = os.path.splitext(rel_path)[0] + ".json"
-            out_path = os.path.join(output_base, json_rel)
-            os.makedirs(os.path.dirname(out_path), exist_ok=True)
-            extractor.write_to_file(out_path)
-            print(f"Done! All outputs in: {output_base}/")
-
+    # --
+    for code_path in tqdm(hs_files, desc="Processing files"):
+        extractor.process_file(code_path)
+        rel_path = os.path.relpath(code_path, root_dir)
+        json_rel = os.path.splitext(rel_path)[0] + ".json"
+        out_path = os.path.join(output_base, json_rel)
+        os.makedirs(os.path.dirname(out_path), exist_ok=True)
+        extractor.write_to_file(out_path)
+        print(f"Done! All outputs in: {output_base}/")
+    # --
+    
     raw_funcs = list(load_components(output_base).values())
     if language == 'haskell':
         unified_schema = adapt_haskell_components(raw_funcs)
