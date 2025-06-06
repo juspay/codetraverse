@@ -47,10 +47,12 @@ def find_path(graph_path, component, source=None, quiet=True):
             return
         try:
             path = find_from_single_source(G, source, target)
+            path_arr = []
+            final_str = f"Shortest path from '{source}' → '{target}':\n  " + format_path(G, path)
             if not quiet:
-                print(f"Shortest path from '{source}' → '{target}':")
-                print("  " + format_path(G, path))
-            return path
+                print(final_str)
+                path_arr.append(final_str)
+            return (path, final_str, None, None)
         except nx.NetworkXNoPath:
             print(f"No path found from '{source}' to '{target}'.")
             return
@@ -86,3 +88,4 @@ def find_path(graph_path, component, source=None, quiet=True):
         else:
             if not quiet:
                 print(f"\nNo outgoing edges from '{target}'.")
+        return (preds, preds_str_arr, succs, succs_str_arr)
