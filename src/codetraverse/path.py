@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-import argparse
-import os
 import pickle
 import networkx as nx
 

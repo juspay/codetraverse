@@ -3,7 +3,7 @@ from tree_sitter import Language, Parser, Node
 import json
 import re
 from collections import defaultdict
-from base.component_extractor import ComponentExtractor
+from codetraverse.base.component_extractor import ComponentExtractor
 
 class HaskellComponentExtractor(ComponentExtractor):
     def __init__(self):
