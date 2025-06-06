@@ -4,7 +4,7 @@ import os
 from collections import defaultdict
 from tree_sitter import Language, Parser, Node
 import tree_sitter_rescript
-from base.component_extractor import ComponentExtractor
+from codetraverse.base.component_extractor import ComponentExtractor
 
 class RescriptComponentExtractor(ComponentExtractor):
     def __init__(self):

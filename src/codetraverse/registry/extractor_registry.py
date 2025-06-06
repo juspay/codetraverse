@@ -1,6 +1,6 @@
-from extractors.haskell_extractor import HaskellComponentExtractor
-from extractors.python_extractor import PythonComponentExtractor
-from extractors.rescript_extractor import RescriptComponentExtractor
+from codetraverse.extractors.haskell_extractor import HaskellComponentExtractor
+from codetraverse.extractors.python_extractor import PythonComponentExtractor
+from codetraverse.extractors.rescript_extractor import RescriptComponentExtractor
 
 def get_extractor(language: str):
     lang = language.lower()

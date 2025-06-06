@@ -44,30 +44,10 @@ def find_from_any_root(G, target):
 def find_from_single_source(G, source, target):
     return nx.shortest_path(G, source=source, target=target)
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Given a saved function-call graph, find a path to a component."
-    )
-    parser.add_argument(
-        "--GRAPH_PATH", "-g",
-        type=str, required=True,
-        help="Path to the saved graph (.gpickle or .graphml)."
-    )
-    parser.add_argument(
-        "--COMPONENT", "-c",
-        type=str, required=True,
-        help="Target fully‐qualified component ID (e.g. PgIntegrationApp::make)."
-    )
-    parser.add_argument(
-        "--SOURCE", "-s",
-        type=str, default=None,
-        help="(Optional) Specific source fully‐qualified ID."
-    )
-
-    args = parser.parse_args()
-    G = load_graph(args.GRAPH_PATH)
-    target = args.COMPONENT
-    source = args.SOURCE
+def find_path(graph_path, component, source=None, quiet=True):
+    G = load_graph(graph_path)
+    target = component
+    source = source
 
     if target not in G:
         print(f"Error: target '{target}' not in graph.")
@@ -79,19 +59,21 @@ def main():
             return
         try:
             path = find_from_single_source(G, source, target)
-            print(f"Shortest path from '{source}' → '{target}':")
-            print("  " + format_path(G, path))
+            if not quiet:
+                print(f"Shortest path from '{source}' → '{target}':")
+                print("  " + format_path(G, path))
+            return path
         except nx.NetworkXNoPath:
             print(f"No path found from '{source}' to '{target}'.")
+            return
     else:
         paths = find_from_any_root(G, target)
         if not paths:
             print(f"No path found from any root to '{target}'.")
             return
-        print(f"Found path(s) to '{target}' from root node(s):")
-        for root, p in paths.items():
-            print(f"• Root = '{root}':")
-            print("    " + format_path(G, p))
-
-if __name__ == "__main__":
-    main()
+        if not quiet:
+            print(f"Found path(s) to '{target}' from root node(s):")
+            for root, p in paths.items():
+                print(f"• Root = '{root}':")
+                print("    " + format_path(G, p))
+        return paths
