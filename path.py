@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import argparse
 import os
 import pickle
@@ -16,7 +15,7 @@ def load_graph(graph_path):
 def format_path(G, node_list):
     """
     Annotate each node in node_list with its module_name (if present) or file_name.
-    We stored those as node‐attributes.  If neither exists (unlikely), just print the ID.
+    We stored those as node‐attributes. If neither exists, just print the ID itself.
     """
     enriched = []
     for nid in node_list:
@@ -30,23 +29,13 @@ def format_path(G, node_list):
             enriched.append(nid)
     return " → ".join(enriched)
 
-def find_from_any_root(G, target):
-    paths = {}
-    roots = [n for (n, deg) in G.in_degree() if deg == 0]
-    for r in roots:
-        try:
-            p = nx.shortest_path(G, source=r, target=target)
-            paths[r] = p
-        except (nx.NetworkXNoPath, nx.NodeNotFound):
-            continue
-    return paths
-
 def find_from_single_source(G, source, target):
     return nx.shortest_path(G, source=source, target=target)
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Given a saved function-call graph, find a path to a component."
+        description="Either list all directly related nodes for a given component, "
+                    "or (if --SOURCE is provided) find the shortest path from SOURCE to COMPONENT."
     )
     parser.add_argument(
         "--GRAPH_PATH", "-g",
@@ -61,7 +50,7 @@ def main():
     parser.add_argument(
         "--SOURCE", "-s",
         type=str, default=None,
-        help="(Optional) Specific source fully‐qualified ID."
+        help="(Optional) Specific source fully‐qualified ID. If omitted, we list direct neighbors of COMPONENT."
     )
 
     args = parser.parse_args()
@@ -84,14 +73,24 @@ def main():
         except nx.NetworkXNoPath:
             print(f"No path found from '{source}' to '{target}'.")
     else:
-        paths = find_from_any_root(G, target)
-        if not paths:
-            print(f"No path found from any root to '{target}'.")
-            return
-        print(f"Found path(s) to '{target}' from root node(s):")
-        for root, p in paths.items():
-            print(f"• Root = '{root}':")
-            print("    " + format_path(G, p))
+        preds = list(G.predecessors(target))
+        succs = list(G.successors(target))
+
+        if preds:
+            print(f"\nNodes with edges INTO '{target}' ({len(preds)}):")
+            for p in preds:
+                rel = G.get_edge_data(p, target).get("relation", "")
+                print(f"  {p} --[{rel}]--> {target}")
+        else:
+            print(f"\nNo incoming edges to '{target}'.")
+
+        if succs:
+            print(f"\nNodes with edges OUT OF '{target}' ({len(succs)}):")
+            for s in succs:
+                rel = G.get_edge_data(target, s).get("relation", "")
+                print(f"  {target} --[{rel}]--> {s}")
+        else:
+            print(f"\nNo outgoing edges from '{target}'.")
 
 if __name__ == "__main__":
     main()

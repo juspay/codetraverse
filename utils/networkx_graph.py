@@ -4,11 +4,6 @@ import networkx as nx
 from tqdm import tqdm
 
 def load_components(fdep_dir):
-    """
-    Walk all .json files under fdep_dir, load each array of components,
-    then add them into a dict keyed by extract_id(comp) so that each
-    component is uniquely identified by "module::name".
-    """
     from adapters.rescript_adapter import extract_id
 
     funcs = {}
@@ -26,14 +21,8 @@ def load_components(fdep_dir):
 
 
 def build_graph_from_schema(schema):
-    """
-    Given the {"nodes": […], "edges": […]} schema returned by our adapter,
-    produce a networkx.DiGraph where **no attribute** is ever None.
-    All None → "", and non‐primitives get JSON‐dumped.
-    """
     G = nx.DiGraph()
 
-    # 1) Add nodes
     for node in schema["nodes"]:
         nid = node["id"]
         attrs = {}
@@ -45,11 +34,9 @@ def build_graph_from_schema(schema):
             elif isinstance(v, (str, int, float, bool)):
                 attrs[k] = v
             else:
-                # lists, dicts, etc. → JSON‐dump as a string
                 attrs[k] = json.dumps(v)
         G.add_node(nid, **attrs)
 
-    # 2) Add edges
     for edge in schema["edges"]:
         src = edge["from"]
         dst = edge["to"]

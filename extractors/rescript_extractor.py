@@ -407,7 +407,7 @@ class RescriptComponentExtractor(ComponentExtractor):
         
         fn_body_for_walk = None
         if is_explicit_fn:
-            # print("Found explicit function definition")
+            
             parameters_node = value_node.child_by_field_name("parameters")
             if parameters_node:
                 for param_container in parameters_node.named_children:
@@ -440,7 +440,7 @@ class RescriptComponentExtractor(ComponentExtractor):
             fn_body_for_walk = value_node.child_by_field_name("body")
         else:
             fn_body_for_walk = value_node
-        # print(fn_body_for_walk)
+        
 
         calls = self.extract_function_calls(let_binding_node)
         lits = self.extract_literals(let_binding_node)
@@ -449,7 +449,7 @@ class RescriptComponentExtractor(ComponentExtractor):
         jsx_elems = []
 
         def walk_recursive(current_node: Node, current_depth: int = 0):
-            # print("got current_node")
+            
             if current_depth > 50: return
             if current_node is None: 
                 return
@@ -457,7 +457,7 @@ class RescriptComponentExtractor(ComponentExtractor):
                 jsx_comp = self._extract_jsx_element(current_node)
                 if jsx_comp:
                     jsx_elems.append(jsx_comp)
-                    # print("added jsx element")
+                    
             elif current_node.type == "let_declaration":
                 for binding_child in current_node.named_children:
                     if binding_child.type == "let_binding":
@@ -537,42 +537,42 @@ class RescriptComponentExtractor(ComponentExtractor):
                 if child_of_container.type == "jsx_attribute":
                     actual_attribute_nodes.append(child_of_container)
 
-            for attr_node in actual_attribute_nodes: # attr_node is a jsx_attribute
+            for attr_node in actual_attribute_nodes: 
                 a_name_str = None
-                # Default to Python boolean True for valueless attributes (e.g. <button disabled />)
+                
                 a_val_processed = True 
 
                 if attr_node.named_child_count > 0:
                     name_child_node = attr_node.named_child(0)
-                    # Check if the first named child is a typical attribute name type
+                    
                     if name_child_node.type in ("property_identifier", "jsx_identifier", "identifier", "value_identifier"):
                         a_name_str = self._get_node_text(name_child_node).strip()
 
-                        # If there's a second named child, it's the value
+                        
                         if attr_node.named_child_count > 1:
                             value_child_node = attr_node.named_child(1)
                             val_text = ""
-                            # If value is a jsx_expression_container, get its content
+                            
                             if value_child_node.type == 'jsx_expression_container':
                                 if value_child_node.named_child_count > 0:
                                     actual_value_expr_node = value_child_node.named_child(0)
                                     val_text = self._get_node_text(actual_value_expr_node).strip()
-                                else: # Empty JSX expression e.g. attr={}
-                                    val_text = "{}" # Or handle as needed
-                            else: # Direct value like string literal, number, true/false keyword
+                                else: 
+                                    val_text = "{}" 
+                            else: 
                                 val_text = self._get_node_text(value_child_node).strip()
                             
-                            # Convert common string boolean representations to Python booleans
+                            
                             if val_text.lower() == "true":
                                 a_val_processed = True
                             elif val_text.lower() == "false":
                                 a_val_processed = False
                             else:
-                                a_val_processed = val_text # Keep as string if not "true" or "false"
-                        # If only one named child (the name), it's a boolean attribute like 'disabled'.
-                        # a_val_processed remains True by default.
+                                a_val_processed = val_text 
+                        
+                        
                 
-                if a_name_str: # Only add attribute if a name was extracted
+                if a_name_str: 
                     attributes.append({"name": a_name_str, "value": a_val_processed})
 
         func_calls_within_jsx = self.extract_function_calls(node)

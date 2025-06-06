@@ -23,8 +23,6 @@ OUTPUT_BASE      = args.OUTPUT_BASE
 GRAPH_OUTPUT_DIR = args.GRAPH_DIR
 LANGUAGE         = args.LANGUAGE.lower()
 
-os.makedirs(OUTPUT_BASE, exist_ok=True)
-os.makedirs(GRAPH_OUTPUT_DIR, exist_ok=True)
 
 EXT_MAP = {'haskell': '.hs', 'python':  '.py', 'rescript': '.res'}
 EXT = EXT_MAP.get(LANGUAGE, '')
@@ -40,6 +38,8 @@ if os.path.isdir('fdep'):
     print("Skipping file processing because 'fdep' directory exists.")
     print("Run `rm -rf fdep` to reprocess files.")
 else:
+    os.makedirs(OUTPUT_BASE, exist_ok=True)
+    os.makedirs(GRAPH_OUTPUT_DIR, exist_ok=True)
     for code_path in tqdm(hs_files, desc="Processing files"):
         extractor.process_file(code_path)
         rel_path = os.path.relpath(code_path, ROOT_DIR)
@@ -47,7 +47,7 @@ else:
         out_path = os.path.join(OUTPUT_BASE, json_rel)
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
         extractor.write_to_file(out_path)
-        print(f"Done! All outputs in: {OUTPUT_BASE}/")
+    print(f"Done! All outputs in: {OUTPUT_BASE}/")
 
 raw_funcs = list(load_components(OUTPUT_BASE).values())
 if LANGUAGE == 'haskell':
