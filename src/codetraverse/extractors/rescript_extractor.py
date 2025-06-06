@@ -99,59 +99,26 @@ class RescriptComponentExtractor(ComponentExtractor):
 
     def extract_literals(self, node: Node) -> list:
         literals = []
-
+        elements_to_check = [
+            'string', 'number', 'true', 'false', 'unit',
+            'string_literal', 'template_literal',
+            'int_literal', 'float_literal',
+            'bool_literal',
+            'array',
+            'tuple',
+            'variant',
+            'variant_identifier'
+        ]
         def traverse_for_literals(n: Node):
-            if n.type in ('string', 'number', 'true', 'false', 'unit'):
-                lit = self._get_node_text(n).strip()
-                if lit:
-                    literals.append(lit)
-
-            elif n.type in ('string_literal', 'template_literal'):
-                lit = self._get_node_text(n).strip()
-                if lit:
-                    literals.append(lit)
-
-            elif n.type in ('int_literal', 'float_literal'):
-                lit = self._get_node_text(n).strip()
-                if lit:
-                    literals.append(lit)
-
-            elif n.type == 'bool_literal':
-                lit = self._get_node_text(n).strip()
-                if lit:
-                    literals.append(lit)
-
-            elif n.type == 'array':
-                arr = self._get_node_text(n).strip()
-                if arr:
-                    literals.append(arr)
-
-            elif n.type == 'tuple':
-                tup = self._get_node_text(n).strip()
-                if tup:
-                    literals.append(tup)
-
-            elif n.type == 'variant':
-                var = self._get_node_text(n).strip()
-                if var:
-                    literals.append(var)
-
-            elif n.type == 'variant_identifier':
-                var = self._get_node_text(n).strip()
-                if var:
-                    literals.append(var)
-
+            if n.type in elements_to_check:
+                node_text = self._get_node_text(n).strip()
+                if node_text:
+                    literals.append(node_text)
             for c in n.children:
                 traverse_for_literals(c)
 
         traverse_for_literals(node)
-        seen = set()
-        unique = []
-        for lit in literals:
-            if lit not in seen:
-                seen.add(lit)
-                unique.append(lit)
-        return unique
+        return list(set(literals))
 
     def extract_all_components(self):
         return self.all_components
@@ -172,10 +139,14 @@ class RescriptComponentExtractor(ComponentExtractor):
 
     def _collect_imports(self, root: Node):
         imports = defaultdict(list)
-
+        name_node_dict = {
+            "open_statement": ({"type": "open"}, lambda x: x.child_by_field_name("path") or x.child_by_field_name("module")),
+            "include_statement": ({"type": "include"}, lambda x: x.child_by_field_name("module")),
+        }
         def walk(n: Node):
-            if n.type == "open_statement":
-                name_node = n.child_by_field_name("path") or n.child_by_field_name("module")
+            if n.type in ("open_statement", "include_statement"):
+                res_dict, name_node_func = name_node_dict[n.type]
+                name_node = name_node_func(n)
                 if not name_node:
                     for c in n.named_children:
                         if c.type in ("module_identifier", "module_identifier_path"):
@@ -183,18 +154,8 @@ class RescriptComponentExtractor(ComponentExtractor):
                             break
                 if name_node:
                     mname = self._get_node_text(name_node)
-                    imports[mname].append({"type": "open", "module": mname})
-
-            elif n.type == "include_statement":
-                name_node = n.child_by_field_name("module")
-                if not name_node:
-                    for c in n.named_children:
-                        if c.type in ("module_identifier", "module_identifier_path"):
-                            name_node = c
-                            break
-                if name_node:
-                    mname = self._get_node_text(name_node)
-                    imports[mname].append({"type": "include", "module": mname})
+                    res_dict["module"] = mname
+                    imports[mname].append(res_dict)
 
             for c in n.children:
                 walk(c)
