@@ -12,16 +12,17 @@ def load_components(fdep_dir):
     """
 
     funcs = {}
+    args = []
+
     for dirpath, _, files in os.walk(fdep_dir):
-        for fn in files:
-            if not fn.endswith(".json"):
-                continue
-            fullpath = os.path.join(dirpath, fn)
-            with open(fullpath, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            for comp in data:
-                fq = extract_id(comp)
-                funcs[fq] = comp
+        args.extend([os.path.join(dirpath, fn) for fn in files if fn.endswith(".json")])
+    
+    for fullpath in tqdm(args, desc="Reading JSONs"):
+        with open(fullpath, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        for comp in data:
+            fq = extract_id(comp)
+            funcs[fq] = comp
     return funcs
 
 

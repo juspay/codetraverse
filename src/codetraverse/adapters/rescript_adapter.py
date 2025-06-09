@@ -28,8 +28,15 @@ def adapt_rescript_components(raw_components):
         fq_ids.append(fq)
         comp_by_fq[fq] = comp
 
-    # 2) Build a set of module‐names to match bare calls to module→FQ lookups
-    all_module_names = {fq.split("::", 1)[0] for fq in fq_ids}
+    # 2) Build a set of module‐names and a map from module_name to its FQ IDs
+    all_module_names = set()
+    module_to_fq_map = {}
+    for fq_id_val in fq_ids:
+        module_name_part = fq_id_val.split("::", 1)[0]
+        all_module_names.add(module_name_part)
+        if module_name_part not in module_to_fq_map:
+            module_to_fq_map[module_name_part] = []
+        module_to_fq_map[module_name_part].append(fq_id_val)
 
     # 3) Now iterate once over raw_components (with a progress bar)
     for comp in tqdm(raw_components, desc="Adapting ReScript components"):
@@ -60,15 +67,16 @@ def adapt_rescript_components(raw_components):
 
             # If the bare‐name equals some module name, fan-out to all FQ nodes under that module
             if target_bare in all_module_names:
-                for candidate_fq in fq_ids:
-                    if candidate_fq.split("::", 1)[0] == target_bare:
-                        edges.append({
-                            "from":     fq,
-                            "to":       candidate_fq,
-                            "relation": "calls"
-                        })
+                # If target_bare is a module name, fan out to all FQs in that module
+                # (module_to_fq_map should contain target_bare if all_module_names does)
+                for candidate_fq in module_to_fq_map.get(target_bare, []): # Use .get for safety
+                    edges.append({
+                        "from":     fq,
+                        "to":       candidate_fq,
+                        "relation": "calls"
+                    })
             else:
-                # Otherwise emit a stub edge to the bare‐name itself
+                # Otherwise (target_bare is not a module name), emit a stub edge to the bare‐name itself
                 edges.append({
                     "from":     fq,
                     "to":       target_bare,
