@@ -1,5 +1,5 @@
 import os
-import argparse
+import shutil
 import networkx as nx
 import pickle
 from tqdm import tqdm
@@ -24,6 +24,13 @@ def _process_single_file_worker(args):
     return None
 
 def create_fdep_data(root_dir, output_base="fdep", graph_output_dir="graph", language="haskell"):
+
+    if os.path.exists(output_base):
+        print("delting fdep")
+        shutil.rmtree(output_base)
+    if os.path.exists(graph_output_dir):
+        print("delting graph")
+        shutil.rmtree(graph_output_dir)
 
     os.makedirs(output_base, exist_ok=True)
     os.makedirs(graph_output_dir, exist_ok=True)
