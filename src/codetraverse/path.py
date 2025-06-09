@@ -7,8 +7,8 @@ def load_graph(graph_path):
     if graph_path.endswith(".gpickle"):
         with open(graph_path, "rb") as f:
             return pickle.load(f)
-    elif graph_path.endswith(".graphml"):
-        return nx.read_graphml(graph_path)
+    # elif graph_path.endswith(".graphml"):
+    #     return nx.read_graphml(graph_path)
     else:
         raise RuntimeError(f"Unsupported graph format: {graph_path}")
 
