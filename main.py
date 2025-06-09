@@ -1,7 +1,7 @@
 import os
 import argparse
 import networkx as nx
-import pickle
+# import pickle
 from tqdm import tqdm
 from registry.extractor_registry import get_extractor
 from utils.networkx_graph import load_components, build_graph_from_schema
@@ -63,10 +63,11 @@ G = build_graph_from_schema(unified_schema)
 print(f"Graph has {G.number_of_nodes()} nodes and {G.number_of_edges()} edges")
 
 graph_ml = os.path.join(GRAPH_OUTPUT_DIR, "repo_function_calls.graphml")
-graph_gp = os.path.join(GRAPH_OUTPUT_DIR, "repo_function_calls.gpickle")
+# graph_gp = os.path.join(GRAPH_OUTPUT_DIR, "repo_function_calls.gpickle")
 
 nx.write_graphml(G, graph_ml)
-with open(graph_gp, "wb") as f:
-    pickle.dump(G, f)
+# with open(graph_gp, "wb") as f:
+#     pickle.dump(G, f)
 
-print(f"Wrote {graph_ml} and {graph_gp}")
+# print(f"Wrote {graph_ml} and {graph_gp}")
+print(f"Wrote {graph_ml}.")
