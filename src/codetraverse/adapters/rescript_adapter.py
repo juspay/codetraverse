@@ -48,10 +48,12 @@ def adapt_rescript_components(raw_components):
         fq = extract_id(comp)
         # 3a) Emit a single node‐entry
         nodes.append({
-            "id":       fq,
+            "id": fq,
             "category": kind,
-            "start":    comp.get("start_line", 0),
-            "end":      comp.get("end_line", 0)
+            "start": comp.get("start_line", 0),
+            "end": comp.get("end_line", 0),
+            "code": comp.get("code", ""),
+            "function_calls": comp.get("function_calls", [])
         })
 
         # 3b) For each bare function‐call, attempt to fan-out to any FQ whose module matches

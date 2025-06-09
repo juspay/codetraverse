@@ -89,3 +89,7 @@ def find_path(graph_path, component, source=None, quiet=True):
             if not quiet:
                 print(f"\nNo outgoing edges from '{target}'.")
         return (preds, preds_str_arr, succs, succs_str_arr)
+    
+def get_node_properties(graph_path, node_pth: str):
+    graph = load_graph(graph_path)
+    return graph.nodes.get(node_pth, None)

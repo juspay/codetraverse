@@ -63,7 +63,3 @@ def create_fdep_data(root_dir, output_base="fdep", graph_output_dir="graph", lan
 
     with open(graph_gp, "wb") as f:
         pickle.dump(G, f)
-
-if __name__ == "__main__":
-    pth = "/Users/jignyas.s/Desktop/Juspay/rescript-euler-dashboard"
-    create_fdep_data(root_dir=pth, language="rescript")
