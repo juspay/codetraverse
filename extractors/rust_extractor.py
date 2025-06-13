@@ -27,12 +27,10 @@ class RustComponentExtractor(ComponentExtractor):
         return self.raw_components
 
     def _extract_type_info(self, node: Node, src: bytes) -> str:
-        """Extract comprehensive type information from a node."""
         if not node:
             return None
         
         type_text = src[node.start_byte:node.end_byte].decode('utf8')
-        
         
         if node.type == 'generic_type':
             base_type = node.child_by_field_name('type')
@@ -44,14 +42,12 @@ class RustComponentExtractor(ComponentExtractor):
         return type_text
 
     def _extract_visibility(self, node: Node, src: bytes) -> str:
-        """Extract visibility modifier."""
         for child in node.children:
             if child.type == 'visibility_modifier':
                 return src[child.start_byte:child.end_byte].decode('utf8')
         return 'private'
 
     def _extract_attributes(self, node: Node, src: bytes) -> list:
-        """Extract attributes/annotations."""
         attributes = []
         
         parent = node.parent
@@ -63,7 +59,6 @@ class RustComponentExtractor(ComponentExtractor):
         return attributes
 
     def _process_node(self, node: Node, src: bytes) -> dict:
-        """Recursively convert an AST node to a component dict with enhanced extraction."""
         primary_kinds = {
             'mod_item', 'use_declaration', 'struct_item', 'enum_item', 'union_item',
             'type_alias_item', 'trait_item', 'impl_item', 'const_item', 'static_item',
@@ -73,7 +68,6 @@ class RustComponentExtractor(ComponentExtractor):
         if node.type not in primary_kinds:
             return None
 
-        
         name = self._extract_name(node, src)
         
         span = {
@@ -108,16 +102,12 @@ class RustComponentExtractor(ComponentExtractor):
             'lifetimes': []
         }
 
-        
         self._extract_node_specific_info(node, src, comp)
-        
-        
         self._traverse_and_extract(node, src, comp)
         
         return comp
 
     def _extract_name(self, node: Node, src: bytes) -> str:
-        """Extract name with enhanced logic for different node types."""
         if node.type == 'impl_item':
             return self._extract_impl_name(node, src)
         elif node.type == 'use_declaration':
@@ -131,7 +121,6 @@ class RustComponentExtractor(ComponentExtractor):
             return node.type
 
     def _extract_impl_name(self, node: Node, src: bytes) -> str:
-        """Enhanced impl naming: handles both trait impls and inherent impls."""
         trait_node = node.child_by_field_name('trait')
         type_node = node.child_by_field_name('type')
         
@@ -145,15 +134,26 @@ class RustComponentExtractor(ComponentExtractor):
         return 'impl_item'
 
     def _extract_use_name(self, node: Node, src: bytes) -> str:
-        """Extract use declaration name."""
         arg_node = node.child_by_field_name('argument')
         if arg_node:
-            return src[arg_node.start_byte:arg_node.end_byte].decode('utf8')
+            return self._extract_use_module_path(arg_node, src)
         return 'use_declaration'
 
+    def _extract_use_module_path(self, node: Node, src: bytes) -> str:
+        if node.type == 'scoped_use_list':
+            path_node = node.child_by_field_name('path')
+            if path_node:
+                return src[path_node.start_byte:path_node.end_byte].decode('utf8')
+        elif node.type == 'scoped_identifier':
+            return src[node.start_byte:node.end_byte].decode('utf8')
+        elif node.type == 'identifier':
+            return src[node.start_byte:node.end_byte].decode('utf8')
+        elif node.type == 'crate':
+            return 'crate'
+        else:
+            return src[node.start_byte:node.end_byte].decode('utf8')
+
     def _extract_node_specific_info(self, node: Node, src: bytes, comp: dict):
-        """Extract information specific to different node types."""
-        
         if node.type == 'function_item':
             self._extract_function_info(node, src, comp)
         elif node.type == 'struct_item':
@@ -170,8 +170,6 @@ class RustComponentExtractor(ComponentExtractor):
             self._extract_mod_info(node, src, comp)
 
     def _extract_function_info(self, node: Node, src: bytes, comp: dict):
-        """Extract function-specific information."""
-        
         params_node = node.child_by_field_name('parameters')
         if params_node:
             for param in params_node.named_children:
@@ -186,17 +184,14 @@ class RustComponentExtractor(ComponentExtractor):
                 elif param.type == 'self_parameter':
                     comp['parameters'].append({'name': 'self', 'type': 'Self'})
 
-        
         ret_node = node.child_by_field_name('return_type')
         if ret_node:
             comp['return_type'] = self._extract_type_info(ret_node, src)
 
-        
         type_params = node.child_by_field_name('type_parameters')
         if type_params:
             comp['type_parameters'] = src[type_params.start_byte:type_params.end_byte].decode('utf8')
 
-        
         where_node = None
         for child in node.children:
             if child.type == 'where_clause':
@@ -206,11 +201,9 @@ class RustComponentExtractor(ComponentExtractor):
             comp['where_clause'] = src[where_node.start_byte:where_node.end_byte].decode('utf8')
 
     def _extract_struct_info(self, node: Node, src: bytes, comp: dict):
-        """Extract struct-specific information."""
         body = node.child_by_field_name('body')
         if body:
             if body.type == 'field_declaration_list':
-                
                 for field in body.named_children:
                     if field.type == 'field_declaration':
                         name_node = field.child_by_field_name('name')
@@ -222,7 +215,6 @@ class RustComponentExtractor(ComponentExtractor):
                         }
                         comp['fields'].append(field_info)
             elif body.type == 'ordered_field_declaration_list':
-                
                 for i, field in enumerate(body.named_children):
                     field_info = {
                         'name': f"field_{i}",
@@ -232,7 +224,6 @@ class RustComponentExtractor(ComponentExtractor):
                     comp['fields'].append(field_info)
 
     def _extract_enum_info(self, node: Node, src: bytes, comp: dict):
-        """Extract enum-specific information."""
         body = node.child_by_field_name('body')
         if body and body.type == 'enum_variant_list':
             for variant in body.named_children:
@@ -243,11 +234,9 @@ class RustComponentExtractor(ComponentExtractor):
                         'fields': []
                     }
                     
-                    
                     value_node = variant.child_by_field_name('value')
                     if value_node:
                         if value_node.type == 'field_declaration_list':
-                            
                             for field in value_node.named_children:
                                 field_name = field.child_by_field_name('name')
                                 field_type = field.child_by_field_name('type')
@@ -256,7 +245,6 @@ class RustComponentExtractor(ComponentExtractor):
                                     'type': self._extract_type_info(field_type, src) if field_type else ''
                                 })
                         elif value_node.type == 'ordered_field_declaration_list':
-                            
                             for i, field in enumerate(value_node.named_children):
                                 variant_info['fields'].append({
                                     'name': f"field_{i}",
@@ -266,34 +254,51 @@ class RustComponentExtractor(ComponentExtractor):
                     comp['variants'].append(variant_info)
 
     def _extract_trait_info(self, node: Node, src: bytes, comp: dict):
-        """Extract trait-specific information."""
-        
         pass
 
     def _extract_impl_info(self, node: Node, src: bytes, comp: dict):
-        """Extract impl-specific information."""
-        
         type_params = node.child_by_field_name('type_parameters')
         if type_params:
             comp['type_parameters'] = src[type_params.start_byte:type_params.end_byte].decode('utf8')
 
     def _extract_use_info(self, node: Node, src: bytes, comp: dict):
-        """Extract use declaration information."""
+        def extract_imports_from_node(n: Node, base_path: str = ""):
+            if n.type == 'identifier':
+                import_path = f"{base_path}::{src[n.start_byte:n.end_byte].decode('utf8')}" if base_path else src[n.start_byte:n.end_byte].decode('utf8')
+                comp['imports'].append(import_path)
+            elif n.type == 'scoped_identifier':
+                path_node = n.child_by_field_name('path')
+                name_node = n.child_by_field_name('name')
+                if path_node and name_node:
+                    path_str = src[path_node.start_byte:path_node.end_byte].decode('utf8')
+                    name_str = src[name_node.start_byte:name_node.end_byte].decode('utf8')
+                    full_path = f"{base_path}::{path_str}::{name_str}" if base_path else f"{path_str}::{name_str}"
+                    comp['imports'].append(full_path)
+            elif n.type == 'scoped_use_list':
+                path_node = n.child_by_field_name('path')
+                list_node = n.child_by_field_name('list')
+                if path_node and list_node:
+                    path_str = src[path_node.start_byte:path_node.end_byte].decode('utf8')
+                    current_base = f"{base_path}::{path_str}" if base_path else path_str
+                    
+                    for child in list_node.named_children:
+                        extract_imports_from_node(child, current_base)
+            elif n.type == 'use_list':
+                for child in n.named_children:
+                    extract_imports_from_node(child, base_path)
+            elif n.type == 'crate':
+                return "crate"
+        
         arg_node = node.child_by_field_name('argument')
         if arg_node:
-            import_path = src[arg_node.start_byte:arg_node.end_byte].decode('utf8')
-            comp['imports'].append(import_path)
+            extract_imports_from_node(arg_node)
 
     def _extract_mod_info(self, node: Node, src: bytes, comp: dict):
-        """Extract module-specific information."""
         pass
 
     def _traverse_and_extract(self, node: Node, src: bytes, comp: dict):
-        """Traverse the AST and extract various language constructs."""
-        
         def walk(n: Node):
             t = n.type
-            
             
             primary_kinds = {
                 'mod_item', 'use_declaration', 'struct_item', 'enum_item', 'union_item',
@@ -307,38 +312,32 @@ class RustComponentExtractor(ComponentExtractor):
                     comp['children'].append(child)
                 return
 
-            
             if t == 'call_expression':
                 fn = n.child_by_field_name('function')
                 if fn:
-                    call_info = {
-                        'name': src[fn.start_byte:fn.end_byte].decode('utf8'),
-                        'span': {
-                            'start_line': n.start_point[0] + 1,
-                            'end_line': n.end_point[0] + 1
-                        }
-                    }
-                    comp['function_calls'].append(call_info)
-
-            
-            elif t == 'field_expression':
-                
-                parent = n.parent
-                if parent and parent.type == 'call_expression':
-                    field = n.child_by_field_name('field')
-                    value = n.child_by_field_name('value')
-                    if field and value:
-                        method_info = {
-                            'receiver': src[value.start_byte:value.end_byte].decode('utf8'),
-                            'method': src[field.start_byte:field.end_byte].decode('utf8'),
+                    if fn.type == 'field_expression':
+                        value_node = fn.child_by_field_name('value')
+                        field_node = fn.child_by_field_name('field')
+                        if value_node and field_node:
+                            method_info = {
+                                'receiver': src[value_node.start_byte:value_node.end_byte].decode('utf8'),
+                                'method': src[field_node.start_byte:field_node.end_byte].decode('utf8'),
+                                'span': {
+                                    'start_line': n.start_point[0] + 1,
+                                    'end_line': n.end_point[0] + 1
+                                }
+                            }
+                            comp['method_calls'].append(method_info)
+                    else:
+                        call_info = {
+                            'name': src[fn.start_byte:fn.end_byte].decode('utf8'),
                             'span': {
                                 'start_line': n.start_point[0] + 1,
                                 'end_line': n.end_point[0] + 1
                             }
                         }
-                        comp['method_calls'].append(method_info)
+                        comp['function_calls'].append(call_info)
 
-            
             elif t == 'macro_invocation':
                 macro_node = n.child_by_field_name('macro')
                 if macro_node:
@@ -351,9 +350,8 @@ class RustComponentExtractor(ComponentExtractor):
                     }
                     comp['macro_calls'].append(macro_info)
 
-            
             elif t in {'string_literal', 'integer_literal', 'float_literal', 
-                      'boolean_literal', 'char_literal', 'raw_string_literal'}:
+                    'boolean_literal', 'char_literal', 'raw_string_literal'}:
                 literal_info = {
                     'type': t,
                     'value': src[n.start_byte:n.end_byte].decode('utf8'),
@@ -364,7 +362,6 @@ class RustComponentExtractor(ComponentExtractor):
                 }
                 comp['literals'].append(literal_info)
 
-            
             elif t == 'let_declaration':
                 pat = n.child_by_field_name('pattern')
                 init = n.child_by_field_name('value')
@@ -394,4 +391,5 @@ class RustComponentExtractor(ComponentExtractor):
 
             for child in n.named_children:
                 walk(child)
+        
         walk(node)
