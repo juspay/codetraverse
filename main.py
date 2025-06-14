@@ -8,6 +8,7 @@ from utils.networkx_graph import load_components, build_graph_from_schema
 from adapters.haskell_adapter import adapt_haskell_components
 from adapters.python_adapter import adapt_python_components
 from adapters.rescript_adapter import adapt_rescript_components
+from adapters.rust_adapter import adapt_rust_components
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -24,7 +25,7 @@ GRAPH_OUTPUT_DIR = args.GRAPH_DIR
 LANGUAGE         = args.LANGUAGE.lower()
 
 
-EXT_MAP = {'haskell': '.hs', 'python':  '.py', 'rescript': '.res'}
+EXT_MAP = {'haskell': '.hs', 'python':  '.py', 'rescript': '.res', 'rust': '.rs'}
 EXT = EXT_MAP.get(LANGUAGE, '')
 extractor = get_extractor(LANGUAGE)
 
@@ -56,13 +57,12 @@ elif LANGUAGE == 'python':
     unified_schema = adapt_python_components(raw_funcs)
 elif LANGUAGE == 'rescript':
     unified_schema = adapt_rescript_components(raw_funcs)
+elif LANGUAGE == 'rust':
+    unified_schema = adapt_rust_components(raw_funcs)
 else:
     raise RuntimeError(f"No adapter for language: {LANGUAGE}")
 
 G = build_graph_from_schema(unified_schema)
-for i in G.nodes:
-    print(i)
-print(f"Graph has {G.number_of_nodes()} nodes and {G.number_of_edges()} edges")
 
 graph_ml = os.path.join(GRAPH_OUTPUT_DIR, "repo_function_calls.graphml")
 graph_gp = os.path.join(GRAPH_OUTPUT_DIR, "repo_function_calls.gpickle")
