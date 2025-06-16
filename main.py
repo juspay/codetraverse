@@ -8,6 +8,8 @@ from utils.networkx_graph import load_components, build_graph_from_schema
 from adapters.haskell_adapter import adapt_haskell_components
 from adapters.python_adapter import adapt_python_components
 from adapters.rescript_adapter import adapt_rescript_components
+from adapters.go_adapter import adapt_go_components
+
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -24,7 +26,7 @@ GRAPH_OUTPUT_DIR = args.GRAPH_DIR
 LANGUAGE         = args.LANGUAGE.lower()
 
 
-EXT_MAP = {'haskell': '.hs', 'python':  '.py', 'rescript': '.res'}
+EXT_MAP = {'haskell': '.hs', 'python':  '.py', 'rescript': '.res', 'go': '.go'}
 EXT = EXT_MAP.get(LANGUAGE, '')
 extractor = get_extractor(LANGUAGE)
 
@@ -56,6 +58,8 @@ elif LANGUAGE == 'python':
     unified_schema = adapt_python_components(raw_funcs)
 elif LANGUAGE == 'rescript':
     unified_schema = adapt_rescript_components(raw_funcs)
+elif LANGUAGE == 'go':
+    unified_schema = adapt_go_components(raw_funcs)
 else:
     raise RuntimeError(f"No adapter for language: {LANGUAGE}")
 

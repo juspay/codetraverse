@@ -1,6 +1,7 @@
 from extractors.haskell_extractor import HaskellComponentExtractor
 from extractors.python_extractor import PythonComponentExtractor
 from extractors.rescript_extractor import RescriptComponentExtractor
+from extractors.go_extractor import GoComponentExtractor
 
 def get_extractor(language: str):
     lang = language.lower()
@@ -10,4 +11,6 @@ def get_extractor(language: str):
         return PythonComponentExtractor()
     if lang == "rescript":
         return RescriptComponentExtractor()
+    if lang == "go":
+        return GoComponentExtractor()
     raise ValueError(f"No extractor for language: {language}")
