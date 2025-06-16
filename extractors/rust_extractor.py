@@ -24,94 +24,56 @@ class RustComponentExtractor(ComponentExtractor):
         self.current_file_path = file_path
         self.current_module_path = self._get_module_path_from_file(file_path)
         self.module_stack = [self.current_module_path]
-        
-        # First pass: collect all imports
         self._collect_imports(tree.root_node, src)
-        
-        # Second pass: process nodes with resolved imports
         for node in tree.root_node.named_children:
             comp = self._process_node(node, src, file_path)
             if comp:
                 self.raw_components.append(comp)
 
     def _get_module_path_from_file(self, file_path: str) -> str:
-        """
-        Convert file path to Rust module path.
-        Examples:
-        - src/main.rs -> crate
-        - src/lib.rs -> crate  
-        - src/module/mod.rs -> crate::module
-        - src/module/submodule.rs -> crate::module::submodule
-        - src/utils.rs -> crate::utils
-        """
         import os
-        
-        # Normalize path separators
         file_path = file_path.replace('\\', '/')
-        
-        # Remove file extension
         path_without_ext = os.path.splitext(file_path)[0]
-        
-        # Split into parts
         parts = path_without_ext.split('/')
-        
-        # Find src directory index
         src_index = -1
         for i, part in enumerate(parts):
             if part == 'src':
                 src_index = i
                 break
-        
         if src_index == -1:
-            # If no 'src' directory found, use the file name as module
             return f"crate::{os.path.basename(path_without_ext)}"
-        
-        # Get parts after 'src'
         module_parts = parts[src_index + 1:]
-        
         if not module_parts:
             return "crate"
-        
-        # Handle special cases
         if len(module_parts) == 1:
             if module_parts[0] in ['main', 'lib']:
                 return "crate"
             else:
                 return f"crate::{module_parts[0]}"
-        
-        # Handle mod.rs files
         if module_parts[-1] == 'mod':
             module_parts = module_parts[:-1]
-        
         if not module_parts:
             return "crate"
-        
         return "crate::" + "::".join(module_parts)
 
     def _collect_imports(self, root_node: Node, src: bytes):
-        """Collect all import statements and build mapping from symbol to full path"""
         def walk_for_imports(node: Node):
             if node.type == 'use_declaration':
                 self._process_use_declaration_for_mapping(node, src)
-            
             for child in node.named_children:
                 walk_for_imports(child)
-        
         walk_for_imports(root_node)
 
     def _process_use_declaration_for_mapping(self, node: Node, src: bytes):
-        """Process use declarations to build import mappings"""
         arg_node = node.child_by_field_name('argument')
         if arg_node:
             self._extract_import_mappings(arg_node, src, "")
 
     def _extract_import_mappings(self, node: Node, src: bytes, base_path: str):
-        """Extract import mappings from use declaration argument"""
         if node.type == 'identifier':
             symbol = src[node.start_byte:node.end_byte].decode('utf8')
             full_path = f"{base_path}::{symbol}" if base_path else symbol
             self.import_mappings[symbol] = full_path
-            
         elif node.type == 'scoped_identifier':
             path_node = node.child_by_field_name('path')
             name_node = node.child_by_field_name('name')
@@ -119,52 +81,36 @@ class RustComponentExtractor(ComponentExtractor):
                 path_str = src[path_node.start_byte:path_node.end_byte].decode('utf8')
                 name_str = src[name_node.start_byte:name_node.end_byte].decode('utf8')
                 full_path = f"{base_path}::{path_str}::{name_str}" if base_path else f"{path_str}::{name_str}"
-                # Map the final symbol to its full path
                 self.import_mappings[name_str] = full_path
-                
         elif node.type == 'scoped_use_list':
             path_node = node.child_by_field_name('path')
             list_node = node.child_by_field_name('list')
             if path_node and list_node:
                 path_str = src[path_node.start_byte:path_node.end_byte].decode('utf8')
                 current_base = f"{base_path}::{path_str}" if base_path else path_str
-                
                 for child in list_node.named_children:
                     self._extract_import_mappings(child, src, current_base)
-                    
         elif node.type == 'use_list':
             for child in node.named_children:
                 self._extract_import_mappings(child, src, base_path)
-                
         elif node.type == 'use_wildcard':
-            # Handle wildcard imports like use std::*
             if base_path:
                 self.wildcard_imports.append(base_path)
-                
         elif node.type == 'crate':
             return "crate"
 
     def _resolve_symbol_path(self, symbol_path: str) -> str:
-        """Resolve a symbol path using import mappings"""
-        # Split the path to get the first component
         parts = symbol_path.split("::")
         if not parts:
             return symbol_path
-            
         first_symbol = parts[0].strip()
-        
-        # Check if we have a mapping for the first symbol
         if first_symbol in self.import_mappings:
-            # Replace the first part with the full path
             full_first_part = self.import_mappings[first_symbol]
             if len(parts) == 1:
                 return full_first_part
             else:
                 remaining_parts = "::".join(parts[1:])
                 return f"{full_first_part}::{remaining_parts}"
-        
-        # If no direct mapping found, return as is
-        # Could potentially check wildcard imports here for more sophisticated resolution
         return symbol_path
 
     def write_to_file(self, output_path: str):
@@ -177,16 +123,13 @@ class RustComponentExtractor(ComponentExtractor):
     def _extract_type_info(self, node: Node, src: bytes) -> str:
         if not node:
             return None
-        
         type_text = src[node.start_byte:node.end_byte].decode('utf8')
-        
         if node.type == 'generic_type':
             base_type = node.child_by_field_name('type')
             type_args = node.child_by_field_name('type_arguments')
             base_text = src[base_type.start_byte:base_type.end_byte].decode('utf8') if base_type else ''
             args_text = src[type_args.start_byte:type_args.end_byte].decode('utf8') if type_args else ''
             return f"{base_text}{args_text}"
-        
         return type_text
 
     def _extract_visibility(self, node: Node, src: bytes) -> str:
@@ -197,7 +140,6 @@ class RustComponentExtractor(ComponentExtractor):
 
     def _extract_attributes(self, node: Node, src: bytes) -> list:
         attributes = []
-        
         parent = node.parent
         if parent:
             for sibling in parent.children:
@@ -209,38 +151,29 @@ class RustComponentExtractor(ComponentExtractor):
     def _process_node(self, node: Node, src: bytes, file_path: str, current_module_path: str = None) -> dict:
         if current_module_path is None:
             current_module_path = self.module_stack[-1] if self.module_stack else self.current_module_path
-            
         primary_kinds = {
             'mod_item', 'use_declaration', 'struct_item', 'enum_item', 'union_item',
             'type_alias_item', 'trait_item', 'impl_item', 'const_item', 'static_item',
             'function_item', 'closure_expression', 'let_declaration', 'type_item'
         }
-        
         if node.type not in primary_kinds:
             return None
-
         name = self._extract_name(node, src)
-        
-        # Calculate the full module path for this component
         if node.type == 'mod_item':
-            # For modules, extend the current path
             full_module_path = f"{current_module_path}::{name}" if current_module_path != "crate" else f"crate::{name}"
         else:
-            # For other components, use the current module path
             full_module_path = current_module_path
-        
         span = {
             'start_line': node.start_point[0] + 1,
             'end_line': node.end_point[0] + 1,
             'start_byte': node.start_byte,
             'end_byte': node.end_byte,
         }
-        
         comp = {
             'type': node.type,
             'name': name,
             'file_path': file_path,
-            'module_path': full_module_path,  # Add module path
+            'module_path': full_module_path,
             'span': span,
             'code': src[node.start_byte:node.end_byte].decode('utf8', errors='ignore'),
             'visibility': self._extract_visibility(node, src),
@@ -262,17 +195,13 @@ class RustComponentExtractor(ComponentExtractor):
             'trait_bounds': [],
             'lifetimes': []
         }
-
         self._extract_node_specific_info(node, src, comp)
-        
-        # Handle nested modules by updating the module stack
         if node.type == 'mod_item':
             self.module_stack.append(full_module_path)
             self._traverse_and_extract(node, src, comp, file_path)
             self.module_stack.pop()
         else:
             self._traverse_and_extract(node, src, comp, file_path)
-        
         return comp
 
     def _extract_name(self, node: Node, src: bytes) -> str:
@@ -291,7 +220,6 @@ class RustComponentExtractor(ComponentExtractor):
     def _extract_impl_name(self, node: Node, src: bytes) -> str:
         trait_node = node.child_by_field_name('trait')
         type_node = node.child_by_field_name('type')
-        
         if trait_node and type_node:
             trait_name = src[trait_node.start_byte:trait_node.end_byte].decode('utf8')
             type_name = src[type_node.start_byte:type_node.end_byte].decode('utf8')
@@ -351,15 +279,12 @@ class RustComponentExtractor(ComponentExtractor):
                     comp['parameters'].append(param_info)
                 elif param.type == 'self_parameter':
                     comp['parameters'].append({'name': 'self', 'type': 'Self'})
-
         ret_node = node.child_by_field_name('return_type')
         if ret_node:
             comp['return_type'] = self._extract_type_info(ret_node, src)
-
         type_params = node.child_by_field_name('type_parameters')
         if type_params:
             comp['type_parameters'] = src[type_params.start_byte:type_params.end_byte].decode('utf8')
-
         where_node = None
         for child in node.children:
             if child.type == 'where_clause':
@@ -401,7 +326,6 @@ class RustComponentExtractor(ComponentExtractor):
                         'name': src[name_node.start_byte:name_node.end_byte].decode('utf8') if name_node else '',
                         'fields': []
                     }
-                    
                     value_node = variant.child_by_field_name('value')
                     if value_node:
                         if value_node.type == 'field_declaration_list':
@@ -418,7 +342,6 @@ class RustComponentExtractor(ComponentExtractor):
                                     'name': f"field_{i}",
                                     'type': self._extract_type_info(field, src)
                                 })
-                    
                     comp['variants'].append(variant_info)
 
     def _extract_trait_info(self, node: Node, src: bytes, comp: dict):
@@ -448,7 +371,6 @@ class RustComponentExtractor(ComponentExtractor):
                 if path_node and list_node:
                     path_str = src[path_node.start_byte:path_node.end_byte].decode('utf8')
                     current_base = f"{base_path}::{path_str}" if base_path else path_str
-                    
                     for child in list_node.named_children:
                         extract_imports_from_node(child, current_base)
             elif n.type == 'use_list':
@@ -456,7 +378,6 @@ class RustComponentExtractor(ComponentExtractor):
                     extract_imports_from_node(child, base_path)
             elif n.type == 'crate':
                 return "crate"
-        
         arg_node = node.child_by_field_name('argument')
         if arg_node:
             extract_imports_from_node(arg_node)
@@ -467,19 +388,16 @@ class RustComponentExtractor(ComponentExtractor):
     def _traverse_and_extract(self, node: Node, src: bytes, comp: dict, file_path: str):
         def walk(n: Node):
             t = n.type
-            
             primary_kinds = {
                 'mod_item', 'use_declaration', 'struct_item', 'enum_item', 'union_item',
                 'type_alias_item', 'trait_item', 'impl_item', 'const_item', 'static_item',
                 'function_item', 'closure_expression', 'type_item'
             }
-            
             if t in primary_kinds and n is not node:
                 child = self._process_node(n, src, file_path, self.module_stack[-1] if self.module_stack else self.current_module_path)
                 if child:
                     comp['children'].append(child)
                 return
-
             if t == 'call_expression':
                 fn = n.child_by_field_name('function')
                 if fn:
@@ -489,10 +407,7 @@ class RustComponentExtractor(ComponentExtractor):
                         if value_node and field_node:
                             receiver_text = src[value_node.start_byte:value_node.end_byte].decode('utf8')
                             method_text = src[field_node.start_byte:field_node.end_byte].decode('utf8')
-                            
-                            # Resolve the receiver path if it's an imported symbol
                             resolved_receiver = self._resolve_symbol_path(receiver_text)
-                            
                             method_info = {
                                 'receiver': receiver_text,
                                 'resolved_receiver': resolved_receiver,
@@ -507,7 +422,6 @@ class RustComponentExtractor(ComponentExtractor):
                     else:
                         fn_text = src[fn.start_byte:fn.end_byte].decode('utf8')
                         resolved_fn = self._resolve_symbol_path(fn_text)
-                        
                         call_info = {
                             'name': fn_text,
                             'resolved_name': resolved_fn,
@@ -517,13 +431,11 @@ class RustComponentExtractor(ComponentExtractor):
                             }
                         }
                         comp['function_calls'].append(call_info)
-
             elif t == 'macro_invocation':
                 macro_node = n.child_by_field_name('macro')
                 if macro_node:
                     macro_text = src[macro_node.start_byte:macro_node.end_byte].decode('utf8')
                     resolved_macro = self._resolve_symbol_path(macro_text)
-                    
                     macro_info = {
                         'name': macro_text,
                         'resolved_name': resolved_macro,
@@ -533,7 +445,6 @@ class RustComponentExtractor(ComponentExtractor):
                         }
                     }
                     comp['macro_calls'].append(macro_info)
-
             elif t in {'string_literal', 'integer_literal', 'float_literal', 
                     'boolean_literal', 'char_literal', 'raw_string_literal'}:
                 literal_info = {
@@ -545,12 +456,10 @@ class RustComponentExtractor(ComponentExtractor):
                     }
                 }
                 comp['literals'].append(literal_info)
-
             elif t == 'let_declaration':
                 pat = n.child_by_field_name('pattern')
                 init = n.child_by_field_name('value')
                 type_node = n.child_by_field_name('type')
-                
                 if pat:
                     var_info = {
                         'name': src[pat.start_byte:pat.end_byte].decode('utf8'),
@@ -562,26 +471,19 @@ class RustComponentExtractor(ComponentExtractor):
                         }
                     }
                     comp['variables'].append(var_info)
-
             elif t in {'type_identifier', 'primitive_type', 'generic_type', 'scoped_type_identifier'}:
                 type_text = src[n.start_byte:n.end_byte].decode('utf8')
                 resolved_type = self._resolve_symbol_path(type_text)
-                
                 type_info = {
                     'type': type_text,
                     'resolved_type': resolved_type
                 }
-                
-                # Only add if not already present
                 if not any(existing['type'] == type_text for existing in comp['types_used']):
                     comp['types_used'].append(type_info)
-
             elif t == 'lifetime':
                 lifetime_text = src[n.start_byte:n.end_byte].decode('utf8')
                 if lifetime_text not in comp['lifetimes']:
                     comp['lifetimes'].append(lifetime_text)
-
             for child in n.named_children:
                 walk(child)
-        
         walk(node)
