@@ -38,15 +38,12 @@ def adapt_rescript_components(raw_components):
             module_to_fq_map[module_name_part] = []
         module_to_fq_map[module_name_part].append(fq_id_val)
 
-    # 3) Now iterate once over raw_components (with a progress bar)
     for comp in tqdm(raw_components, desc="Adapting ReScript components"):
         kind = comp.get("kind")
-        # Only register top‐level functions, variables, modules
         if kind not in ("function", "variable", "module"):
             continue
 
         fq = extract_id(comp)
-        # 3a) Emit a single node‐entry
         nodes.append({
             "id":       fq,
             "category": kind,
@@ -54,9 +51,7 @@ def adapt_rescript_components(raw_components):
             "end":      comp.get("end_line", 0)
         })
 
-        # 3b) For each bare function‐call, attempt to fan-out to any FQ whose module matches
         for raw_call in comp.get("function_calls", []):
-            # raw_call may be a dict or string; extract a bare name
             if isinstance(raw_call, dict):
                 target_bare = raw_call.get("name") or raw_call.get("tag_name") or ""
             else:
@@ -65,25 +60,21 @@ def adapt_rescript_components(raw_components):
             if not target_bare:
                 continue
 
-            # If the bare‐name equals some module name, fan-out to all FQ nodes under that module
             if target_bare in all_module_names:
-                # If target_bare is a module name, fan out to all FQs in that module
-                # (module_to_fq_map should contain target_bare if all_module_names does)
-                for candidate_fq in module_to_fq_map.get(target_bare, []): # Use .get for safety
+
+                for candidate_fq in module_to_fq_map.get(target_bare, []):
                     edges.append({
                         "from":     fq,
                         "to":       candidate_fq,
                         "relation": "calls"
                     })
             else:
-                # Otherwise (target_bare is not a module name), emit a stub edge to the bare‐name itself
                 edges.append({
                     "from":     fq,
                     "to":       target_bare,
                     "relation": "calls"
                 })
 
-    # 4) Any edge endpoint not yet in nodes → create a stub node
     seen = {n["id"] for n in nodes}
     for e in edges:
         for endpoint in (e["from"], e["to"]):

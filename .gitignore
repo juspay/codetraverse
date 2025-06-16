@@ -4,8 +4,8 @@ __pycache__/
 .venv/
 env/
 venv/
-fdep/
-graph/
+fdep*/
+graph*/
 .vscode/
 .idea/
 *.swp

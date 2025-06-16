@@ -35,9 +35,9 @@ for dirpath, _, filenames in os.walk(ROOT_DIR):
         if fn.endswith(EXT):
             hs_files.append(os.path.join(dirpath, fn))
 
-if os.path.isdir('fdep'):
-    print("Skipping file processing because 'fdep' directory exists.")
-    print("Run `rm -rf fdep` to reprocess files.")
+if os.path.isdir(OUTPUT_BASE):
+    print(f"Skipping file processing because {OUTPUT_BASE} directory exists.")
+    print(f"Run `rm -rf {OUTPUT_BASE}` to reprocess files.")
 else:
     os.makedirs(OUTPUT_BASE, exist_ok=True)
     os.makedirs(GRAPH_OUTPUT_DIR, exist_ok=True)

@@ -13,10 +13,6 @@ def load_graph(graph_path):
         raise RuntimeError(f"Unsupported graph format: {graph_path}")
 
 def format_path(G, node_list):
-    """
-    Annotate each node in node_list with its module_name (if present) or file_name.
-    We stored those as node‐attributes. If neither exists, just print the ID itself.
-    """
     enriched = []
     for nid in node_list:
         mn = G.nodes[nid].get("module_name", "")

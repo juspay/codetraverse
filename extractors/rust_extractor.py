@@ -9,12 +9,11 @@ class RustComponentExtractor(ComponentExtractor):
         self.RS_LANGUAGE = Language(tree_sitter_rust.language())
         self.parser = Parser(self.RS_LANGUAGE)
         self.raw_components = []
-        # Track import mappings for the entire file
-        self.import_mappings = {}  # Maps symbol name to full path
-        self.wildcard_imports = []  # Tracks wildcard imports like use std::*
+        self.import_mappings = {} 
+        self.wildcard_imports = []
         self.current_file_path = ""
         self.current_module_path = ""
-        self.module_stack = []  # Stack to track nested modules
+        self.module_stack = []
 
     def process_file(self, file_path: str):
         src = open(file_path, "rb").read()

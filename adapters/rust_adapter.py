@@ -4,189 +4,196 @@ from tqdm import tqdm
 
 def extract_rust_id(comp):
     """
-    Builds a stable ID in the format: "module_path::component_name".
-    Uses the module_path field provided by the enhanced extractor.
+    Builds a stable ID in the format: "full_module_path::component_name".
+    This function extracts the module path from resolved imports or builds it from the component context.
     """
-    module_path = comp.get("module_path", "unknown_module")
-    name = comp.get("name", "unnamed")
+    name_part = comp.get("name") or "<unnamed>"
     
-    # The line number is kept to prevent collisions with identically named items
-    # (e.g., multiple functions in an `impl` block)
-    line_num = comp.get('span', {}).get('start_line', 0)
+    # Try to get the full module path from various sources
+    # Priority: resolved module_name > constructed path from current context
+    module_part = None
+    
+    # For function calls and method calls, we already have resolved module_name
+    if comp.get("module_name"):
+        module_part = comp.get("module_name")
+    else:
+        # For component definitions, we need to construct the module path
+        # This should be enhanced based on your extractor's module tracking
+        module_part = comp.get("module_path") or "<anonymous_module>"
+    last_module_segment = module_part.split('::')[-1]
+    return f"{last_module_segment}::{name_part}"
 
-    return f"{module_path}::{name}@{line_num}"
-
+def build_module_path_for_component(comp, current_module_stack=[]):
+    """
+    Build the full module path for a component based on its context.
+    This should match the import resolution logic from the extractor.
+    """
+    # If the component already has a resolved module path, use it
+    if comp.get("resolved_module_path"):
+        return comp["resolved_module_path"]
+    
+    # Otherwise, construct from the current module context
+    # This is a simplified version - you might need to enhance this based on your needs
+    name = comp.get("name", "")
+    if current_module_stack:
+        return "::".join(current_module_stack + [name])
+    else:
+        return name
 
 def adapt_rust_components(raw_components: list) -> dict:
     """
-    Adapts raw Rust components into a simple, unified schema using module paths.
-
-    This adapter uses a simple, two-pass approach:
-    1. It iterates through all components to create primary nodes using a
-       module_path::component_name ID format and gathers all potential edges.
-    2. It creates "stub" nodes for any dependency that was not defined in the project.
+    Adapts raw Rust components into a unified schema using full module paths.
     
-    The component extractor now provides full module paths for proper resolution.
+    This adapter creates nodes with IDs in the format: full_module_path::component_name
+    where full_module_path is the resolved import path (e.g., api::x::y::g::f::q).
     """
     nodes = {}
     edges = []
     
-    # --- Pass 1: Create primary nodes and gather all potential edges ---
-
-    # Flatten the component hierarchy first to process all items
+    # --- Pass 1: Flatten hierarchy and build module context ---
     all_components = []
     component_queue = list(raw_components)
-    while component_queue:
-        comp = component_queue.pop(0)
-        children = comp.pop('children', [])
-        if children:
-            component_queue.extend(children)
-        all_components.append(comp)
+    module_stack = []  # Track current module nesting
+    
+    def process_component_tree(comps, current_module_path=[]):
+        for comp in comps:
+            # Update module path context
+            comp_module_path = current_module_path.copy()
+            if comp.get('type') == 'mod_item':
+                comp_module_path.append(comp.get('name', ''))
+            
+            comp['current_module_path'] = comp_module_path
+            
+            # Process children with updated context
+            children = comp.pop('children', [])
+            if children:
+                process_component_tree(children, comp_module_path)
+            
+            all_components.append(comp)
+    
+    process_component_tree(raw_components)
 
-    # Pre-calculate maps for name resolution
-    name_to_ids = defaultdict(list)  # Simple name -> list of full IDs
-    resolved_name_to_ids = defaultdict(list)  # Resolved name -> list of full IDs
+    # Pre-calculate mapping from simple names to fully-qualified IDs
+    name_to_fq_ids = defaultdict(list)
     
     for comp in all_components:
-        comp['id'] = extract_rust_id(comp)
+        comp_type = comp.get('type')
         name = comp.get('name')
-        if name:
-            name_to_ids[name].append(comp['id'])
+        
+        if comp_type in {'function_item', 'struct_item', 'enum_item', 'trait_item', 'impl_item', 'mod_item'}:
+            # Build the full module path for this component
+            if comp.get('current_module_path'):
+                # Use the tracked module path
+                module_path = "::".join(comp['current_module_path'])
+                if module_path:
+                    fq_id = f"{module_path}::{name}"
+                else:
+                    fq_id = name
+            else:
+                fq_id = name
+            
+            comp['fq_id'] = fq_id
+            if name:
+                name_to_fq_ids[name].append(fq_id)
 
+    # --- Pass 2: Create nodes and edges ---
     for comp in tqdm(all_components, desc="Adapting Rust components"):
-        source_id = comp['id']
         comp_type = comp.get('type')
         
-        # 1a) Create a primary node for key component types
+        # Create nodes for primary component types
         if comp_type in {'function_item', 'struct_item', 'enum_item', 'trait_item', 'impl_item', 'mod_item'}:
-            nodes[source_id] = {
-                "id":        source_id,
-                "category":  comp_type,
-                "name":      comp.get('name'),
-                "module_path": comp.get('module_path'),
-                "file_path": comp.get('file_path'),
-                "start":     comp.get('span', {}).get('start_line', 0),
-                "end":       comp.get('span', {}).get('end_line', 0)
-            }
+            fq_id = comp.get('fq_id')
+            if fq_id:
+                nodes[fq_id] = {
+                    "id": fq_id,
+                    "category": comp_type,
+                    "name": comp.get('name'),
+                    "file_path": comp.get('file_path'),
+                    "start": comp.get('span', {}).get('start_line', 0),
+                    "end": comp.get('span', {}).get('end_line', 0)
+                }
 
-        # 1b) Create 'calls' edges using resolved names when available
-        function_calls = comp.get('function_calls', [])
-        method_calls = comp.get('method_calls', [])
+        # Create 'calls' edges using resolved module names
+        source_id = comp.get('fq_id') or comp.get('name', 'unknown')
         
-        for call in function_calls:
-            original_name = call.get('name')
-            resolved_name = call.get('resolved_name')
+        # Process function calls with resolved module paths
+        for call in comp.get('function_calls', []):
+            call_name = call.get('name')
+            resolved_module = call.get('module_name')  # This comes from our enhanced extractor
             
-            if not original_name:
-                continue
-                
-            # Use resolved name if available, otherwise use original
-            target_name = resolved_name if resolved_name and resolved_name != original_name else original_name
-            
-            # Try to find exact matches first
-            potential_targets = []
-            
-            # Look for exact matches in our component list
-            for candidate_comp in all_components:
-                candidate_module = candidate_comp.get('module_path', '')
-                candidate_name = candidate_comp.get('name', '')
-                candidate_full_name = f"{candidate_module}::{candidate_name}"
-                
-                if (candidate_full_name == target_name or 
-                    candidate_name == target_name or
-                    candidate_name == original_name):
-                    potential_targets.append(candidate_comp['id'])
-            
-            if potential_targets:
-                for target_id in potential_targets:
-                    edges.append({"from": source_id, "to": target_id, "relation": "calls"})
+            if resolved_module and resolved_module != call_name:
+                # Use the fully resolved module path
+                target_id = resolved_module
             else:
-                # Create stub edge with the most specific name we have
-                edges.append({"from": source_id, "to": target_name, "relation": "calls"})
-        
-        for call in method_calls:
+                # Fall back to simple name matching
+                target_id = call_name
+            
+            if target_id:
+                edges.append({
+                    "from": source_id,
+                    "to": target_id,
+                    "relation": "calls"
+                })
+
+        # Process method calls with resolved module paths
+        for call in comp.get('method_calls', []):
             method_name = call.get('method')
-            full_path = call.get('full_path')
-            resolved_receiver = call.get('resolved_receiver')
+            resolved_module = call.get('module_name')  # Full path like api::x::y::g::f::q::method
             
-            if not method_name:
-                continue
-                
-            # Use the full path if available
-            target_name = full_path if full_path else f"{resolved_receiver}::{method_name}" if resolved_receiver else method_name
-            
-            # Look for matches
-            potential_targets = []
-            for candidate_comp in all_components:
-                candidate_module = candidate_comp.get('module_path', '')
-                candidate_name = candidate_comp.get('name', '')
-                candidate_full_name = f"{candidate_module}::{candidate_name}"
-                
-                if (candidate_full_name == target_name or 
-                    candidate_name == method_name):
-                    potential_targets.append(candidate_comp['id'])
-            
-            if potential_targets:
-                for target_id in potential_targets:
-                    edges.append({"from": source_id, "to": target_id, "relation": "calls"})
+            if resolved_module:
+                target_id = resolved_module
             else:
-                edges.append({"from": source_id, "to": target_name, "relation": "calls"})
+                # Fall back to receiver::method format
+                receiver = call.get('receiver', '')
+                target_id = f"{receiver}::{method_name}" if receiver else method_name
+            
+            if target_id:
+                edges.append({
+                    "from": source_id,
+                    "to": target_id,
+                    "relation": "calls"
+                })
 
-        # 1c) Create 'imports' edges from 'use' declarations
+        # Process macro calls with resolved module paths
+        for call in comp.get('macro_calls', []):
+            macro_name = call.get('name')
+            resolved_module = call.get('module_name')
+            
+            target_id = resolved_module if resolved_module else macro_name
+            if target_id:
+                edges.append({
+                    "from": source_id,
+                    "to": target_id,
+                    "relation": "calls"
+                })
+
+        # Create 'imports' edges from use declarations
         if comp_type == 'use_declaration':
             for import_path in comp.get('imports', []):
-                # Try to find the imported item in our components
-                potential_targets = []
-                import_parts = import_path.split('::')
-                if import_parts:
-                    imported_name = import_parts[-1]
-                    
-                    for candidate_comp in all_components:
-                        candidate_module = candidate_comp.get('module_path', '')
-                        candidate_name = candidate_comp.get('name', '')
-                        candidate_full_name = f"{candidate_module}::{candidate_name}"
-                        
-                        if (candidate_full_name == import_path or 
-                            candidate_name == imported_name):
-                            potential_targets.append(candidate_comp['id'])
-                
-                if potential_targets:
-                    for target_id in potential_targets:
-                        edges.append({"from": source_id, "to": target_id, "relation": "imports"})
-                else:
-                    edges.append({"from": source_id, "to": import_path, "relation": "imports"})
+                edges.append({
+                    "from": source_id,
+                    "to": import_path,
+                    "relation": "imports"
+                })
 
-        # 1d) Create 'uses_type' edges for type usage
-        types_used = comp.get('types_used', [])
-        for type_info in types_used:
+        # Create 'uses_type' edges for type dependencies
+        for type_info in comp.get('types_used', []):
             if isinstance(type_info, dict):
-                original_type = type_info.get('type')
-                resolved_type = type_info.get('resolved_type')
-                target_type = resolved_type if resolved_type and resolved_type != original_type else original_type
+                type_name = type_info.get('name')
+                resolved_type = type_info.get('module_name')
+                target_id = resolved_type if resolved_type else type_name
             else:
-                # Handle old format where types_used was just a list of strings
-                target_type = type_info
+                # Handle legacy format where types_used might be strings
+                target_id = str(type_info)
             
-            if target_type:
-                # Look for type definitions
-                potential_targets = []
-                for candidate_comp in all_components:
-                    if candidate_comp.get('type') in {'struct_item', 'enum_item', 'trait_item', 'type_alias_item'}:
-                        candidate_module = candidate_comp.get('module_path', '')
-                        candidate_name = candidate_comp.get('name', '')
-                        candidate_full_name = f"{candidate_module}::{candidate_name}"
-                        
-                        if (candidate_full_name == target_type or
-                            candidate_name == target_type):
-                            potential_targets.append(candidate_comp['id'])
-                
-                if potential_targets:
-                    for target_id in potential_targets:
-                        edges.append({"from": source_id, "to": target_id, "relation": "uses_type"})
-                else:
-                    edges.append({"from": source_id, "to": target_type, "relation": "uses_type"})
+            if target_id:
+                edges.append({
+                    "from": source_id,
+                    "to": target_id,
+                    "relation": "uses_type"
+                })
 
-    # --- Pass 2: Create stub nodes for any edge endpoint that doesn't exist ---
+    # --- Pass 3: Create stub nodes for external references ---
     final_nodes = list(nodes.values())
     seen_ids = set(nodes.keys())
 
@@ -194,25 +201,35 @@ def adapt_rust_components(raw_components: list) -> dict:
         for endpoint_key in ("from", "to"):
             endpoint_id = edge[endpoint_key]
             if endpoint_id not in seen_ids:
-                # Extract a reasonable name from the ID
-                name_part = endpoint_id.split('::')[-1].split('@')[0]
+                # Determine category for external references
+                category = "external_reference"
+                if "::" in endpoint_id:
+                    if edge["relation"] == "calls":
+                        category = "external_function"
+                    elif edge["relation"] == "uses_type":
+                        category = "external_type"
+                    elif edge["relation"] == "imports":
+                        category = "external_module"
+                
+                # Extract the simple name (last part after ::)
+                simple_name = endpoint_id.split("::")[-1]
+                
                 final_nodes.append({
-                    "id": endpoint_id, 
-                    "category": "external_reference",
-                    "name": name_part,
-                    "module_path": "::".join(endpoint_id.split('::')[:-1]) if '::' in endpoint_id else endpoint_id
+                    "id": endpoint_id,
+                    "category": category,
+                    "name": simple_name
                 })
                 seen_ids.add(endpoint_id)
 
     print(f"Created {len(final_nodes)} nodes and {len(edges)} edges.")
     
-    # Print sample nodes for debugging
+    # Show some examples for debugging
     print("\nSample nodes:")
-    for i, node in enumerate(final_nodes[:10]):
-        print(f"{i+1}. {node}")
+    for i, node in enumerate(final_nodes[:5]):
+        print(f"  {node}")
     
     print(f"\nSample edges:")
-    for i, edge in enumerate(edges[:10]):
-        print(f"{i+1}. {edge}")
+    for i, edge in enumerate(edges[:5]):
+        print(f"  {edge}")
     
     return {"nodes": final_nodes, "edges": edges}
