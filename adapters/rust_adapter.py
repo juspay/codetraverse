@@ -1,485 +1,218 @@
-def adapt_rust_components(raw_components, file_path=None, crate_name="crate"):
+import re
+from collections import defaultdict
+from tqdm import tqdm
+
+def extract_rust_id(comp):
     """
-    Adapt Rust components to graph format using full module paths as unique identifiers.
+    Builds a stable ID in the format: "module_path::component_name".
+    Uses the module_path field provided by the enhanced extractor.
+    """
+    module_path = comp.get("module_path", "unknown_module")
+    name = comp.get("name", "unnamed")
     
-    Args:
-        raw_components: List of parsed Rust components
-        file_path: Optional file path (e.g., "src/utils.rs") to determine module path
-        crate_name: Name of the crate (defaults to "crate")
+    # The line number is kept to prevent collisions with identically named items
+    # (e.g., multiple functions in an `impl` block)
+    line_num = comp.get('span', {}).get('start_line', 0)
+
+    return f"{module_path}::{name}@{line_num}"
+
+
+def adapt_rust_components(raw_components: list) -> dict:
     """
-    nodes = []
+    Adapts raw Rust components into a simple, unified schema using module paths.
+
+    This adapter uses a simple, two-pass approach:
+    1. It iterates through all components to create primary nodes using a
+       module_path::component_name ID format and gathers all potential edges.
+    2. It creates "stub" nodes for any dependency that was not defined in the project.
+    
+    The component extractor now provides full module paths for proper resolution.
+    """
+    nodes = {}
     edges = []
-    seen_nodes = {}
     
-    # Determine the module path from file path
-    def get_module_path_from_file(file_path, crate_name):
-        if not file_path:
-            return crate_name
-        
-        # Convert file path to module path
-        # src/utils.rs -> crate::utils
-        # src/models/user.rs -> crate::models::user
-        # lib.rs or main.rs -> crate
-        
-        import os
-        file_path = file_path.replace("\\", "/")  # Normalize path separators
-        
-        # Remove common prefixes
-        if file_path.startswith("src/"):
-            file_path = file_path[4:]
-        elif file_path.startswith("./src/"):
-            file_path = file_path[6:]
-        
-        # Handle special cases
-        if file_path in ["main.rs", "lib.rs"]:
-            return crate_name
-        
-        # Convert to module path
-        if file_path.endswith(".rs"):
-            file_path = file_path[:-3]
-        
-        # Replace path separators with module separators
-        module_parts = file_path.split("/")
-        if module_parts:
-            return f"{crate_name}::{('::'.join(module_parts))}"
-        
-        return crate_name
+    # --- Pass 1: Create primary nodes and gather all potential edges ---
 
-    # Get the base module path for this file
-    base_module_path = get_module_path_from_file(file_path, crate_name)
+    # Flatten the component hierarchy first to process all items
+    all_components = []
+    component_queue = list(raw_components)
+    while component_queue:
+        comp = component_queue.pop(0)
+        children = comp.pop('children', [])
+        if children:
+            component_queue.extend(children)
+        all_components.append(comp)
 
-    def add_node(name, category, extra=None):
-        node = {"id": name, "category": category}
-        if extra:
-            node.update(extra)
-        if name not in seen_nodes:
-            seen_nodes[name] = node
-            nodes.append(node)
-        return node
+    # Pre-calculate maps for name resolution
+    name_to_ids = defaultdict(list)  # Simple name -> list of full IDs
+    resolved_name_to_ids = defaultdict(list)  # Resolved name -> list of full IDs
+    
+    for comp in all_components:
+        comp['id'] = extract_rust_id(comp)
+        name = comp.get('name')
+        if name:
+            name_to_ids[name].append(comp['id'])
 
-    def get_location_info(comp):
-        return {
-            "start": comp.get("span", {}).get("start_line", 0),
-            "end": comp.get("span", {}).get("end_line", 0),
-            "file": file_path
-        }
-
-    def build_full_path(parent_path, comp_name):
-        """Build full module path for a component"""
-        if not parent_path:
-            return f"{base_module_path}::{comp_name}"
-        return f"{parent_path}::{comp_name}"
-
-    def normalize_external_reference(ref_name, current_context):
-        """
-        Normalize external references to use full paths where possible.
-        For now, we'll prefix unqualified names with the current context.
-        """
-        if "::" in ref_name:
-            # Already qualified
-            return ref_name
+    for comp in tqdm(all_components, desc="Adapting Rust components"):
+        source_id = comp['id']
+        comp_type = comp.get('type')
         
-        # Check if it's a standard library type
-        std_types = {
-            "String", "Vec", "HashMap", "Result", "Option", "Box", "Rc", "Arc",
-            "str", "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", 
-            "i32", "i64", "i128", "isize", "f32", "f64", "bool", "char"
-        }
-        
-        if ref_name in std_types:
-            return f"std::{ref_name}"
-        
-        # For other unqualified references, we might need more context
-        # For now, return as-is but this could be improved with use declaration tracking
-        return ref_name
+        # 1a) Create a primary node for key component types
+        if comp_type in {'function_item', 'struct_item', 'enum_item', 'trait_item', 'impl_item', 'mod_item'}:
+            nodes[source_id] = {
+                "id":        source_id,
+                "category":  comp_type,
+                "name":      comp.get('name'),
+                "module_path": comp.get('module_path'),
+                "file_path": comp.get('file_path'),
+                "start":     comp.get('span', {}).get('start_line', 0),
+                "end":       comp.get('span', {}).get('end_line', 0)
+            }
 
-    def process_component(comp, parent_path=""):
-        comp_name = comp.get("name", "")
-        comp_type = comp.get("type", "")
+        # 1b) Create 'calls' edges using resolved names when available
+        function_calls = comp.get('function_calls', [])
+        method_calls = comp.get('method_calls', [])
         
-        if not comp_name:
-            return
-        
-        # Build the full path for this component
-        if parent_path:
-            full_name = f"{parent_path}::{comp_name}"
-        else:
-            full_name = f"{base_module_path}::{comp_name}"
-        
-        # Handle special cases for top-level items in main.rs or lib.rs
-        if base_module_path == crate_name and not parent_path:
-            full_name = f"{crate_name}::{comp_name}"
-        
-        if comp_type == "function_item":
-            process_function(comp, full_name)
-        elif comp_type == "struct_item":
-            process_struct(comp, full_name)
-        elif comp_type == "enum_item":
-            process_enum(comp, full_name)
-        elif comp_type == "impl_item":
-            process_impl(comp, full_name, parent_path)
-        elif comp_type == "trait_item":
-            process_trait(comp, full_name)
-        elif comp_type == "mod_item":
-            process_module(comp, full_name)
-        elif comp_type == "use_declaration":
-            process_use_declaration(comp, full_name)
-        elif comp_type == "const_item":
-            process_const(comp, full_name)
-        elif comp_type == "static_item":
-            process_static(comp, full_name)
-        elif comp_type == "type_alias_item":
-            process_type_alias(comp, full_name)
-        elif comp_type == "type_item":
-            process_associated_type(comp, full_name, parent_path)
-
-        # Process children with the current full_name as parent
-        for child in comp.get("children", []):
-            process_component(child, full_name)
-
-    def process_function(comp, full_name):
-        fn_node = add_node(full_name, "function", {
-            "signature": [param.get("name", "") for param in comp.get("parameters", [])],
-            "return_type": comp.get("return_type"),
-            "visibility": comp.get("visibility", "private"),
-            "type_parameters": comp.get("type_parameters"),
-            "where_clause": comp.get("where_clause"),
-            "location": get_location_info(comp),
-            "simple_name": comp.get("name", "")  # Store simple name for easier querying
-        })
-
-        # Process parameters
-        for param in comp.get("parameters", []):
-            param_name = param.get("name", "")
-            param_type = param.get("type", "")
-            if param_name and param_name != "self":
-                param_node_name = f"{full_name}::{param_name}"
-                add_node(param_node_name, "parameter", {
-                    "type": param_type,
-                    "location": get_location_info(comp),
-                    "simple_name": param_name
-                })
-                edges.append({
-                    "from": full_name,
-                    "to": param_node_name,
-                    "relation": "defines"
-                })
-
-        # Process function calls
-        for call in comp.get("function_calls", []):
-            call_info = call if isinstance(call, dict) else {"name": call}
-            call_name = call_info.get("name", str(call_info))
-            normalized_call = normalize_external_reference(call_name, full_name)
-            add_node(normalized_call, "function", {"simple_name": call_name})
-            edges.append({
-                "from": full_name,
-                "to": normalized_call,
-                "relation": "calls"
-            })
-
-        # Process method calls
-        for method_call in comp.get("method_calls", []):
-            method_name = method_call.get("method", "")
-            receiver = method_call.get("receiver", "")
-            if method_name:
-                # Create a more descriptive method identifier
-                if receiver:
-                    full_method_name = f"{receiver}::{method_name}"
-                else:
-                    full_method_name = f"<unknown>::{method_name}"
+        for call in function_calls:
+            original_name = call.get('name')
+            resolved_name = call.get('resolved_name')
+            
+            if not original_name:
+                continue
                 
-                add_node(full_method_name, "method", {"simple_name": method_name})
-                edges.append({
-                    "from": full_name,
-                    "to": full_method_name,
-                    "relation": "calls"
-                })
-
-        # Process macro calls
-        for macro_call in comp.get("macro_calls", []):
-            macro_name = macro_call.get("name", str(macro_call))
-            normalized_macro = normalize_external_reference(macro_name, full_name)
-            add_node(normalized_macro, "macro", {"simple_name": macro_name})
-            edges.append({
-                "from": full_name,
-                "to": normalized_macro,
-                "relation": "invokes"
-            })
-
-        # Process variables
-        for var in comp.get("variables", []):
-            var_name = var.get("name", "")
-            var_type = var.get("type", "")
-            if var_name:
-                var_node_name = f"{full_name}::{var_name}"
-                add_node(var_node_name, "variable", {
-                    "type": var_type,
-                    "value": var.get("value"),
-                    "location": get_location_info(comp),
-                    "simple_name": var_name
-                })
-                edges.append({
-                    "from": full_name,
-                    "to": var_node_name,
-                    "relation": "defines"
-                })
-
-        # Process types used
-        for type_used in comp.get("types_used", []):
-            normalized_type = normalize_external_reference(type_used, full_name)
-            add_node(normalized_type, "type", {"simple_name": type_used})
-            edges.append({
-                "from": full_name,
-                "to": normalized_type,
-                "relation": "uses"
-            })
-
-    def process_struct(comp, full_name):
-        struct_node = add_node(full_name, "struct", {
-            "visibility": comp.get("visibility", "private"),
-            "location": get_location_info(comp),
-            "simple_name": comp.get("name", "")
-        })
-
-        # Process fields
-        for field in comp.get("fields", []):
-            field_name = field.get("name", "")
-            field_type = field.get("type", "")
-            if field_name:
-                field_node_name = f"{full_name}::{field_name}"
-                add_node(field_node_name, "field", {
-                    "type": field_type,
-                    "visibility": field.get("visibility", "private"),
-                    "location": get_location_info(comp),
-                    "simple_name": field_name
-                })
-                edges.append({
-                    "from": full_name,
-                    "to": field_node_name,
-                    "relation": "has_field"
-                })
-
-                if field_type:
-                    normalized_type = normalize_external_reference(field_type, full_name)
-                    add_node(normalized_type, "type", {"simple_name": field_type})
-                    edges.append({
-                        "from": full_name,
-                        "to": normalized_type,
-                        "relation": "depends_on"
-                    })
-
-    def process_enum(comp, full_name):
-        enum_node = add_node(full_name, "enum", {
-            "visibility": comp.get("visibility", "private"),
-            "location": get_location_info(comp),
-            "simple_name": comp.get("name", "")
-        })
-
-        # Process variants
-        for variant in comp.get("variants", []):
-            variant_name = variant.get("name", "")
-            if variant_name:
-                variant_node_name = f"{full_name}::{variant_name}"
-                add_node(variant_node_name, "variant", {
-                    "location": get_location_info(comp),
-                    "simple_name": variant_name
-                })
-                edges.append({
-                    "from": full_name,
-                    "to": variant_node_name,
-                    "relation": "has_variant"
-                })
-
-                # Process variant fields
-                for field in variant.get("fields", []):
-                    field_name = field.get("name", "")
-                    field_type = field.get("type", "")
-                    if field_name:
-                        field_node_name = f"{variant_node_name}::{field_name}"
-                        add_node(field_node_name, "field", {
-                            "type": field_type,
-                            "location": get_location_info(comp),
-                            "simple_name": field_name
-                        })
-                        edges.append({
-                            "from": variant_node_name,
-                            "to": field_node_name,
-                            "relation": "has_field"
-                        })
-
-                        if field_type:
-                            normalized_type = normalize_external_reference(field_type, variant_node_name)
-                            add_node(normalized_type, "type", {"simple_name": field_type})
-                            edges.append({
-                                "from": variant_node_name,
-                                "to": normalized_type,
-                                "relation": "depends_on"
-                            })
-
-    def process_impl(comp, full_name, parent_path):
-        trait_name = comp.get("trait_name", "")
-        type_name = comp.get("type_name", "")
+            # Use resolved name if available, otherwise use original
+            target_name = resolved_name if resolved_name and resolved_name != original_name else original_name
+            
+            # Try to find exact matches first
+            potential_targets = []
+            
+            # Look for exact matches in our component list
+            for candidate_comp in all_components:
+                candidate_module = candidate_comp.get('module_path', '')
+                candidate_name = candidate_comp.get('name', '')
+                candidate_full_name = f"{candidate_module}::{candidate_name}"
+                
+                if (candidate_full_name == target_name or 
+                    candidate_name == target_name or
+                    candidate_name == original_name):
+                    potential_targets.append(candidate_comp['id'])
+            
+            if potential_targets:
+                for target_id in potential_targets:
+                    edges.append({"from": source_id, "to": target_id, "relation": "calls"})
+            else:
+                # Create stub edge with the most specific name we have
+                edges.append({"from": source_id, "to": target_name, "relation": "calls"})
         
-        if trait_name and type_name:
-            impl_id = f"impl {trait_name} for {type_name}"
-            full_impl_path = f"{base_module_path}::{impl_id}"
-        elif type_name:
-            impl_id = f"impl {type_name}"
-            full_impl_path = f"{base_module_path}::{impl_id}"
-        else:
-            full_impl_path = full_name
-        
-        impl_node = add_node(full_impl_path, "impl", {
-            "type_parameters": comp.get("type_parameters"),
-            "location": get_location_info(comp),
-            "trait_name": trait_name,
-            "type_name": type_name
-        })
+        for call in method_calls:
+            method_name = call.get('method')
+            full_path = call.get('full_path')
+            resolved_receiver = call.get('resolved_receiver')
+            
+            if not method_name:
+                continue
+                
+            # Use the full path if available
+            target_name = full_path if full_path else f"{resolved_receiver}::{method_name}" if resolved_receiver else method_name
+            
+            # Look for matches
+            potential_targets = []
+            for candidate_comp in all_components:
+                candidate_module = candidate_comp.get('module_path', '')
+                candidate_name = candidate_comp.get('name', '')
+                candidate_full_name = f"{candidate_module}::{candidate_name}"
+                
+                if (candidate_full_name == target_name or 
+                    candidate_name == method_name):
+                    potential_targets.append(candidate_comp['id'])
+            
+            if potential_targets:
+                for target_id in potential_targets:
+                    edges.append({"from": source_id, "to": target_id, "relation": "calls"})
+            else:
+                edges.append({"from": source_id, "to": target_name, "relation": "calls"})
 
-        if trait_name:
-            normalized_trait = normalize_external_reference(trait_name, full_impl_path)
-            add_node(normalized_trait, "trait", {"simple_name": trait_name})
-            edges.append({
-                "from": full_impl_path,
-                "to": normalized_trait,
-                "relation": "implements"
-            })
-        
-        if type_name:
-            normalized_type = normalize_external_reference(type_name, full_impl_path)
-            add_node(normalized_type, "type", {"simple_name": type_name})
-            edges.append({
-                "from": full_impl_path,
-                "to": normalized_type,
-                "relation": "for_type"
-            })
+        # 1c) Create 'imports' edges from 'use' declarations
+        if comp_type == 'use_declaration':
+            for import_path in comp.get('imports', []):
+                # Try to find the imported item in our components
+                potential_targets = []
+                import_parts = import_path.split('::')
+                if import_parts:
+                    imported_name = import_parts[-1]
+                    
+                    for candidate_comp in all_components:
+                        candidate_module = candidate_comp.get('module_path', '')
+                        candidate_name = candidate_comp.get('name', '')
+                        candidate_full_name = f"{candidate_module}::{candidate_name}"
+                        
+                        if (candidate_full_name == import_path or 
+                            candidate_name == imported_name):
+                            potential_targets.append(candidate_comp['id'])
+                
+                if potential_targets:
+                    for target_id in potential_targets:
+                        edges.append({"from": source_id, "to": target_id, "relation": "imports"})
+                else:
+                    edges.append({"from": source_id, "to": import_path, "relation": "imports"})
 
-    def process_trait(comp, full_name):
-        trait_node = add_node(full_name, "trait", {
-            "visibility": comp.get("visibility", "private"),
-            "location": get_location_info(comp),
-            "simple_name": comp.get("name", "")
-        })
+        # 1d) Create 'uses_type' edges for type usage
+        types_used = comp.get('types_used', [])
+        for type_info in types_used:
+            if isinstance(type_info, dict):
+                original_type = type_info.get('type')
+                resolved_type = type_info.get('resolved_type')
+                target_type = resolved_type if resolved_type and resolved_type != original_type else original_type
+            else:
+                # Handle old format where types_used was just a list of strings
+                target_type = type_info
+            
+            if target_type:
+                # Look for type definitions
+                potential_targets = []
+                for candidate_comp in all_components:
+                    if candidate_comp.get('type') in {'struct_item', 'enum_item', 'trait_item', 'type_alias_item'}:
+                        candidate_module = candidate_comp.get('module_path', '')
+                        candidate_name = candidate_comp.get('name', '')
+                        candidate_full_name = f"{candidate_module}::{candidate_name}"
+                        
+                        if (candidate_full_name == target_type or
+                            candidate_name == target_type):
+                            potential_targets.append(candidate_comp['id'])
+                
+                if potential_targets:
+                    for target_id in potential_targets:
+                        edges.append({"from": source_id, "to": target_id, "relation": "uses_type"})
+                else:
+                    edges.append({"from": source_id, "to": target_type, "relation": "uses_type"})
 
-        for bound in comp.get("trait_bounds", []):
-            normalized_bound = normalize_external_reference(bound, full_name)
-            add_node(normalized_bound, "trait", {"simple_name": bound})
-            edges.append({
-                "from": full_name,
-                "to": normalized_bound,
-                "relation": "extends"
-            })
+    # --- Pass 2: Create stub nodes for any edge endpoint that doesn't exist ---
+    final_nodes = list(nodes.values())
+    seen_ids = set(nodes.keys())
 
-    def process_module(comp, full_name):
-        mod_node = add_node(full_name, "module", {
-            "visibility": comp.get("visibility", "private"),
-            "location": get_location_info(comp),
-            "simple_name": comp.get("name", "")
-        })
+    for edge in edges:
+        for endpoint_key in ("from", "to"):
+            endpoint_id = edge[endpoint_key]
+            if endpoint_id not in seen_ids:
+                # Extract a reasonable name from the ID
+                name_part = endpoint_id.split('::')[-1].split('@')[0]
+                final_nodes.append({
+                    "id": endpoint_id, 
+                    "category": "external_reference",
+                    "name": name_part,
+                    "module_path": "::".join(endpoint_id.split('::')[:-1]) if '::' in endpoint_id else endpoint_id
+                })
+                seen_ids.add(endpoint_id)
 
-    def process_use_declaration(comp, full_name):
-        use_id = f"use {comp.get('import_path', full_name)}"
-        use_full_path = f"{base_module_path}::{use_id}"
-        
-        use_node = add_node(use_full_path, "import", {
-            "visibility": comp.get("visibility", "private"),
-            "location": get_location_info(comp),
-            "import_path": comp.get("import_path", "")
-        })
-
-        for import_path in comp.get("imports", []):
-            add_node(import_path, "module", {"simple_name": import_path.split("::")[-1]})
-            edges.append({
-                "from": use_full_path,
-                "to": import_path,
-                "relation": "imports"
-            })
-
-    def process_const(comp, full_name):
-        const_node = add_node(full_name, "const", {
-            "visibility": comp.get("visibility", "private"),
-            "location": get_location_info(comp),
-            "simple_name": comp.get("name", "")
-        })
-
-        for type_used in comp.get("types_used", []):
-            normalized_type = normalize_external_reference(type_used, full_name)
-            add_node(normalized_type, "type", {"simple_name": type_used})
-            edges.append({
-                "from": full_name,
-                "to": normalized_type,
-                "relation": "uses"
-            })
-
-    def process_static(comp, full_name):
-        static_node = add_node(full_name, "static", {
-            "visibility": comp.get("visibility", "private"),
-            "location": get_location_info(comp),
-            "simple_name": comp.get("name", "")
-        })
-
-        for type_used in comp.get("types_used", []):
-            normalized_type = normalize_external_reference(type_used, full_name)
-            add_node(normalized_type, "type", {"simple_name": type_used})
-            edges.append({
-                "from": full_name,
-                "to": normalized_type,
-                "relation": "uses"
-            })
-
-    def process_type_alias(comp, full_name):
-        alias_node = add_node(full_name, "type_alias", {
-            "visibility": comp.get("visibility", "private"),
-            "location": get_location_info(comp),
-            "simple_name": comp.get("name", "")
-        })
-
-        for type_used in comp.get("types_used", []):
-            normalized_type = normalize_external_reference(type_used, full_name)
-            add_node(normalized_type, "type", {"simple_name": type_used})
-            edges.append({
-                "from": full_name,
-                "to": normalized_type,
-                "relation": "aliases"
-            })
-
-    def process_associated_type(comp, full_name, parent_path):
-        assoc_type_node = add_node(full_name, "associated_type", {
-            "location": get_location_info(comp),
-            "simple_name": comp.get("name", "")
-        })
-
-        if parent_path:
-            edges.append({
-                "from": parent_path,
-                "to": full_name,
-                "relation": "defines"
-            })
-
-        for type_used in comp.get("types_used", []):
-            normalized_type = normalize_external_reference(type_used, full_name)
-            add_node(normalized_type, "type", {"simple_name": type_used})
-            edges.append({
-                "from": full_name,
-                "to": normalized_type,
-                "relation": "uses"
-            })
-
-    for comp in raw_components:
-        process_component(comp)
-
-    for comp in raw_components:
-        comp_name = comp.get("name", "")
-        if comp_name:
-            full_comp_name = f"{base_module_path}::{comp_name}"
-            if full_comp_name in seen_nodes:
-                for lifetime in comp.get("lifetimes", []):
-                    lifetime_id = f"'{lifetime}"
-                    add_node(lifetime_id, "lifetime", {"simple_name": lifetime})
-                    edges.append({
-                        "from": full_comp_name,
-                        "to": lifetime_id,
-                        "relation": "uses"
-                    })
-    print(f"Processed {len(nodes)} nodes and {len(edges)} edges for Rust components.")
-    return {"nodes": nodes, "edges": edges}
+    print(f"Created {len(final_nodes)} nodes and {len(edges)} edges.")
+    
+    # Print sample nodes for debugging
+    print("\nSample nodes:")
+    for i, node in enumerate(final_nodes[:10]):
+        print(f"{i+1}. {node}")
+    
+    print(f"\nSample edges:")
+    for i, edge in enumerate(edges[:10]):
+        print(f"{i+1}. {edge}")
+    
+    return {"nodes": final_nodes, "edges": edges}

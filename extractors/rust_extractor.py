@@ -9,15 +9,164 @@ class RustComponentExtractor(ComponentExtractor):
         self.RS_LANGUAGE = Language(tree_sitter_rust.language())
         self.parser = Parser(self.RS_LANGUAGE)
         self.raw_components = []
+        # Track import mappings for the entire file
+        self.import_mappings = {}  # Maps symbol name to full path
+        self.wildcard_imports = []  # Tracks wildcard imports like use std::*
+        self.current_file_path = ""
+        self.current_module_path = ""
+        self.module_stack = []  # Stack to track nested modules
 
     def process_file(self, file_path: str):
         src = open(file_path, "rb").read()
         tree = self.parser.parse(src)
         self.raw_components = []
+        self.import_mappings = {}
+        self.wildcard_imports = []
+        self.current_file_path = file_path
+        self.current_module_path = self._get_module_path_from_file(file_path)
+        self.module_stack = [self.current_module_path]
+        
+        # First pass: collect all imports
+        self._collect_imports(tree.root_node, src)
+        
+        # Second pass: process nodes with resolved imports
         for node in tree.root_node.named_children:
-            comp = self._process_node(node, src)
+            comp = self._process_node(node, src, file_path)
             if comp:
                 self.raw_components.append(comp)
+
+    def _get_module_path_from_file(self, file_path: str) -> str:
+        """
+        Convert file path to Rust module path.
+        Examples:
+        - src/main.rs -> crate
+        - src/lib.rs -> crate  
+        - src/module/mod.rs -> crate::module
+        - src/module/submodule.rs -> crate::module::submodule
+        - src/utils.rs -> crate::utils
+        """
+        import os
+        
+        # Normalize path separators
+        file_path = file_path.replace('\\', '/')
+        
+        # Remove file extension
+        path_without_ext = os.path.splitext(file_path)[0]
+        
+        # Split into parts
+        parts = path_without_ext.split('/')
+        
+        # Find src directory index
+        src_index = -1
+        for i, part in enumerate(parts):
+            if part == 'src':
+                src_index = i
+                break
+        
+        if src_index == -1:
+            # If no 'src' directory found, use the file name as module
+            return f"crate::{os.path.basename(path_without_ext)}"
+        
+        # Get parts after 'src'
+        module_parts = parts[src_index + 1:]
+        
+        if not module_parts:
+            return "crate"
+        
+        # Handle special cases
+        if len(module_parts) == 1:
+            if module_parts[0] in ['main', 'lib']:
+                return "crate"
+            else:
+                return f"crate::{module_parts[0]}"
+        
+        # Handle mod.rs files
+        if module_parts[-1] == 'mod':
+            module_parts = module_parts[:-1]
+        
+        if not module_parts:
+            return "crate"
+        
+        return "crate::" + "::".join(module_parts)
+
+    def _collect_imports(self, root_node: Node, src: bytes):
+        """Collect all import statements and build mapping from symbol to full path"""
+        def walk_for_imports(node: Node):
+            if node.type == 'use_declaration':
+                self._process_use_declaration_for_mapping(node, src)
+            
+            for child in node.named_children:
+                walk_for_imports(child)
+        
+        walk_for_imports(root_node)
+
+    def _process_use_declaration_for_mapping(self, node: Node, src: bytes):
+        """Process use declarations to build import mappings"""
+        arg_node = node.child_by_field_name('argument')
+        if arg_node:
+            self._extract_import_mappings(arg_node, src, "")
+
+    def _extract_import_mappings(self, node: Node, src: bytes, base_path: str):
+        """Extract import mappings from use declaration argument"""
+        if node.type == 'identifier':
+            symbol = src[node.start_byte:node.end_byte].decode('utf8')
+            full_path = f"{base_path}::{symbol}" if base_path else symbol
+            self.import_mappings[symbol] = full_path
+            
+        elif node.type == 'scoped_identifier':
+            path_node = node.child_by_field_name('path')
+            name_node = node.child_by_field_name('name')
+            if path_node and name_node:
+                path_str = src[path_node.start_byte:path_node.end_byte].decode('utf8')
+                name_str = src[name_node.start_byte:name_node.end_byte].decode('utf8')
+                full_path = f"{base_path}::{path_str}::{name_str}" if base_path else f"{path_str}::{name_str}"
+                # Map the final symbol to its full path
+                self.import_mappings[name_str] = full_path
+                
+        elif node.type == 'scoped_use_list':
+            path_node = node.child_by_field_name('path')
+            list_node = node.child_by_field_name('list')
+            if path_node and list_node:
+                path_str = src[path_node.start_byte:path_node.end_byte].decode('utf8')
+                current_base = f"{base_path}::{path_str}" if base_path else path_str
+                
+                for child in list_node.named_children:
+                    self._extract_import_mappings(child, src, current_base)
+                    
+        elif node.type == 'use_list':
+            for child in node.named_children:
+                self._extract_import_mappings(child, src, base_path)
+                
+        elif node.type == 'use_wildcard':
+            # Handle wildcard imports like use std::*
+            if base_path:
+                self.wildcard_imports.append(base_path)
+                
+        elif node.type == 'crate':
+            return "crate"
+
+    def _resolve_symbol_path(self, symbol_path: str) -> str:
+        """Resolve a symbol path using import mappings"""
+        # Split the path to get the first component
+        parts = symbol_path.split("::")
+        if not parts:
+            return symbol_path
+            
+        first_symbol = parts[0].strip()
+        
+        # Check if we have a mapping for the first symbol
+        if first_symbol in self.import_mappings:
+            # Replace the first part with the full path
+            full_first_part = self.import_mappings[first_symbol]
+            if len(parts) == 1:
+                return full_first_part
+            else:
+                remaining_parts = "::".join(parts[1:])
+                return f"{full_first_part}::{remaining_parts}"
+        
+        # If no direct mapping found, return as is
+        # Could potentially check wildcard imports here for more sophisticated resolution
+        return symbol_path
 
     def write_to_file(self, output_path: str):
         with open(output_path, "w", encoding="utf-8") as f:
@@ -58,7 +207,10 @@ class RustComponentExtractor(ComponentExtractor):
                     attributes.append(attr_text)
         return attributes
 
-    def _process_node(self, node: Node, src: bytes) -> dict:
+    def _process_node(self, node: Node, src: bytes, file_path: str, current_module_path: str = None) -> dict:
+        if current_module_path is None:
+            current_module_path = self.module_stack[-1] if self.module_stack else self.current_module_path
+            
         primary_kinds = {
             'mod_item', 'use_declaration', 'struct_item', 'enum_item', 'union_item',
             'type_alias_item', 'trait_item', 'impl_item', 'const_item', 'static_item',
@@ -70,6 +222,14 @@ class RustComponentExtractor(ComponentExtractor):
 
         name = self._extract_name(node, src)
         
+        # Calculate the full module path for this component
+        if node.type == 'mod_item':
+            # For modules, extend the current path
+            full_module_path = f"{current_module_path}::{name}" if current_module_path != "crate" else f"crate::{name}"
+        else:
+            # For other components, use the current module path
+            full_module_path = current_module_path
+        
         span = {
             'start_line': node.start_point[0] + 1,
             'end_line': node.end_point[0] + 1,
@@ -80,6 +240,8 @@ class RustComponentExtractor(ComponentExtractor):
         comp = {
             'type': node.type,
             'name': name,
+            'file_path': file_path,
+            'module_path': full_module_path,  # Add module path
             'span': span,
             'code': src[node.start_byte:node.end_byte].decode('utf8', errors='ignore'),
             'visibility': self._extract_visibility(node, src),
@@ -103,7 +265,14 @@ class RustComponentExtractor(ComponentExtractor):
         }
 
         self._extract_node_specific_info(node, src, comp)
-        self._traverse_and_extract(node, src, comp)
+        
+        # Handle nested modules by updating the module stack
+        if node.type == 'mod_item':
+            self.module_stack.append(full_module_path)
+            self._traverse_and_extract(node, src, comp, file_path)
+            self.module_stack.pop()
+        else:
+            self._traverse_and_extract(node, src, comp, file_path)
         
         return comp
 
@@ -296,7 +465,7 @@ class RustComponentExtractor(ComponentExtractor):
     def _extract_mod_info(self, node: Node, src: bytes, comp: dict):
         pass
 
-    def _traverse_and_extract(self, node: Node, src: bytes, comp: dict):
+    def _traverse_and_extract(self, node: Node, src: bytes, comp: dict, file_path: str):
         def walk(n: Node):
             t = n.type
             
@@ -307,7 +476,7 @@ class RustComponentExtractor(ComponentExtractor):
             }
             
             if t in primary_kinds and n is not node:
-                child = self._process_node(n, src)
+                child = self._process_node(n, src, file_path, self.module_stack[-1] if self.module_stack else self.current_module_path)
                 if child:
                     comp['children'].append(child)
                 return
@@ -319,9 +488,17 @@ class RustComponentExtractor(ComponentExtractor):
                         value_node = fn.child_by_field_name('value')
                         field_node = fn.child_by_field_name('field')
                         if value_node and field_node:
+                            receiver_text = src[value_node.start_byte:value_node.end_byte].decode('utf8')
+                            method_text = src[field_node.start_byte:field_node.end_byte].decode('utf8')
+                            
+                            # Resolve the receiver path if it's an imported symbol
+                            resolved_receiver = self._resolve_symbol_path(receiver_text)
+                            
                             method_info = {
-                                'receiver': src[value_node.start_byte:value_node.end_byte].decode('utf8'),
-                                'method': src[field_node.start_byte:field_node.end_byte].decode('utf8'),
+                                'receiver': receiver_text,
+                                'resolved_receiver': resolved_receiver,
+                                'method': method_text,
+                                'full_path': f"{resolved_receiver}::{method_text}",
                                 'span': {
                                     'start_line': n.start_point[0] + 1,
                                     'end_line': n.end_point[0] + 1
@@ -329,8 +506,12 @@ class RustComponentExtractor(ComponentExtractor):
                             }
                             comp['method_calls'].append(method_info)
                     else:
+                        fn_text = src[fn.start_byte:fn.end_byte].decode('utf8')
+                        resolved_fn = self._resolve_symbol_path(fn_text)
+                        
                         call_info = {
-                            'name': src[fn.start_byte:fn.end_byte].decode('utf8'),
+                            'name': fn_text,
+                            'resolved_name': resolved_fn,
                             'span': {
                                 'start_line': n.start_point[0] + 1,
                                 'end_line': n.end_point[0] + 1
@@ -341,8 +522,12 @@ class RustComponentExtractor(ComponentExtractor):
             elif t == 'macro_invocation':
                 macro_node = n.child_by_field_name('macro')
                 if macro_node:
+                    macro_text = src[macro_node.start_byte:macro_node.end_byte].decode('utf8')
+                    resolved_macro = self._resolve_symbol_path(macro_text)
+                    
                     macro_info = {
-                        'name': src[macro_node.start_byte:macro_node.end_byte].decode('utf8'),
+                        'name': macro_text,
+                        'resolved_name': resolved_macro,
                         'span': {
                             'start_line': n.start_point[0] + 1,
                             'end_line': n.end_point[0] + 1
@@ -381,8 +566,16 @@ class RustComponentExtractor(ComponentExtractor):
 
             elif t in {'type_identifier', 'primitive_type', 'generic_type', 'scoped_type_identifier'}:
                 type_text = src[n.start_byte:n.end_byte].decode('utf8')
-                if type_text not in comp['types_used']:
-                    comp['types_used'].append(type_text)
+                resolved_type = self._resolve_symbol_path(type_text)
+                
+                type_info = {
+                    'type': type_text,
+                    'resolved_type': resolved_type
+                }
+                
+                # Only add if not already present
+                if not any(existing['type'] == type_text for existing in comp['types_used']):
+                    comp['types_used'].append(type_info)
 
             elif t == 'lifetime':
                 lifetime_text = src[n.start_byte:n.end_byte].decode('utf8')
