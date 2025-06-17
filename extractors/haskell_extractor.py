@@ -203,23 +203,73 @@ class HaskellComponentExtractor(ComponentExtractor):
         return fields
 
     def extract_field_info(self, field_node, src_bytes):
-        """Extract individual field information"""
-        field_info = {
-            "name": "unknown",
-            "type": "unknown"
+        """Extract a field with a single qualified‐type entry (ignoring wrappers like Maybe)."""
+        # 1) Get the field name
+        name_node = field_node.child_by_field_name("name")
+        field_name = src_bytes[name_node.start_byte:name_node.end_byte].decode() if name_node else None
+
+        # 2) Get the raw type text
+        type_node = field_node.child_by_field_name("type")
+        type_txt = src_bytes[type_node.start_byte:type_node.end_byte].decode() if type_node else None
+
+        # 3) Peel off any wrapper (e.g. Maybe X  → X)
+        core = type_txt
+        if core and " " in core:
+            core = core.split()[-1]
+
+        # 4) If it’s qualified (Module.Base), split it; else leave it simple
+        if core and "." in core:
+            module_part, base = core.rsplit(".", 1)
+            # resolve via import_map if needed:
+            resolved = self.import_map.get(module_part, [module_part])
+            modules = [f"{m}.{base}" for m in resolved]
+            type_info = {
+                "name":    f"{module_part}.{base}",
+                "type":    "qualified",
+                "modules": modules,
+                "base":    base,
+                "context": "type_constructor"
+            }
+        else:
+            # simple unqualified type
+            type_info = {
+                "name":    core,
+                "type":    "simple",
+                "modules": [],
+                "base":    core,
+                "context": "type_constructor"
+            }
+
+        return {
+            "name":      field_name,
+            "type":      type_txt,
+            "type_info": type_info
         }
-        
-        for child in field_node.children:
-            if child.type == "field_name":
-                # Extract field name
-                for name_child in child.children:
-                    if name_child.type == "variable":
-                        field_info["name"] = src_bytes[name_child.start_byte:name_child.end_byte].decode()
-            elif child.type in ["name", "qualified", "apply"]:
-                # Extract field type
-                field_info["type"] = self.extract_type_info(child, src_bytes)
-        
-        return field_info
+
+
+    def _extract_qualified_type(self, qualified_node, src_bytes):
+        """
+        Pull module IDs and base name out of a `qualified` node,
+        returning {'full','modules','base'} as before.
+        """
+        # get module path
+        module_bits = []
+        for m in qualified_node.child_by_field_name("module").children:
+            if m.type == "module_id":
+                module_bits.append(src_bytes[m.start_byte:m.end_byte].decode())
+        base_node = qualified_node.child_by_field_name("id") or qualified_node.child_by_field_name("name")
+        base = src_bytes[base_node.start_byte:base_node.end_byte].decode() if base_node else ""
+        full = ".".join(module_bits + ([base] if base else []))
+
+        # resolve via import_map if you want
+        first = module_bits[0] if module_bits else None
+        if first and first in self.import_map:
+            modules = [f"{imp}.{'.'.join(module_bits[1:])}" for imp in self.import_map[first]]
+        else:
+            modules = [".".join(module_bits)] if module_bits else []
+
+        return {"full": full, "modules": modules, "base": base}
+
 
     def extract_type_info(self, type_node, src_bytes):
         """Extract type information from various type nodes"""
