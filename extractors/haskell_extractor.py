@@ -88,8 +88,47 @@ class HaskellComponentExtractor(ComponentExtractor):
                     sigs[name] = sig_code
     
         components = []
+
+        if root_node.type == "header":
+            # grab raw text
+            start, end = root_node.start_point[0], root_node.end_point[0]
+            header_code = b"\n".join(src_bytes.split(b"\n")[start : end + 1]).decode("utf8")
+
+            # module path
+            module_path = []
+            mod_n = root_node.child_by_field_name("module")
+            if mod_n:
+                for mid in mod_n.children:
+                    if mid.type == "module_id":
+                        module_path.append(src_bytes[mid.start_byte:mid.end_byte].decode())
+
+            # explicit exports
+            exports = []
+            exp_n = root_node.child_by_field_name("exports")
+            if exp_n:
+                for item in exp_n.named_children:
+                    if item.type == "module_export":
+                        alias = item.child_by_field_name("module")
+                        if alias:
+                            name = src_bytes[alias.start_byte:alias.end_byte].decode()
+                            exports.append({"kind": "module_export", "alias": name})
+                    elif item.type in ("export", "import_name", "name"):
+                        txt = src_bytes[item.start_byte:item.end_byte].decode().strip()
+                        exports.append({"kind": "name_export", "name": txt})
+
+            components.append({
+                "kind":        "module_header",
+                "name":        ".".join(module_path),
+                "start_line":  start + 1,
+                "end_line":    end + 1,
+                "code":        header_code,
+                "module_path": module_path,
+                "exports":     exports
+            })
+
         for child in root_node.children:
             if child.type == "header":
+                print("Skipping header node in top-level extraction")
                 start, end = child.start_point[0], child.end_point[0]
                 header_code = b"\n".join(src_bytes.split(b"\n")[start : end + 1]).decode("utf8")
                 module_path = []
