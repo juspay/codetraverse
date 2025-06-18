@@ -11,6 +11,6 @@ def get_extractor(language: str):
         return PythonComponentExtractor()
     if lang == "rescript":
         return RescriptComponentExtractor()
-    if lang == "go":
+    if lang == "golang":
         return GoComponentExtractor()
     raise ValueError(f"No extractor for language: {language}")

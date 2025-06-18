@@ -1,10 +1,14 @@
+from collections import defaultdict
+
 def adapt_go_components(raw_components):
     nodes = []
     edges = []
+    id_set = set()
+    func_lookup = defaultdict(list)  # function name -> list of full-path IDs
 
     def signature_for(comp):
         kind = comp.get("kind")
-        name = comp.get("name")
+        name = comp.get("name", "")
         if kind in ("function", "method"):
             params = comp.get("parameters", [])
             param_types = comp.get("parameter_types", {})
@@ -30,86 +34,103 @@ def adapt_go_components(raw_components):
         elif kind == "variable":
             return f"var {name} {comp.get('type', '')} = {comp.get('value', '')}"
         else:
-            return name
+            return name or "unknown"
 
-    id_set = set()
-    # Build a lookup table from name to complete_function_path
-    func_lookup = {}
-    for comp in raw_components:
-        if comp.get("kind") in ("function", "method"):
-            func_lookup[comp["name"]] = comp.get("complete_function_path", comp["name"])
-        # Optionally, index all by (package, name) or by more context if you want!
-
+    # --- 1. Build NODES and func_lookup ---
     for comp in raw_components:
         kind = comp.get("kind")
         if kind == "file":
             continue
-        # Use complete_function_path as unique id if present
-        node_id = comp.get("complete_function_path") or comp.get("name")
-        if not node_id or not kind:
+
+        node_id = comp.get("complete_function_path")
+        if not node_id:
+            # fallback: build from file_path + name
+            name = comp.get("name")
+            fallback_path = comp.get("file_path", "").replace("/", "::").replace("\\", "::")
+            node_id = f"{fallback_path}::{name}" if name else None
+            if not node_id:
+                continue
+
+        # Avoid duplicate IDs
+        if node_id in id_set:
             continue
+        id_set.add(node_id)
+
         node = {
             "id": node_id,
             "category": kind,
             "signature": signature_for(comp),
             "location": {
-                "start": comp.get("start_line") or comp.get("location", {}).get("start"),
-                "end": comp.get("end_line") or comp.get("location", {}).get("end"),
+                "start": comp.get("start_line") or (comp.get("location") or {}).get("start"),
+                "end": comp.get("end_line") or (comp.get("location") or {}).get("end"),
             }
         }
         nodes.append(node)
-        id_set.add(node_id)
 
-    # Edges
+        if kind in ("function", "method"):
+            func_lookup[(comp.get("name", ""), comp.get("file_path", ""))].append(node_id)
+
+    # --- 2. Build EDGES using full node IDs only ---
     for comp in raw_components:
         kind = comp.get("kind")
         if kind == "file":
             continue
-        from_id = comp.get("complete_function_path") or comp.get("name")
+
+        from_id = comp.get("complete_function_path")
         if not from_id:
-            continue
-        # Function/method calls
+            name = comp.get("name")
+            fallback_path = comp.get("file_path", "").replace("/", "::").replace("\\", "::")
+            from_id = f"{fallback_path}::{name}" if name else None
+            if not from_id:
+                continue
+
         if kind in ("function", "method"):
+            # Calls: try to match both name+file (strong) or just name (fallback)
             for call in comp.get("function_calls", []):
-                # Try to find the correct unique id for the call target
-                to_id = func_lookup.get(call, call)
-                if to_id:
+                # Prefer full path if available, fallback to all nodes with that name
+                to_ids = []
+                # Try: calls from the same file
+                if (call, comp.get("file_path", "")) in func_lookup:
+                    to_ids = func_lookup[(call, comp.get("file_path", ""))]
+                elif (call, "") in func_lookup:
+                    to_ids = func_lookup[(call, "")]
+                else:
+                    # fallback: all matches by name across files
+                    to_ids = [
+                        id for (n, _), ids in func_lookup.items() if n == call for id in ids
+                    ]
+                for to_id in to_ids:
                     edges.append({"from": from_id, "to": to_id, "relation": "calls"})
-            # Type dependencies
             for dep in comp.get("type_dependencies", []):
                 if dep:
                     edges.append({"from": from_id, "to": dep, "relation": "uses_type"})
-            # Method belonging to struct
             if kind == "method" and comp.get("receiver_type"):
                 edges.append({"from": comp["receiver_type"], "to": from_id, "relation": "has_method"})
-        # Struct field type deps
-        if kind == "struct":
+        elif kind == "struct":
             for field_type in comp.get("field_types", []):
                 if field_type:
                     edges.append({"from": from_id, "to": field_type, "relation": "field_type"})
             for m in comp.get("methods", []):
-                # Try to find the unique id for the method
-                m_id = func_lookup.get(m, m)
-                edges.append({"from": from_id, "to": m_id, "relation": "has_method"})
-        # Interface type deps
-        if kind == "interface":
+                m_ids = func_lookup.get((m, comp.get("file_path", "")), []) or \
+                        [id for (n, _), ids in func_lookup.items() if n == m for id in ids]
+                for m_id in m_ids:
+                    edges.append({"from": from_id, "to": m_id, "relation": "has_method"})
+        elif kind == "interface":
             for dep in comp.get("type_dependencies", []):
                 if dep:
                     edges.append({"from": from_id, "to": dep, "relation": "interface_dep"})
-        # Type alias
-        if kind == "type_alias":
+        elif kind == "type_alias":
             aliased = comp.get("aliased_type")
             if aliased:
                 edges.append({"from": from_id, "to": aliased, "relation": "type_alias"})
-        # Variable/constant type
-        if kind in ("constant", "variable"):
+        elif kind in ("constant", "variable"):
             typ = comp.get("type")
             if typ:
                 edges.append({"from": from_id, "to": typ, "relation": "var_type"})
 
-    # Ensure all edge endpoints are in the node list
-    for e in edges:
-        for end in (e["from"], e["to"]):
+    # --- 3. Add nodes for missing edge endpoints ---
+    for edge in edges:
+        for end in (edge["from"], edge["to"]):
             if end and end not in id_set:
                 nodes.append({"id": end, "category": "unknown"})
                 id_set.add(end)

@@ -19,6 +19,19 @@ def load_components(fdep_dir):
                 funcs[fq] = comp
     return funcs
 
+def load_components_without_hash(fdep_dir):
+    components = []
+    for dirpath, _, files in os.walk(fdep_dir):
+        for fn in files:
+            if not fn.endswith(".json"):
+                continue
+            fullpath = os.path.join(dirpath, fn)
+            with open(fullpath, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            components.extend(data)
+    return components
+
+
 
 def build_graph_from_schema(schema):
     G = nx.DiGraph()

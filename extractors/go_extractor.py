@@ -36,6 +36,14 @@ def guess_literal_type(literal_node, src):
     elif t == "imaginary_literal":
         return "complex"
     return None
+def get_receiver_type(recv_node, src):
+    if recv_node is None or len(recv_node.named_children) == 0:
+        return None
+    type_node = recv_node.named_children[0].child_by_field_name("type")
+    if type_node:
+        receiver_type = get_node_text(type_node, src).lstrip("*")  
+        return receiver_type
+    return None
 
 def extract_doc_comment(node, src):
     siblings = node.parent.children if node.parent else []
@@ -67,13 +75,16 @@ def get_module_path(go_mod_path):
     return None
 
 def build_import_path(file_path, repo_root, module_path):
-    # Relative directory of file from repo root (minus the filename)
     file_dir = os.path.dirname(os.path.abspath(file_path))
     rel = os.path.relpath(file_dir, repo_root)
-    rel = rel.replace(os.sep, "/")
+    rel = rel.replace(os.sep, "::")
     if rel == ".":
         return module_path
-    return f"{module_path}/{rel}"
+    # Ensure the module_path is not duplicated
+    if rel.startswith(module_path):
+        return rel
+    return f"{module_path}::{rel}"
+
 
 class GoComponentExtractor(ComponentExtractor):
     def __init__(self):
@@ -105,8 +116,6 @@ class GoComponentExtractor(ComponentExtractor):
         tree = self.parser.parse(src)
         root = tree.root_node
 
-        # print_tree(root, src)  # Debugging: Print the syntax tree structure
-
         # Collect all comments
         self.comments = []
         for node in root.children:
@@ -123,7 +132,7 @@ class GoComponentExtractor(ComponentExtractor):
                 break
 
         self.import_map = self._collect_imports(root, src)
-        self.package_name = self._collect_package_name( src)
+        self.package_name = self._collect_package_name(src)
 
         imports = []
         for node in root.named_children:
@@ -148,7 +157,7 @@ class GoComponentExtractor(ComponentExtractor):
             "module_path": self.module_path,
             "import_path": self.import_path,
             "imports": imports,
-            "file_path": file_path,
+            "file_path": os.path.relpath(file_path, start=self.repo_root),  # Use relative path from repo root
         }]
         self.method_receivers = defaultdict(list)
 
@@ -185,13 +194,14 @@ class GoComponentExtractor(ComponentExtractor):
     def extract_all_components(self):
         return self.all_components
 
-    def _collect_package_name(self, src: bytes):
-        src_text = src.decode(errors="ignore")        
+    def _collect_package_name(self,src: bytes):
+        src_text = src.decode(errors="ignore")
+        print("Source Code:\n", src_text)
         match = re.search(r"^\s*package\s+(\w+)", src_text, re.MULTILINE)
         if match:
-            return match.group(1) 
-        return "unknown_package"  
-    
+            return match.group(1)  
+        return "unknown_package"  # Default value if no package name is found
+
     def _collect_imports(self, root: Node, src: bytes):
         imports = defaultdict(list)
         for node in root.named_children:
@@ -209,16 +219,22 @@ class GoComponentExtractor(ComponentExtractor):
         return dict(imports)
 
     def _function_complete_path(self, name, receiver_type=None):
-        """Unique ID for function: <module_path>/<import_path>[.<receiver_type>].<name>"""
-        # Ex: github.com/myorg/mylib/util.(*Math).Add or github.com/myorg/mylib/util.Add
-        path = self.import_path
+        file_path_rel = os.path.relpath(self.current_file_path, start=self.repo_root)
+        file_path_rel = file_path_rel.replace(os.sep, "::").replace("/", "::")
         if receiver_type:
-            return f"{path}.{receiver_type}.{name}"
+            return f"{file_path_rel}::{receiver_type}::{name}"
         else:
-            return f"{path}.{name}"
+            return f"{file_path_rel}::{name}"
+
+
 
     def _process_function(self, node: Node, src: bytes):
         kind = "method" if node.type == "method_declaration" else "function"
+        receiver_type = None
+        if kind == "method":
+            recv_node = node.child_by_field_name("receiver")
+            if recv_node:
+                receiver_type = get_receiver_type(recv_node, src)
         name_node = node.child_by_field_name("name")
         name = get_node_text(name_node, src) if name_node else ""
         start_line = node.start_point[0] + 1
@@ -310,7 +326,8 @@ class GoComponentExtractor(ComponentExtractor):
             "package": self.package_name,
             "import_path": self.import_path,
             "module_path": self.module_path,
-            "file_path": self.current_file_path,
+            "file_path": os.path.relpath(self.current_file_path, start=self.repo_root),  # Use relative path from repo root
+
         }
         return out
 
@@ -541,16 +558,3 @@ class GoComponentExtractor(ComponentExtractor):
                     })
         return consts_
 
-
-# Uncomment the following function to print the syntax tree structure for debugging
-
-# def print_tree(node, src, indent=0):
-#     """
-#     Recursively prints the syntax tree structure for debugging.
-#     """
-#     prefix = " " * indent
-#     print(f"{prefix}{node.type} [{node.start_point} - {node.end_point}]")
-#     if node.type in ("interpreted_string_literal", "raw_string_literal", "identifier"):
-#         print(f"{prefix}  Text: {get_node_text(node, src)}")
-#     for child in node.children:
-#         print_tree(child, src, indent + 2)

@@ -4,7 +4,7 @@ import networkx as nx
 import pickle
 from tqdm import tqdm
 from registry.extractor_registry import get_extractor
-from utils.networkx_graph import load_components, build_graph_from_schema
+from utils.networkx_graph import load_components, build_graph_from_schema, load_components_without_hash
 from adapters.haskell_adapter import adapt_haskell_components
 from adapters.python_adapter import adapt_python_components
 from adapters.rescript_adapter import adapt_rescript_components
@@ -26,7 +26,7 @@ GRAPH_OUTPUT_DIR = args.GRAPH_DIR
 LANGUAGE         = args.LANGUAGE.lower()
 
 
-EXT_MAP = {'haskell': '.hs', 'python':  '.py', 'rescript': '.res', 'go': '.go'}
+EXT_MAP = {'haskell': '.hs', 'python':  '.py', 'rescript': '.res', 'golang': '.go'}
 EXT = EXT_MAP.get(LANGUAGE, '')
 extractor = get_extractor(LANGUAGE)
 
@@ -51,15 +51,21 @@ else:
         extractor.write_to_file(out_path)
     print(f"Done! All outputs in: {OUTPUT_BASE}/")
 
-raw_funcs = list(load_components(OUTPUT_BASE).values())
+if LANGUAGE == 'haskell' or LANGUAGE == 'python' or LANGUAGE == 'rescript':
+    raw_funcs = list(load_components(OUTPUT_BASE).values())
+elif LANGUAGE == 'golang':
+    raw_funcs_without_hash = load_components_without_hash(OUTPUT_BASE)
+else :
+    raise RuntimeError(f"Unsupported language: {LANGUAGE}")
+
 if LANGUAGE == 'haskell':
     unified_schema = adapt_haskell_components(raw_funcs)
 elif LANGUAGE == 'python':
     unified_schema = adapt_python_components(raw_funcs)
 elif LANGUAGE == 'rescript':
     unified_schema = adapt_rescript_components(raw_funcs)
-elif LANGUAGE == 'go':
-    unified_schema = adapt_go_components(raw_funcs)
+elif LANGUAGE == 'golang':
+    unified_schema = adapt_go_components(raw_funcs_without_hash)
 else:
     raise RuntimeError(f"No adapter for language: {LANGUAGE}")
 
