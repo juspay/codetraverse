@@ -90,19 +90,16 @@ class HaskellComponentExtractor(ComponentExtractor):
         components = []
 
         if root_node.type == "header":
-            # grab raw text
             start, end = root_node.start_point[0], root_node.end_point[0]
-            header_code = b"\n".join(src_bytes.split(b"\n")[start : end + 1]).decode("utf8")
+            header_code = b"\n".join(src_bytes.split(b"\n")[start:end+1]).decode("utf8")
 
-            # module path
             module_path = []
             mod_n = root_node.child_by_field_name("module")
             if mod_n:
-                for mid in mod_n.children:
+                for mid in mod_n.named_children:
                     if mid.type == "module_id":
                         module_path.append(src_bytes[mid.start_byte:mid.end_byte].decode())
 
-            # explicit exports
             exports = []
             exp_n = root_node.child_by_field_name("exports")
             if exp_n:
@@ -110,22 +107,33 @@ class HaskellComponentExtractor(ComponentExtractor):
                     if item.type == "module_export":
                         alias = item.child_by_field_name("module")
                         if alias:
-                            name = src_bytes[alias.start_byte:alias.end_byte].decode()
-                            exports.append({"kind": "module_export", "alias": name})
-                    elif item.type in ("export", "import_name", "name"):
+                            exports.append(src_bytes[alias.start_byte:alias.end_byte].decode())
+                    elif item.type in ("export","import_name","name"):
                         txt = src_bytes[item.start_byte:item.end_byte].decode().strip()
-                        exports.append({"kind": "name_export", "name": txt})
+                        exports.append(txt)
+
+            if not exports:
+                parent = root_node.parent
+                for sib in parent.children:
+                    for child in sib.children:
+                        if child is root_node:
+                            continue
+                        if child.type in ("function","data_type","instance","class","newtype","type_synonym"):
+                            name_n = child.child_by_field_name("name") or child.child_by_field_name("variable")
+                            if name_n:
+                                exports.append(src_bytes[name_n.start_byte:name_n.end_byte].decode())
 
             components.append({
                 "kind":        "module_header",
                 "name":        ".".join(module_path),
-                "start_line":  start + 1,
-                "end_line":    end + 1,
+                "start_line":  start+1,
+                "end_line":    end+1,
                 "code":        header_code,
                 "module_path": module_path,
                 "exports":     exports
             })
-
+            return components
+        
         for child in root_node.children:
             if child.type == "header":
                 print("Skipping header node in top-level extraction")
