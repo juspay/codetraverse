@@ -22,3 +22,4 @@ tree-sitter-python==0.23.6
 tree-sitter-rescript @ git+https://github.com/JignyasAnand/tree-sitter-rescript@215c56d2cc3ce4ce912dff3ea44fd4e22ac8913d
 tree-sitter-rust==0.24.0
 tree-sitter-go==0.23.4
+tree-sitter-typescript==0.23.2
