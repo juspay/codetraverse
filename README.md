@@ -1,6 +1,6 @@
 # CODETRAVERSE
 
-**CODETRAVERSE** is a cross-language static code analysis tool that extracts structural components and dependencies from code repositories in Go, Python, Haskell, or Rescript.
+**CODETRAVERSE** is a cross-language static code analysis tool that extracts structural components and dependencies from code repositories in Haskell, Rescript, Typescript, Rust, golang, python.
 
 Given any supported codebase, CODETRAVERSE outputs:
 - Per-file JSON summaries (`fdep/`)
@@ -12,7 +12,7 @@ This enables rich code visualization, impact analysis, dependency inspection, an
 
 ## 🚀 Features
 
-- **Multi-language Support:** Go, Python, Haskell, Rescript (easily extensible!)
+- **Multi-language Support:** Haskell, Rescript, Typescript, Rust, golang, python (easily extensible!)
 - **Scalable:** Handles arbitrarily nested folder structures
 - **Rich Outputs:**
   - JSON component files for every source file
@@ -53,7 +53,7 @@ python main.py --ROOT_DIR=/path/to/your/repo --LANGUAGE=golang
 ```
 
 - Replace `/path/to/your/repo` with the root directory of your code repository
-- Set `--LANGUAGE` to one of: `golang`, `python`, `haskell`, `rescript`
+- Set `--LANGUAGE` to one of: `haskell`, `rescript`, `typescript`, `rust`, `golang`, `python`
 
 Outputs will be saved in:
 - `fdep/` (JSON component summaries)
@@ -65,8 +65,8 @@ Outputs will be saved in:
 | Argument | Type | Description |
 |----------|------|-------------|
 | `--ROOT_DIR` | str | Path to the root of the source code repository (required) |
-| `--LANGUAGE` | str | One of `golang`, `python`, `haskell`, `rescript` (required) |
-| `--OUTPUT_BASE`(opt) | str | Output directory for per-file JSONs (default: `fdep`) |
+| `--LANGUAGE` | str | One of `haskell`, `rescript`, `typescript`, `rust`, `golang`, `python` (required) |
+| `--OUTPUT_BASE` (opt) | str | Output directory for per-file JSONs (default: `fdep`) |
 | `--GRAPH_DIR`  (opt) | str | Output directory for the graphs (default: `graph`) |
 
 ### Example
