@@ -16,7 +16,7 @@ pytz==2025.2
 scipy==1.15.3
 six==1.17.0
 tqdm==4.67.1
-tree-sitter @ git+https://github.com/tree-sitter/py-tree-sitter@29bfbc0e246d499241ebc587f3688f25bb00a9e1
+tree-sitter
 tree-sitter-haskell==0.23.1
 tree-sitter-python==0.23.6
-tree-sitter-rescript @ git+https://github.com/rescript-lang/tree-sitter-rescript@d2df8a285fff95de56a91d2f8152aeceb66f40ef
+tree-sitter-rescript @ git+https://github.com/rescript-lang/tree-sitter-rescript
