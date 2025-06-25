@@ -19,4 +19,4 @@ tqdm==4.67.1
 tree-sitter
 tree-sitter-haskell==0.23.1
 tree-sitter-python==0.23.6
-tree-sitter-rescript @ git+https://github.com/rescript-lang/tree-sitter-rescript
+tree-sitter-rescript @ git+https://github.com/JignyasAnand/tree-sitter-rescript
