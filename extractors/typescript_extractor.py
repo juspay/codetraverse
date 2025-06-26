@@ -99,6 +99,58 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                             if child.type == "constraint":
                                 constraints.append(self.get_text(child, code))
         return constraints
+    def extract_generic_type_dependencies(self, node, code):
+        """Return all dependencies from a generic_type node (e.g. Partial<User>)."""
+        deps = []
+        name = None
+        type_args = []
+        for c in node.children:
+            if c.type == "type_identifier":
+                name = self.get_text(c, code)
+            elif c.type == "type_arguments":
+                for arg in c.children:
+                    # Each argument can itself be a generic_type, literal_type, etc.
+                    if arg.type != ",":
+                        type_args.append(self.get_text(arg, code))
+        if name:
+            deps.append(name)
+        deps += type_args
+        return deps
+    def extract_lookup_type_dependencies(self, node, code):
+        """For lookup_type nodes, get dependencies e.g. User['id'] -> User, 'id'."""
+        deps = []
+        for c in node.children:
+            if c.type in ("type_identifier", "literal_type"):
+                deps.append(self.get_text(c, code))
+            elif c.type == "lookup_type":
+                # nested indexed access
+                deps += self.extract_lookup_type_dependencies(c, code)
+        return deps
+    def extract_conditional_type_dependencies(self, node, code):
+        """For conditional_type nodes, collect all involved types/literals."""
+        deps = []
+        for c in node.children:
+            if c.type in ("type_identifier", "predefined_type", "literal_type"):
+                deps.append(self.get_text(c, code))
+            elif c.type in ("consequence", "alternative", "left", "right"):
+                # Children of consequence/alternative/left/right can be literal_type etc.
+                for cc in c.children:
+                    if cc.type in ("type_identifier", "predefined_type", "literal_type"):
+                        deps.append(self.get_text(cc, code))
+        return deps
+    def extract_mapped_type_dependencies(self, node, code):
+        """For mapped_type_clause, extract referenced types, e.g. P in keyof T."""
+        deps = []
+        for c in node.children:
+            if c.type == "type_identifier":
+                deps.append(self.get_text(c, code))
+            elif c.type == "index_type_query": # e.g., keyof T
+                for cc in c.children:
+                    if cc.type == "type_identifier":
+                        deps.append(self.get_text(cc, code))
+        return deps
+
+
 
     def extract_index_signatures(self, node, code):
         indices = []
@@ -344,12 +396,20 @@ class TypeScriptComponentExtractor(ComponentExtractor):
     def extract_type_dependencies(self, node, code):
         deps = set()
         def visit(n):
-            if n.type in ('type_identifier', 'nested_type_identifier', 'generic_type'):
+            if n.type in ('type_identifier', 'predefined_type', 'nested_type_identifier', 'generic_type'):
                 deps.add(self.get_text(n, code))
-            for c in n.children:
-                visit(c)
+            # Recurse for unions/intersections and parenthesized
+            elif n.type in ('union_type', 'intersection_type', 'parenthesized_type'):
+                for c in n.children:
+                    if c.type not in {"|", "&", "(", ")"}:
+                        visit(c)
+            # Recurse for all other node types (safety)
+            else:
+                for c in n.children:
+                    visit(c)
         visit(node)
         return list(deps)
+
 
     def _get_full_component_path(self, module_name, kind, name, class_name=None):
         if class_name:
@@ -636,6 +696,28 @@ class TypeScriptComponentExtractor(ComponentExtractor):
             start_line = node.start_point[0] + 1
             end_line = node.end_point[0] + 1
             full_path = self._get_full_component_path(module_name, "interface", interface_name)
+            # --- Extract type dependencies for all properties ---
+            type_deps = []
+            for c in node.children:
+                if c.type == "interface_body":
+                    for member in c.children:
+                        if member.type == "property_signature":
+                            # The type of the property is usually in a type_annotation child
+                            for prop_child in member.children:
+                                if prop_child.type == "type_annotation":
+                                    for type_ann_child in prop_child.children:
+                                        # Could be type_identifier, generic_type, literal_type, etc.
+                                        if type_ann_child.type in ("type_identifier", "predefined_type", "literal_type"):
+                                            type_deps.append(self.get_text(type_ann_child, code))
+                                        elif type_ann_child.type == "generic_type":
+                                            type_deps += self.extract_generic_type_dependencies(type_ann_child, code)
+                                        elif type_ann_child.type == "lookup_type":
+                                            type_deps += self.extract_lookup_type_dependencies(type_ann_child, code)
+                                        elif type_ann_child.type == "conditional_type":
+                                            type_deps += self.extract_conditional_type_dependencies(type_ann_child, code)
+                                        # you can add more here as needed
+            # Remove duplicates
+            type_deps = list(set(type_deps))
             results.append({
                 "kind": "interface",
                 "module": module_name,
@@ -644,6 +726,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                 "type_param_constraints": type_param_constraints, # Added
                 "extends": parents,
                 "index_signatures": index_signatures, # Added
+                "type_dependencies": type_deps,
                 "start_line": start_line,
                 "end_line": end_line,
                 "full_component_path": full_path
@@ -655,20 +738,62 @@ class TypeScriptComponentExtractor(ComponentExtractor):
             type_params = self.extract_type_params(node, code)
             type_param_constraints = self.extract_type_param_constraints(node, code) # Added
             type_deps = self.extract_type_dependencies(node, code)
+            value_node = None
+            for c in node.children:
+                if c.type in ("type", "object_type", "generic_type", "union_type", "lookup_type", "conditional_type"):
+                    value_node = c
+                    break
+                # also support multi-line definitions
+
+            # Add dependencies for advanced type features
+            if value_node:
+                if value_node.type == "generic_type":
+                    type_deps += self.extract_generic_type_dependencies(value_node, code)
+                elif value_node.type == "lookup_type":
+                    type_deps += self.extract_lookup_type_dependencies(value_node, code)
+                elif value_node.type == "conditional_type":
+                    type_deps += self.extract_conditional_type_dependencies(value_node, code)
+                elif value_node.type == "object_type":
+                    # Check for mapped type inside index_signature/mapped_type_clause
+                    for child in value_node.children:
+                        if child.type == "index_signature":
+                            for grandchild in child.children:
+                                if grandchild.type == "mapped_type_clause":
+                                    type_deps += self.extract_mapped_type_dependencies(grandchild, code)
+                                if grandchild.type == "type_annotation":
+                                    # e.g. T[P]
+                                    for ggc in grandchild.children:
+                                        if ggc.type == "lookup_type":
+                                            type_deps += self.extract_lookup_type_dependencies(ggc, code)
+                                if grandchild.type == "opting_type_annotation":
+                                    for ggc in grandchild.children:
+                                        if ggc.type == "lookup_type":
+                                            type_deps += self.extract_lookup_type_dependencies(ggc, code)
+                elif value_node.type == "union_type":
+                    # Union of multiple types/literals
+                    for child in value_node.children:
+                        if child.type in ("type_identifier", "literal_type"):
+                            type_deps.append(self.get_text(child, code))
             start_line = node.start_point[0] + 1
             end_line = node.end_point[0] + 1
             full_path = self._get_full_component_path(module_name, "type_alias", type_name)
+            literal_types = self.extract_literal_types(node, code, module_name)
+            literal_type_ids = [lit["id"] for lit in literal_types]
             results.append({
                 "kind": "type_alias",
                 "module": module_name,
                 "name": type_name,
                 "type_parameters": type_params,
                 "type_param_constraints": type_param_constraints, # Added
-                "type_dependencies": type_deps,
+                "type_dependencies": list(set(type_deps)), 
+                "literal_type_dependencies": [lit["value"] for lit in literal_types], # Use literal_types to get just the values
                 "start_line": start_line,
                 "end_line": end_line,
                 "full_component_path": full_path
             })
+            
+            for lit in literal_types:
+                results.append(lit)
 
         # --- Enum Extraction ---
         if node.type == 'enum_declaration':
@@ -723,3 +848,26 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                 if f.endswith('.ts'):
                     raw_components.extend(self.extract_from_file(os.path.join(root, f), abs_folder))
         return raw_components
+    def extract_literal_types(self, node, code, module_name):
+        """Recursively find all literal_type nodes under the given node."""
+        literals = []
+        def visit(n):
+            if n.type == 'literal_type':
+                # This will get the source text, e.g. '"north"', '404', 'true'
+                literal_value = self.get_text(n, code)
+                # Compose a unique name/id for this literal
+                literal_id = f"{module_name}::{literal_value}"
+                literals.append({
+                    "kind": "literal_type",
+                    "name": literal_value,           # for consistency
+                    "value": literal_value,
+                    "module": module_name,
+                    "id": literal_id,
+                    "start_line": n.start_point[0] + 1,
+                    "end_line": n.end_point[0] + 1,
+                    "full_component_path": literal_id
+                })
+            for c in n.children:
+                visit(c)
+        visit(node)
+        return literals

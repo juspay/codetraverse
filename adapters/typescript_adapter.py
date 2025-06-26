@@ -91,6 +91,9 @@ def adapt_typescript_components(raw_components):
         # For other entities, require "module" and "name"
         elif kind in {"function", "class", "interface", "type_alias", "enum", "variable", "namespace"} and comp.get("module") and comp.get("name"):
             node_id = f'{comp["module"]}::{comp["name"]}'
+        elif kind == "literal_type" and comp.get("id"):
+            node_id = comp["id"]
+            category = "literal_type"
         # For function_call nodes with full_component_path
         elif kind == "function_call" and comp.get("full_component_path"):
             node_id = comp["full_component_path"]
@@ -301,6 +304,25 @@ def adapt_typescript_components(raw_components):
 
                 nodes.append(node_info)
                 seen_ids.add(endpoint)
+
+    # 8. Add type dependency edges for type_alias nodes (including literal_type)
+    for comp in raw_components:
+        if comp.get("kind") == "type_alias" and comp.get("type_dependencies"):
+            from_id = make_node_id(comp)
+            for dep in comp["type_dependencies"]:
+                # You should check if this dep is a valid node id (your extractor already uses the node id)
+                if dep != from_id:  # Avoid self-dependency
+                    edges.append({
+                        "from": from_id,
+                        "to": dep,
+                        "relation": "type_dependency"
+                    })
+            for lit in comp.get("literal_type_dependencies", []):
+                edges.append({
+                    "from": from_id,
+                    "to": f'{comp["module"]}::{lit}',
+                    "relation": "type_dependency"
+                })
 
 
     filtered_edges = [e for e in edges if e["from"] is not None and e["to"] is not None]
