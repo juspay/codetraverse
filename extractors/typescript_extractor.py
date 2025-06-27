@@ -7,6 +7,10 @@ from tree_sitter import Language, Parser
 from base.component_extractor import ComponentExtractor
 
 class TypeScriptComponentExtractor(ComponentExtractor):
+    UTILITY_TYPES = {
+    "Partial", "Required", "Readonly", "Pick", "Omit",
+    "ReturnType", "Parameters", "NonNullable", "Record", "InstanceType", "Extract", "Exclude"
+        }
     def __init__(self):
         self.language = Language(tree_sitter_typescript.language_typescript())
         self.parser = Parser(self.language)
@@ -88,6 +92,53 @@ class TypeScriptComponentExtractor(ComponentExtractor):
             if c.type in mods:
                 mods[c.type] = True
         return mods
+    
+    def extract_type_structure(self, node, code):
+        # Recursively turn a type AST into a dict or string
+        if node.type in {"type_identifier", "predefined_type"}:
+            return self.get_text(node, code)
+        if node.type == "object_type":
+            props = {}
+            for child in node.children:
+                if child.type == "property_signature":
+                    key, value = None, None
+                    for n in child.children:
+                        if n.type == "property_identifier":
+                            key = self.get_text(n, code)
+                        elif n.type == "type_annotation" and len(n.children) > 1:
+                            value = self.extract_type_structure(n.children[1], code)
+                    if key:
+                        props[key] = value
+            return {"object_type": props}
+        if node.type == "array_type":
+            for c in node.children:
+                if c.type in {"type_identifier", "predefined_type", "object_type"}:
+                    return [self.extract_type_structure(c, code)]
+        # TODO: handle tuple_type, generic_type, etc. as needed
+        return self.get_text(node, code)
+    def extract_type_params_structured(self, node, code):
+        for c in node.children:
+            if c.type == 'type_parameters':
+                params = []
+                for param in c.children:
+                    if param.type == "type_parameter":
+                        name = None
+                        constraint = None
+                        default = None
+                        for child in param.children:
+                            if child.type == "type_identifier":
+                                name = self.get_text(child, code)
+                            elif child.type == "constraint" and len(child.children) > 1:
+                                constraint = self.extract_type_structure(child.children[1], code)
+                            elif child.type == "default_type" and len(child.children) > 1:
+                                default = self.extract_type_structure(child.children[1], code)
+                        params.append({
+                            "name": name,
+                            "constraint": constraint,
+                            "default": default
+                        })
+                return params
+        return []
 
     def extract_type_param_constraints(self, node, code):
         constraints = []
@@ -269,7 +320,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                             parents.append(parent_name)
         return parents
     
-    def extract_expression_statement_calls(self, node, code, module_name):
+    def extract_expression_statement_calls(self, node, code, module_name, file_path):
         """
         Extract function/method calls of the form `object.method(args)` at the expression statement level.
         Returns a list of component dicts (to be appended to results).
@@ -285,6 +336,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                     if object_node and property_node:
                         object_name = self.get_text(object_node, code)
                         property_name = self.get_text(property_node, code)
+                        jsdoc = self.extract_jsdoc(node, code)
                         # Extract argument list (skipping commas)
                         arg_nodes = expr.child_by_field_name("arguments")
                         arguments = []
@@ -293,6 +345,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                                 if arg.type != ',':
                                     arguments.append(self.get_text(arg, code))
                         # Build a function_call component
+                        abs_path = os.path.abspath(file_path).replace("\\", "/")
                         results.append({
                             "kind": "function_call",
                             "module": module_name,
@@ -301,7 +354,8 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                             "arguments": arguments,
                             "start_line": node.start_point[0] + 1,
                             "end_line": node.end_point[0] + 1,
-                            "full_component_path": f"{module_name}::{object_name}.{property_name}"
+                            "jsdoc": jsdoc,
+                            "full_component_path": f"{abs_path}::{module_name}::{object_name}.{property_name}"
                         })
         return results
 
@@ -371,8 +425,9 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                         source_file = imports[base_name]
                         if not source_file.endswith('.ts'):
                             source_file = source_file + '.ts'
-                        source_file_name = os.path.basename(source_file)
-                        callee_id = f"{source_file_name}::{base_name}"
+                        # source_file_name = os.path.basename(source_file)
+                        # callee_id = f"{source_file_name}::{base_name}"
+                        callee_id = f"{source_file}::{base_name}"
                     else:
                         callee_id = f"{module_name}::{base_name}"
                     calls.append({
@@ -411,18 +466,49 @@ class TypeScriptComponentExtractor(ComponentExtractor):
         return list(deps)
 
 
-    def _get_full_component_path(self, module_name, kind, name, class_name=None):
+    def _get_full_component_path(self, file_path, root_folder, name, class_name=None):
+        rel_path = os.path.relpath(file_path, root_folder).replace("\\", "/")
         if class_name:
-            return f"{module_name}::{class_name}::{name}"
-        return f"{module_name}::{name}"
+            return f"{rel_path}::{class_name}::{name}"
+        return f"{rel_path}::{name}"
 
     def walk_node(self, node, code, file_path, root_folder, context=None, imports=None):
         results = []
         rel_file = os.path.relpath(file_path, root_folder)
         module_name = rel_file.replace(os.sep, '/')
+        typeof_keyof_nodes = self.extract_typeof_keyof_nodes(node, code, module_name)
+        results.extend(typeof_keyof_nodes)
 
         # Extract top-level function/method calls like `rect.draw()`
-        results.extend(self.extract_expression_statement_calls(node, code, module_name))
+        results.extend(self.extract_expression_statement_calls(node, code, module_name, file_path))
+        if node.type == "expression_statement":
+            expr = node.children[0] if node.children else None
+            if expr and expr.type == "call_expression":
+                fn = expr.child_by_field_name("function")
+                if fn and fn.type == "identifier":
+                    func_name = self.get_text(fn, code)
+                    arg_nodes = expr.child_by_field_name("arguments")
+                    arguments = []
+                    if arg_nodes:
+                        for arg in arg_nodes.children:
+                            if arg.type != ',':
+                                arguments.append(self.get_text(arg, code))
+                    jsdoc = self.extract_jsdoc(node, code)
+                    entry = {
+                        "kind": "function_call",
+                        "module": module_name,
+                        "object": None,
+                        "method": func_name,
+                        "arguments": arguments,
+                        "start_line": node.start_point[0] + 1,
+                        "end_line": node.end_point[0] + 1,
+                        "jsdoc": jsdoc,
+                        "full_component_path": f"{module_name}::{func_name}"
+                    }
+                    # --- NEW: Add function_from field if this function is imported ---
+                    if func_name in imports:
+                        entry["function_from"] = imports[func_name]
+                    results.append(entry)
 
         # --- Namespace/Module Extraction ---
         if node.type in ('internal_module', 'module'):
@@ -430,13 +516,17 @@ class TypeScriptComponentExtractor(ComponentExtractor):
             start_line = node.start_point[0] + 1
             end_line = node.end_point[0] + 1
             full_path = self._get_full_component_path(module_name, "namespace", ns_name)
+            exports = self.extract_exports_from_namespace(node)
+            jsdoc = self.extract_jsdoc(node, code)
             results.append({
                 "kind": "namespace",
                 "module": module_name,
                 "name": ns_name,
                 "start_line": start_line,
                 "end_line": end_line,
-                "full_component_path": full_path
+                "jsdoc": jsdoc,
+                "full_component_path": full_path,
+                "exports": exports,  
             })
 
         # --- Variable Extraction ---
@@ -510,6 +600,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                         start_line = child.start_point[0] + 1
                         end_line = child.end_point[0] + 1
                         full_path = self._get_full_component_path(module_name, "variable", name)
+                        jsdoc = self.extract_jsdoc(node, code)
                         results.append({
                             "kind": "variable",
                             "module": module_name,
@@ -519,9 +610,10 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                             "function_calls": calls,
                             "start_line": start_line,
                             "end_line": end_line,
+                            "jsdoc": jsdoc,
                             "full_component_path": full_path
                         })
-            return results
+            # return results
 
         # --- Function Extraction ---
         if node.type in ('function_declaration', 'function_signature'):
@@ -545,6 +637,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                 function_calls = []
             type_deps = self.extract_type_dependencies(node, code)
             full_path = self._get_full_component_path(module_name, "function", fn_name)
+            jsdoc = self.extract_jsdoc(node, code)
             results.append({
                 "kind": "function",
                 "module": module_name,
@@ -552,11 +645,13 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                 "type_signature": type_sig,
                 "type_parameters": type_params,
                 "type_param_constraints": type_param_constraints, # Added
+                "type_parameters_structured": self.extract_type_params_structured(node, code),  # <--- NEW FIELD
                 "parameters": params,
                 "decorators": decorators,
                 "start_line": start_line,
                 "end_line": end_line,
-                "function_calls": function_calls,  # <--- KEY FIELD
+                "jsdoc": jsdoc,
+                "function_calls": function_calls,
                 "type_dependencies": type_deps,
                 "parent": context.get("parent") if context else None,
                 "full_component_path": full_path
@@ -573,7 +668,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
             start_line = node.start_point[0] + 1
             end_line = node.end_point[0] + 1
             full_path = self._get_full_component_path(module_name, "class", class_name)
-
+            jsdoc = self.extract_jsdoc(node, code)
             results.append({
                 "kind": "class",
                 "module": module_name,
@@ -583,6 +678,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                 "decorators": decorators,
                 "start_line": start_line,
                 "end_line": end_line,
+                "jsdoc": jsdoc,
                 "bases": bases,
                 "implements": impls,
                 "index_signatures": index_signatures, # Added
@@ -630,7 +726,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                             
                             # Constructor check
                             kind = "constructor" if method_name == "constructor" else "method"
-
+                            jsdoc = self.extract_jsdoc(node, code)
                             results.append({
                                 "kind": kind, # Changed from "method"
                                 "module": module_name,
@@ -642,6 +738,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                                 "decorators": m_decorators,
                                 "start_line": m_start,
                                 "end_line": m_end,
+                                "jsdoc": jsdoc,
                                 "function_calls": m_calls,
                                 "type_dependencies": m_type_deps,
                                 "parent": class_name,
@@ -668,7 +765,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                             
                             # Modifiers
                             m_mods = self.extract_modifiers(m)
-
+                            jsdoc = self.extract_jsdoc(node, code)
                             results.append({
                                 "kind": "field",
                                 "module": module_name,
@@ -678,6 +775,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                                 "decorators": m_decorators,
                                 "start_line": m_start,
                                 "end_line": m_end,
+                                "jsdoc": jsdoc,
                                 "parent": class_name,
                                 "full_component_path": f_full_path,
                                 "static": m_mods["static"],       # Added
@@ -718,6 +816,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                                         # you can add more here as needed
             # Remove duplicates
             type_deps = list(set(type_deps))
+            jsdoc = self.extract_jsdoc(node, code)
             results.append({
                 "kind": "interface",
                 "module": module_name,
@@ -729,6 +828,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                 "type_dependencies": type_deps,
                 "start_line": start_line,
                 "end_line": end_line,
+                "jsdoc": jsdoc,
                 "full_component_path": full_path
             })
 
@@ -740,9 +840,13 @@ class TypeScriptComponentExtractor(ComponentExtractor):
             type_deps = self.extract_type_dependencies(node, code)
             value_node = None
             for c in node.children:
-                if c.type in ("type", "object_type", "generic_type", "union_type", "lookup_type", "conditional_type"):
+                if c.type in ("generic_type", "object_type", "union_type", "lookup_type", "conditional_type"):
                     value_node = c
                     break
+                if c.type == "type" and len(c.children) > 0:
+                    if c.children[0].type in ("generic_type", "object_type", "union_type", "lookup_type", "conditional_type"):
+                        value_node = c.children[0]
+                        break
                 # also support multi-line definitions
 
             # Add dependencies for advanced type features
@@ -779,6 +883,14 @@ class TypeScriptComponentExtractor(ComponentExtractor):
             full_path = self._get_full_component_path(module_name, "type_alias", type_name)
             literal_types = self.extract_literal_types(node, code, module_name)
             literal_type_ids = [lit["id"] for lit in literal_types]
+            utility_type_info = None
+            if value_node:
+                real_value_node = value_node
+                if value_node.type == "type":
+                    if value_node.type == "type" and len(value_node.children) == 1 and value_node.children[0].type == "generic_type":
+                        real_value_node = value_node.children[0]
+                utility_type_info = self.extract_utility_type(real_value_node, code)
+            jsdoc = self.extract_jsdoc(node, code)
             results.append({
                 "kind": "type_alias",
                 "module": module_name,
@@ -786,9 +898,11 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                 "type_parameters": type_params,
                 "type_param_constraints": type_param_constraints, # Added
                 "type_dependencies": list(set(type_deps)), 
+                "utility_type": utility_type_info,
                 "literal_type_dependencies": [lit["value"] for lit in literal_types], # Use literal_types to get just the values
                 "start_line": start_line,
                 "end_line": end_line,
+                "jsdoc": jsdoc,
                 "full_component_path": full_path
             })
             
@@ -801,33 +915,39 @@ class TypeScriptComponentExtractor(ComponentExtractor):
             start_line = node.start_point[0] + 1
             end_line = node.end_point[0] + 1
             full_path = self._get_full_component_path(module_name, "enum", enum_name)
+            jsdoc = self.extract_jsdoc(node, code)
             results.append({
                 "kind": "enum",
                 "module": module_name,
                 "name": enum_name,
                 "start_line": start_line,
                 "end_line": end_line,
+                "jsdoc": jsdoc,
                 "full_component_path": full_path,
                 "members": self.extract_enum_members(node, code), # Added
             })
 
         # --- Import/Export Extraction ---
         if node.type == 'import_statement':
+            jsdoc = self.extract_jsdoc(node, code)
             results.append({
                 "kind": "import",
                 "module": module_name,
                 "statement": self.get_text(node, code),
                 "start_line": node.start_point[0] + 1,
-                "end_line": node.end_point[0] + 1
+                "end_line": node.end_point[0] + 1,
+                "jsdoc": jsdoc
             })
 
         if node.type == 'export_statement':
+            jsdoc = self.extract_jsdoc(node, code)
             results.append({
                 "kind": "export",
                 "module": module_name,
                 "statement": self.get_text(node, code),
                 "start_line": node.start_point[0] + 1,
-                "end_line": node.end_point[0] + 1
+                "end_line": node.end_point[0] + 1,
+                "jsdoc": jsdoc
             })
 
         # --- Recurse for all children ---
@@ -871,3 +991,145 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                 visit(c)
         visit(node)
         return literals
+
+    def extract_utility_type(self, node, code):
+        if node.type == "generic_type":
+            name_node = None
+            args = []
+            for c in node.children:
+                if c.type == "type_identifier":
+                    name_node = c
+                elif c.type == "type_arguments":
+                    for arg in c.children:
+                        if arg.type not in {",", "<", ">"}:
+                            args.append(self.get_text(arg, code))
+            if name_node is not None:
+                name = self.get_text(name_node, code)
+                if name in self.UTILITY_TYPES:
+                    return {"utility_type": name, "args": args}
+        
+        return None
+    def extract_exports_from_namespace(self, namespace_node):
+        exports = []
+        for child in namespace_node.children:
+            if child.type == "statement_block":
+                for stmt in child.children:
+                    if stmt.type == "export_statement":
+                        exported = self.extract_exported_from_export_statement(stmt)
+                        if exported:
+                            exports.extend(exported)
+        return exports
+        
+    def extract_exported_from_export_statement(self, export_stmt_node):
+        exports = []
+        for child in export_stmt_node.children:
+            decl = child
+            if decl.type == "lexical_declaration":
+                for var_decl in decl.children:
+                    if var_decl.type == "variable_declarator":
+                        name_node = var_decl.child_by_field_name("name")
+                        if name_node:
+                            name = name_node.text.decode("utf-8") if hasattr(name_node.text, "decode") else name_node.text
+                            exports.append({"type": "const", "name": name})
+            elif decl.type == "function_declaration":
+                name_node = decl.child_by_field_name("name")
+                if name_node:
+                    name = name_node.text.decode("utf-8") if hasattr(name_node.text, "decode") else name_node.text
+                    exports.append({"type": "function", "name": name})
+            elif decl.type == "class_declaration":
+                name_node = decl.child_by_field_name("name")
+                if name_node:
+                    name = name_node.text.decode("utf-8") if hasattr(name_node.text, "decode") else name_node.text
+                    exports.append({"type": "class", "name": name})
+            # -- other types can be added here as needed --
+        return exports
+    
+    def extract_jsdoc(self, node, code):
+        prev_sibling = None
+        if hasattr(node, 'parent') and node.parent is not None:
+            siblings = node.parent.children
+            idx = siblings.index(node)
+            # Look for comment node(s) right before
+            for i in range(idx - 1, -1, -1):
+                sib = siblings[i]
+                if sib.type == 'comment':
+                    comment_text = self.get_text(sib, code)
+                    if comment_text.strip().startswith('/**'):
+                        return comment_text
+                elif sib.type not in {'comment'} and not sib.type.isspace():
+                    break  # Stop at first non-comment
+        return None
+    def extract_typeof_keyof_nodes(self, node, code, module_name, parent=None):
+        results = []
+        # typeof operator
+        if node.type == "type_query":
+            arg = node.child_by_field_name("argument") or node.child_by_field_name("name")
+            if arg is None and len(node.children) > 0:
+                if node.children[0].type == 'typeof':
+                    arg = node.children[1] if len(node.children) > 1 else None
+                else:
+                    arg = node.children[0]
+            referenced_name = self.get_text(arg, code) if arg is not None else None
+
+            typeof_node_id = f"{module_name}::typeof::{referenced_name}"
+            results.append({
+                "id": typeof_node_id,
+                "label": "typeof",
+                "category": "typeof",
+                "operator": "typeof",
+                "target": referenced_name,
+                "ast_type": "type_query",
+                "deps": [referenced_name],
+            })
+
+        # keyof operator
+        elif node.type == "index_type_query":
+            arg = node.child_by_field_name("type") or node.child_by_field_name("argument")
+            if arg is None and len(node.children) > 0:
+                if node.children[0].type == 'keyof':
+                    arg = node.children[1] if len(node.children) > 1 else None
+                else:
+                    arg = node.children[0]
+            referenced_type = self.get_text(arg, code) if arg is not None else None
+
+            keyof_node_id = f"{module_name}::keyof::{referenced_type}"
+            results.append({
+                "id": keyof_node_id,
+                "label": "keyof",
+                "category": "keyof",
+                "operator": "keyof",
+                "target": referenced_type,
+                "ast_type": "index_type_query",
+                "deps": [referenced_type],
+            })
+
+        for child in node.children:
+            results += self.extract_typeof_keyof_nodes(child, code, module_name, node)
+        return results
+    def extract_imports(root_node):
+        imported_functions = {}
+        for node in root_node.children:
+            if node.type == "import_statement":
+                # Get the source module (e.g., "./folder1/main")
+                source_node = node.child_by_field_name("source")
+                source = source_node.text[1:-1] if source_node else None  # removes quotes
+                # Get all imported names (works for named imports)
+                import_clause = node.child_by_field_name("import_clause")
+                if import_clause:
+                    for child in import_clause.named_children:
+                        if child.type == "named_imports":
+                            for spec in child.named_children:
+                                if spec.type == "import_specifier":
+                                    name_node = spec.child_by_field_name("name")
+                                    if name_node:
+                                        imported_functions[name_node.text] = source
+        return imported_functions
+
+
+
+
+
+
+
+
+
