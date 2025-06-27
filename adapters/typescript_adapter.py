@@ -79,12 +79,61 @@ def adapt_typescript_components(raw_components):
                     source_module = source_module + '.ts'
                 import_map[module][namespace] = (source_module, '*')
                 continue
+    # Add edges for utility types
+    for comp in raw_components:
+        if comp.get("kind") == "type_alias" and comp.get("utility_type"):
+            alias_id = make_node_id(comp)
+            ut = comp["utility_type"]
+            utility_node_id = f'utility::{ut["utility_type"]}'
+            # Create utility type node if missing
+            if utility_node_id not in [n["id"] for n in nodes]:
+                nodes.append({
+                    "id": utility_node_id,
+                    "category": "utility_type",
+                    "utility_type": ut["utility_type"]
+                })
+            # Edge from alias to utility type node
+            edges.append({
+                "from": alias_id,
+                "to": utility_node_id,
+                "relation": "utility_type"
+            })
+            # Edges from utility type node to its argument(s)
+            for arg in ut["args"]:
+                # Heuristic: try to qualify with module if not already qualified
+                if "::" not in arg:
+                    arg_id = f'{comp["module"]}::{arg}'
+                else:
+                    arg_id = arg
+                if arg_id not in [n["id"] for n in nodes]:
+                    nodes.append({
+                        "id": arg_id,
+                        "category": "type"
+                    })
+                edges.append({
+                    "from": utility_node_id,
+                    "to": arg_id,
+                    "relation": "utility_argument"
+                })
 
     # 2. Build nodes for all main entities
     existing_nodes = set()
     for comp in raw_components:
         kind = comp.get("kind")
         node_id = None
+        if comp.get("operator") in {"typeof", "keyof"} and comp.get("id"):
+            node_id = comp["id"]
+            op = comp["operator"]
+            nodes.append({
+                "id": node_id,
+                "category": op,   # 'typeof' or 'keyof'
+                "label": f'{op} {comp.get("target")}',
+                "target": comp.get("target"),
+                "deps": comp.get("deps"),
+                "ast_type": comp.get("ast_type"),
+            })
+            existing_nodes.add(node_id)
+            continue  # Don't double-handle
         # For method/field, require "class" and "name"
         if kind in {"method", "field"} and comp.get("class") and comp.get("name"):
             node_id = f'{comp["module"]}::{comp["class"]}::{comp["name"]}'
@@ -112,6 +161,9 @@ def adapt_typescript_components(raw_components):
             "category": category, # Use the determined category
             "signature": comp.get("type_signature"),
             "type_parameters": comp.get("type_parameters"),
+            "type_parameters_structured": comp.get("type_parameters_structured"),
+            "utility_type": comp.get("utility_type"),
+
             "parameters": comp.get("parameters"),
             "decorators": comp.get("decorators"),
             "location": {
@@ -139,6 +191,29 @@ def adapt_typescript_components(raw_components):
         node = {k: v for k, v in node.items() if v is not None}
         nodes.append(node)
         existing_nodes.add(node_id)
+
+        
+    # Add edges from namespace to their exported members
+    for comp in raw_components:
+        if comp.get("kind") == "namespace" and comp.get("exports"):
+            ns_id = make_node_id(comp)
+            module = comp.get("module")
+            for export in comp["exports"]:
+                export_type = export.get("type")
+                export_name = export.get("name")
+                export_id = None
+                # Look for the exported item as its own node
+                for cand in raw_components:
+                    if cand.get("name") == export_name and cand.get("module") == module and cand.get("kind") in {"variable", "function", "class"}:
+                        export_id = make_node_id(cand)
+                        break
+                if not export_id:
+                    export_id = f"{module}::{export_name}"
+                edges.append({
+                    "from": ns_id,
+                    "to": export_id,
+                    "relation": "exports"
+                })
 
 
     # 3. Add inheritance (extends) edges for classes
@@ -310,19 +385,133 @@ def adapt_typescript_components(raw_components):
         if comp.get("kind") == "type_alias" and comp.get("type_dependencies"):
             from_id = make_node_id(comp)
             for dep in comp["type_dependencies"]:
-                # You should check if this dep is a valid node id (your extractor already uses the node id)
-                if dep != from_id:  # Avoid self-dependency
+                # Try to resolve dep to a full node id
+                dep_id = dep
+                # Look for a node that endswith ::dep (most precise)
+                candidates = [n["id"] for n in nodes if n["id"].endswith(f"::{dep}")]
+                if candidates:
+                    dep_id = candidates[0]
+                # Don't create self-edges
+                if dep_id and dep_id != from_id:
                     edges.append({
                         "from": from_id,
-                        "to": dep,
+                        "to": dep_id,
                         "relation": "type_dependency"
                     })
             for lit in comp.get("literal_type_dependencies", []):
-                edges.append({
-                    "from": from_id,
-                    "to": f'{comp["module"]}::{lit}',
-                    "relation": "type_dependency"
-                })
+                lit_id = f'{comp["module"]}::{lit}'
+                if lit_id != from_id:
+                    edges.append({
+                        "from": from_id,
+                        "to": lit_id,
+                        "relation": "type_dependency"
+                    })
+
+
+    # 9. Add generic constraint and default edges
+    for comp in raw_components:
+        if comp.get("kind") == "function" and comp.get("type_parameters_structured"):
+            from_id = make_node_id(comp)
+            for idx, tp in enumerate(comp["type_parameters_structured"]):
+                # --- Constraint ---
+                if tp.get("constraint"):
+                    constraint = tp["constraint"]
+                    if isinstance(constraint, dict) and "object_type" in constraint:
+                        # Make a unique node id for the object type constraint
+                        obj_desc = "_".join(f"{k}:{v}" for k, v in constraint["object_type"].items())
+                        constraint_node_id = f'{comp["module"]}::<object_type:{obj_desc}>'
+                        # Add node if not already present
+                        if constraint_node_id not in [n["id"] for n in nodes]:
+                            nodes.append({
+                                "id": constraint_node_id,
+                                "category": "object_type",
+                                "structure": constraint["object_type"]
+                            })
+                        edges.append({
+                            "from": from_id,
+                            "to": constraint_node_id,
+                            "relation": "generic_constraint"
+                        })
+                    else:
+                        # For simple constraints like "object" or "string"
+                        constraint_node_id = f'{comp["module"]}::{constraint}'
+                        if constraint_node_id not in [n["id"] for n in nodes]:
+                            nodes.append({
+                                "id": constraint_node_id,
+                                "category": "type"
+                            })
+                        edges.append({
+                            "from": from_id,
+                            "to": constraint_node_id,
+                            "relation": "generic_constraint"
+                        })
+                # --- Default ---
+                if tp.get("default"):
+                    default = tp["default"]
+                    if isinstance(default, dict) and "object_type" in default:
+                        obj_desc = "_".join(f"{k}:{v}" for k, v in default["object_type"].items())
+                        default_node_id = f'{comp["module"]}::<object_type:{obj_desc}>'
+                        if default_node_id not in [n["id"] for n in nodes]:
+                            nodes.append({
+                                "id": default_node_id,
+                                "category": "object_type",
+                                "structure": default["object_type"]
+                            })
+                        edges.append({
+                            "from": from_id,
+                            "to": default_node_id,
+                            "relation": "generic_default"
+                        })
+                    else:
+                        default_node_id = f'{comp["module"]}::{default}'
+                        if default_node_id not in [n["id"] for n in nodes]:
+                            nodes.append({
+                                "id": default_node_id,
+                                "category": "type"
+                            })
+                        edges.append({
+                            "from": from_id,
+                            "to": default_node_id,
+                            "relation": "generic_default"
+                        })
+     # 10. Add edges for typeof/keyof functional dependencies ---
+    # for comp in raw_components:
+    #     print(comp)
+    #     print("siraj1")
+    #     if comp.get("operator") in {"typeof", "keyof"} and comp.get("id"):
+    #         print("siraj2")
+    #         from_id = comp["id"]
+    #         print(f"\n--- DEBUG ---\nProcessing operator node: {from_id}, deps: {comp.get('deps')}")
+    #         print("All current nodes:")
+    #         for n in nodes:
+    #             print("  ", n["id"])
+    #         for dep in comp.get("deps", []):
+    #             if dep and from_id != dep:
+    #                 dep_id = dep
+    #                 possible = [n["id"] for n in nodes if n["id"].endswith(f"::{dep}")]
+    #                 print(f"  Looking for nodes ending with '::{dep}'")
+    #                 print(f"  Possible matches: {possible}")
+    #                 if possible:
+    #                     dep_id = possible[0]
+    #                     print(f"    Found match: {dep_id}")
+    #                 else:
+    #                     print(f"    No match, will use raw dep_id: {dep_id}")
+    #                 edges.append({
+    #                     "from": from_id,
+    #                     "to": dep_id,
+    #                     "relation": "fdeps"
+    #                 })
+
+
+
+
+
+
+    
+
+
+
+ 
 
 
     filtered_edges = [e for e in edges if e["from"] is not None and e["to"] is not None]
