@@ -1,6 +1,6 @@
 from tqdm import tqdm
 
-def adapt_haskell_components(raw_components):
+def adapt_haskell_components(raw_components, quiet: bool = True):
     # First pass: find the module name
     current_module = None
     for comp in raw_components:
@@ -143,7 +143,7 @@ def adapt_haskell_components(raw_components):
                     })
 
     # Create edges based on function calls and dependencies
-    for comp in tqdm(raw_components):
+    for comp in tqdm(raw_components, total=len(raw_components), desc="Adapting Haskell components"):
         if comp["kind"] not in ["function", "data_type", "instance"]:
             continue
         
@@ -263,8 +263,8 @@ def adapt_haskell_components(raw_components):
                     "file_path": "external"
                 })
                 node_ids.add(endpoint)
-    
-    print(f"Created {len(nodes)} nodes and {len(edges)} edges")
+    if not quiet:
+        print(f"Created {len(nodes)} nodes and {len(edges)} edges")
     return {
         "nodes": nodes,
         "edges": edges,

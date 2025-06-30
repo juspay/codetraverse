@@ -21,7 +21,7 @@ def build_module_path_for_component(comp, current_module_stack=[]):
     else:
         return name
 
-def adapt_rust_components(raw_components: list) -> dict:
+def adapt_rust_components(raw_components: list, quiet: bool = True) -> dict:
     nodes = {}
     edges = []
     all_components = []
@@ -54,7 +54,7 @@ def adapt_rust_components(raw_components: list) -> dict:
             comp['fq_id'] = fq_id
             if name:
                 name_to_fq_ids[name].append(fq_id)
-    for comp in tqdm(all_components, desc="Adapting Rust components"):
+    for comp in tqdm(all_components, total=len(all_components), desc="Adapting Rust components"):
         comp_type = comp.get('type')
         if comp_type in {'function_item', 'struct_item', 'enum_item', 'trait_item', 'impl_item', 'mod_item'}:
             fq_id = comp.get('fq_id')
@@ -146,11 +146,6 @@ def adapt_rust_components(raw_components: list) -> dict:
                     "name": simple_name
                 })
                 seen_ids.add(endpoint_id)
-    print(f"Created {len(final_nodes)} nodes and {len(edges)} edges.")
-    print("\nSample nodes:")
-    for i, node in enumerate(final_nodes[:5]):
-        print(f"  {node}")
-    print(f"\nSample edges:")
-    for i, edge in enumerate(edges[:5]):
-        print(f"  {edge}")
+    if not quiet:
+        print(f"Created {len(final_nodes)} nodes and {len(edges)} edges.")
     return {"nodes": final_nodes, "edges": edges}

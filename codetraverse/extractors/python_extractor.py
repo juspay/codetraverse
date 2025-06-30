@@ -28,6 +28,8 @@ class PythonComponentExtractor(ComponentExtractor):
                 global_var = self._process_global_assignment(node, src)
                 if global_var:
                     self.all_components.append(global_var)
+        for comp in self.all_components:
+            comp["file_path"] = file_path
 
     def write_to_file(self, output_path):
         with open(output_path, "w", encoding="utf-8") as f:
