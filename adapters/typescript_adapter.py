@@ -245,6 +245,24 @@ def adapt_typescript_components(raw_components):
                         "relation": "fdeps"
                     })
 
+    # Class → Method/Field edges
+    for comp in raw_components:
+        if comp.get("kind") in {"method", "field"}:
+            class_name = comp.get("class")
+            if not class_name:
+                continue
+
+            class_id = f"{comp['module']}::{class_name}"
+            member_id = make_node_id(comp)
+
+            if class_id and member_id:
+                edges.append({
+                    "from": class_id,
+                    "to": member_id,
+                    "relation": "defines"
+                })
+
+
     filtered_edges = [e for e in edges if e["from"] and e["to"]]
     return {
         "nodes": nodes,
