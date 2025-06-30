@@ -4,7 +4,7 @@ import tree_sitter_go
 from tree_sitter import Language, Parser, Node
 import json
 from collections import defaultdict
-from base.component_extractor import ComponentExtractor
+from codetraverse.base.component_extractor import ComponentExtractor
 
 def get_node_text(node, src):
     return src[node.start_byte:node.end_byte].decode(errors="ignore")

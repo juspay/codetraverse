@@ -1,9 +1,9 @@
-from extractors.haskell_extractor import HaskellComponentExtractor
-from extractors.python_extractor import PythonComponentExtractor
-from extractors.rescript_extractor import RescriptComponentExtractor
-from extractors.rust_extractor import RustComponentExtractor
-from extractors.go_extractor import GoComponentExtractor
-from extractors.typescript_extractor import TypeScriptComponentExtractor
+from codetraverse.extractors.haskell_extractor import HaskellComponentExtractor
+from codetraverse.extractors.python_extractor import PythonComponentExtractor
+from codetraverse.extractors.rescript_extractor import RescriptComponentExtractor
+from codetraverse.extractors.rust_extractor import RustComponentExtractor
+from codetraverse.extractors.go_extractor import GoComponentExtractor
+from codetraverse.extractors.typescript_extractor import TypeScriptComponentExtractor
 
 def get_extractor(language: str):
     lang = language.lower()

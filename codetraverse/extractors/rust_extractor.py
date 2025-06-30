@@ -2,7 +2,7 @@ import tree_sitter_rust
 from tree_sitter import Language, Parser, Node
 import json, re
 from collections import defaultdict
-from base.component_extractor import ComponentExtractor
+from codetraverse.base.component_extractor import ComponentExtractor
 
 class RustComponentExtractor(ComponentExtractor):
     def __init__(self):

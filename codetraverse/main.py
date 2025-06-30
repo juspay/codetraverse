@@ -3,14 +3,14 @@ import argparse
 import networkx as nx
 import pickle
 from tqdm import tqdm
-from registry.extractor_registry import get_extractor
-from utils.networkx_graph import load_components, build_graph_from_schema, load_components_without_hash
-from adapters.haskell_adapter import adapt_haskell_components
-from adapters.python_adapter import adapt_python_components
-from adapters.rescript_adapter import adapt_rescript_components
-from adapters.rust_adapter import adapt_rust_components
-from adapters.go_adapter import adapt_go_components
-from adapters.typescript_adapter import adapt_typescript_components
+from codetraverse.registry.extractor_registry import get_extractor
+from codetraverse.utils.networkx_graph import load_components, build_graph_from_schema, load_components_without_hash
+from codetraverse.adapters.haskell_adapter import adapt_haskell_components
+from codetraverse.adapters.python_adapter import adapt_python_components
+from codetraverse.adapters.rescript_adapter import adapt_rescript_components
+from codetraverse.adapters.rust_adapter import adapt_rust_components
+from codetraverse.adapters.go_adapter import adapt_go_components
+from codetraverse.adapters.typescript_adapter import adapt_typescript_components
 
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"

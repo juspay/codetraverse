@@ -5,7 +5,7 @@ import json
 from tree_sitter import Language, Parser
 import tree_sitter_typescript
 
-from base.component_extractor import ComponentExtractor
+from codetraverse.base.component_extractor import ComponentExtractor
 
 class TypeScriptComponentExtractor(ComponentExtractor):
     def __init__(self):
