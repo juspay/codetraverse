@@ -5,6 +5,7 @@ from codetraverse.extractors.rust_extractor import RustComponentExtractor
 from codetraverse.extractors.go_extractor import GoComponentExtractor
 from codetraverse.extractors.typescript_extractor import TypeScriptComponentExtractor
 
+
 def get_extractor(language: str):
     lang = language.lower()
     if lang == "haskell":

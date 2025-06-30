@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 
+
 class ComponentExtractor(ABC):
     @abstractmethod
     def process_file(self, file_path: str):

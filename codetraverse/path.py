@@ -3,6 +3,7 @@ import os
 import pickle
 import networkx as nx
 
+
 def load_graph(graph_path):
     if graph_path.endswith(".gpickle"):
         with open(graph_path, "rb") as f:
@@ -11,6 +12,7 @@ def load_graph(graph_path):
         return nx.read_graphml(graph_path)
     else:
         raise RuntimeError(f"Unsupported graph format: {graph_path}")
+
 
 def format_path(G, node_list):
     enriched = []
@@ -25,28 +27,36 @@ def format_path(G, node_list):
             enriched.append(nid)
     return " → ".join(enriched)
 
+
 def find_from_single_source(G, source, target):
     return nx.shortest_path(G, source=source, target=target)
+
 
 def main():
     parser = argparse.ArgumentParser(
         description="Either list all directly related nodes for a given component, "
-                    "or (if --SOURCE is provided) find the shortest path from SOURCE to COMPONENT."
+        "or (if --SOURCE is provided) find the shortest path from SOURCE to COMPONENT."
     )
     parser.add_argument(
-        "--GRAPH_PATH", "-g",
-        type=str, required=True,
-        help="Path to the saved graph (.gpickle or .graphml)."
+        "--GRAPH_PATH",
+        "-g",
+        type=str,
+        required=True,
+        help="Path to the saved graph (.gpickle or .graphml).",
     )
     parser.add_argument(
-        "--COMPONENT", "-c",
-        type=str, required=True,
-        help="Target fully‐qualified component ID (e.g. PgIntegrationApp::make)."
+        "--COMPONENT",
+        "-c",
+        type=str,
+        required=True,
+        help="Target fully‐qualified component ID (e.g. PgIntegrationApp::make).",
     )
     parser.add_argument(
-        "--SOURCE", "-s",
-        type=str, default=None,
-        help="(Optional) Specific source fully‐qualified ID. If omitted, we list direct neighbors of COMPONENT."
+        "--SOURCE",
+        "-s",
+        type=str,
+        default=None,
+        help="(Optional) Specific source fully‐qualified ID. If omitted, we list direct neighbors of COMPONENT.",
     )
 
     args = parser.parse_args()
@@ -87,6 +97,7 @@ def main():
                 print(f"  {target} --[{rel}]--> {s}")
         else:
             print(f"\nNo outgoing edges from '{target}'.")
+
 
 if __name__ == "__main__":
     main()

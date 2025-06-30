@@ -4,6 +4,7 @@ import networkx as nx
 from tqdm import tqdm
 from codetraverse.adapters.rescript_adapter import extract_id
 
+
 def load_components(fdep_dir):
     funcs = {}
     for dirpath, _, files in os.walk(fdep_dir):
@@ -18,6 +19,7 @@ def load_components(fdep_dir):
                 funcs[fq] = comp
     return funcs
 
+
 def load_components_without_hash(fdep_dir):
     components = []
     for dirpath, _, files in os.walk(fdep_dir):
@@ -31,14 +33,13 @@ def load_components_without_hash(fdep_dir):
     return components
 
 
-
 def build_graph_from_schema(schema):
     G = nx.DiGraph()
 
     for node in schema["nodes"]:
         nid = node["id"]
         attrs = {}
-        for (k, v) in node.items():
+        for k, v in node.items():
             if k == "id":
                 continue
             if v is None:

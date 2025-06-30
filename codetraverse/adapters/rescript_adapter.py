@@ -1,9 +1,10 @@
 import json
 from tqdm import tqdm
 
+
 def extract_id(comp):
     """
-    Build a stable ID: "<module>::<name_or_tag>". 
+    Build a stable ID: "<module>::<name_or_tag>".
     If comp["module_name"] is present, use it; otherwise fall back to comp["file_name"].
     The raw “name” may sometimes be missing (e.g. for JSX), so we also fall back to comp["tag_name"].
     """
@@ -38,18 +39,22 @@ def adapt_rescript_components(raw_components):
             module_to_fq_map[module_name_part] = []
         module_to_fq_map[module_name_part].append(fq_id_val)
 
-    for comp in tqdm(raw_components, total=len(raw_components), desc="Adapting ReScript components"):
+    for comp in tqdm(
+        raw_components, total=len(raw_components), desc="Adapting ReScript components"
+    ):
         kind = comp.get("kind")
         if kind not in ("function", "variable", "module"):
             continue
 
         fq = extract_id(comp)
-        nodes.append({
-            "id":       fq,
-            "category": kind,
-            "start":    comp.get("start_line", 0),
-            "end":      comp.get("end_line", 0)
-        })
+        nodes.append(
+            {
+                "id": fq,
+                "category": kind,
+                "start": comp.get("start_line", 0),
+                "end": comp.get("end_line", 0),
+            }
+        )
 
         for raw_call in comp.get("function_calls", []):
             if isinstance(raw_call, dict):
@@ -63,17 +68,9 @@ def adapt_rescript_components(raw_components):
             if target_bare in all_module_names:
 
                 for candidate_fq in module_to_fq_map.get(target_bare, []):
-                    edges.append({
-                        "from":     fq,
-                        "to":       candidate_fq,
-                        "relation": "calls"
-                    })
+                    edges.append({"from": fq, "to": candidate_fq, "relation": "calls"})
             else:
-                edges.append({
-                    "from":     fq,
-                    "to":       target_bare,
-                    "relation": "calls"
-                })
+                edges.append({"from": fq, "to": target_bare, "relation": "calls"})
 
     seen = {n["id"] for n in nodes}
     for e in edges:
@@ -94,13 +91,13 @@ def adapt_rescript_components(raw_components):
         for mod_name, import_list in comp.get("import_map", {}).items():
             for import_info in import_list:
                 import_type = import_info.get("type", "unknown")
-                edges.append({
-                    "from":     fq,
-                    "to":       mod_name,
-                    "relation": f"imports_{import_type}"
-                })
+                edges.append(
+                    {"from": fq, "to": mod_name, "relation": f"imports_{import_type}"}
+                )
 
-    print(f"Created {len(nodes)} nodes and {len(edges)} edges (functions/variables/modules only)")
+    print(
+        f"Created {len(nodes)} nodes and {len(edges)} edges (functions/variables/modules only)"
+    )
     fn_edges = [e for e in edges if e["relation"] == "calls"]
     print(f"Function‐call edges: {len(fn_edges)}")
     return {"nodes": nodes, "edges": edges}

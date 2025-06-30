@@ -6,20 +6,27 @@ import json
 from collections import defaultdict
 from codetraverse.base.component_extractor import ComponentExtractor
 
+
 def get_node_text(node, src):
-    return src[node.start_byte:node.end_byte].decode(errors="ignore")
+    return src[node.start_byte : node.end_byte].decode(errors="ignore")
+
 
 def find_first_literal(node):
     queue = [node]
     while queue:
         n = queue.pop(0)
         if n.type in (
-            "interpreted_string_literal", "raw_string_literal",
-            "int_literal", "float_literal", "rune_literal", "imaginary_literal"
+            "interpreted_string_literal",
+            "raw_string_literal",
+            "int_literal",
+            "float_literal",
+            "rune_literal",
+            "imaginary_literal",
         ):
             return n
         queue.extend(n.children)
     return None
+
 
 def guess_literal_type(literal_node, src):
     if literal_node is None:
@@ -36,20 +43,23 @@ def guess_literal_type(literal_node, src):
     elif t == "imaginary_literal":
         return "complex"
     return None
+
+
 def get_receiver_type(recv_node, src):
     if recv_node is None or len(recv_node.named_children) == 0:
         return None
     type_node = recv_node.named_children[0].child_by_field_name("type")
     if type_node:
-        receiver_type = get_node_text(type_node, src).lstrip("*")  
+        receiver_type = get_node_text(type_node, src).lstrip("*")
         return receiver_type
     return None
+
 
 def extract_doc_comment(node, src):
     siblings = node.parent.children if node.parent else []
     idx = siblings.index(node)
     doc = ""
-    for i in range(idx-1, -1, -1):
+    for i in range(idx - 1, -1, -1):
         sib = siblings[i]
         if sib.type == "comment":
             comment_text = get_node_text(sib, src).strip(" /")
@@ -57,6 +67,7 @@ def extract_doc_comment(node, src):
         else:
             break
     return doc.strip() if doc else None
+
 
 def find_repo_root(file_path):
     curr = os.path.abspath(file_path)
@@ -66,6 +77,7 @@ def find_repo_root(file_path):
         curr = os.path.dirname(curr)
     return None
 
+
 def get_module_path(go_mod_path):
     with open(go_mod_path, "r") as f:
         for line in f:
@@ -73,6 +85,7 @@ def get_module_path(go_mod_path):
             if line.startswith("module "):
                 return line.split()[1]
     return None
+
 
 def build_import_path(file_path, repo_root, module_path):
     file_dir = os.path.dirname(os.path.abspath(file_path))
@@ -120,7 +133,9 @@ class GoComponentExtractor(ComponentExtractor):
         self.comments = []
         for node in root.children:
             if node.type == "comment":
-                self.comments.append((node.start_point[0] + 1, get_node_text(node, src).strip(" /")))
+                self.comments.append(
+                    (node.start_point[0] + 1, get_node_text(node, src).strip(" /"))
+                )
 
         # Header docstring
         file_docstring = ""
@@ -150,15 +165,19 @@ class GoComponentExtractor(ComponentExtractor):
                             pkg = get_node_text(path_node, src).strip('"')
                             imports.append(pkg)
 
-        self.all_components = [{
-            "kind": "file",
-            "file_docstring": file_docstring.strip(),
-            "package": self.package_name,
-            "module_path": self.module_path,
-            "import_path": self.import_path,
-            "imports": imports,
-            "file_path": os.path.relpath(file_path, start=self.repo_root),  # Use relative path from repo root
-        }]
+        self.all_components = [
+            {
+                "kind": "file",
+                "file_docstring": file_docstring.strip(),
+                "package": self.package_name,
+                "module_path": self.module_path,
+                "import_path": self.import_path,
+                "imports": imports,
+                "file_path": os.path.relpath(
+                    file_path, start=self.repo_root
+                ),  # Use relative path from repo root
+            }
+        ]
         self.method_receivers = defaultdict(list)
 
         for node in root.named_children:
@@ -177,7 +196,9 @@ class GoComponentExtractor(ComponentExtractor):
                 types = self._process_type_declaration(node, src)
                 self.all_components.extend(types)
             elif node.type == "var_declaration":
-                self.all_components.extend(self._process_var_decl(node, src, global_scope=True))
+                self.all_components.extend(
+                    self._process_var_decl(node, src, global_scope=True)
+                )
             elif node.type == "const_declaration":
                 self.all_components.extend(self._process_const_decl(node, src))
 
@@ -194,12 +215,12 @@ class GoComponentExtractor(ComponentExtractor):
     def extract_all_components(self):
         return self.all_components
 
-    def _collect_package_name(self,src: bytes):
+    def _collect_package_name(self, src: bytes):
         src_text = src.decode(errors="ignore")
         print("Source Code:\n", src_text)
         match = re.search(r"^\s*package\s+(\w+)", src_text, re.MULTILINE)
         if match:
-            return match.group(1)  
+            return match.group(1)
         return "unknown_package"  # Default value if no package name is found
 
     def _collect_imports(self, root: Node, src: bytes):
@@ -213,8 +234,11 @@ class GoComponentExtractor(ComponentExtractor):
                             if path_node:
                                 module = get_node_text(path_node, src).strip('"')
                                 alias_node = spec.child_by_field_name("name")
-                                alias = (get_node_text(alias_node, src)
-                                         if alias_node else module.split('/')[-1])
+                                alias = (
+                                    get_node_text(alias_node, src)
+                                    if alias_node
+                                    else module.split("/")[-1]
+                                )
                                 imports[alias].append(module)
         return dict(imports)
 
@@ -225,8 +249,6 @@ class GoComponentExtractor(ComponentExtractor):
             return f"{file_path_rel}::{receiver_type}::{name}"
         else:
             return f"{file_path_rel}::{name}"
-
-
 
     def _process_function(self, node: Node, src: bytes):
         kind = "method" if node.type == "method_declaration" else "function"
@@ -269,21 +291,32 @@ class GoComponentExtractor(ComponentExtractor):
         if kind == "method":
             recv_node = node.child_by_field_name("receiver")
             if recv_node:
-                receiver_child = [c for c in recv_node.named_children if c.type == "parameter_declaration"]
+                receiver_child = [
+                    c
+                    for c in recv_node.named_children
+                    if c.type == "parameter_declaration"
+                ]
                 if receiver_child:
                     rtype_node = receiver_child[0].child_by_field_name("type")
                     if rtype_node:
                         receiver_type = get_node_text(rtype_node, src).lstrip("*")
 
         calls, literals, variables, type_deps = [], [], [], set()
+
         def walk(n):
             if n.type == "call_expression":
                 func_node = n.child_by_field_name("function")
                 if func_node:
                     callname = get_node_text(func_node, src)
                     calls.append(callname)
-            elif n.type in ("interpreted_string_literal", "raw_string_literal",
-                            "int_literal", "float_literal", "rune_literal", "imaginary_literal"):
+            elif n.type in (
+                "interpreted_string_literal",
+                "raw_string_literal",
+                "int_literal",
+                "float_literal",
+                "rune_literal",
+                "imaginary_literal",
+            ):
                 lit = get_node_text(n, src)
                 literals.append(lit)
             elif n.type in ("assignment_statement", "short_var_declaration"):
@@ -295,16 +328,23 @@ class GoComponentExtractor(ComponentExtractor):
                         var_name = get_node_text(ident, src)
                         var_val = get_node_text(right, src)
                         variables.append({"name": var_name, "value": var_val})
-            elif n.type in ("type_conversion_expression", "qualified_type", "pointer_type"):
+            elif n.type in (
+                "type_conversion_expression",
+                "qualified_type",
+                "pointer_type",
+            ):
                 t = get_node_text(n, src)
                 type_deps.add(t)
             for c in n.children:
                 walk(c)
+
         body = node.child_by_field_name("body")
         if body:
             walk(body)
 
-        complete_function_path = self._function_complete_path(name, receiver_type if kind == "method" else None)
+        complete_function_path = self._function_complete_path(
+            name, receiver_type if kind == "method" else None
+        )
 
         out = {
             "kind": kind,
@@ -326,11 +366,11 @@ class GoComponentExtractor(ComponentExtractor):
             "package": self.package_name,
             "import_path": self.import_path,
             "module_path": self.module_path,
-            "file_path": os.path.relpath(self.current_file_path, start=self.repo_root),  # Use relative path from repo root
-
+            "file_path": os.path.relpath(
+                self.current_file_path, start=self.repo_root
+            ),  # Use relative path from repo root
         }
         return out
-
 
     def _process_type_declaration(self, node: Node, src: bytes):
         types = []
@@ -353,10 +393,17 @@ class GoComponentExtractor(ComponentExtractor):
                 if field_list:
                     for fld in field_list.named_children:
                         if fld.type == "field_declaration":
-                            field_names = [get_node_text(n, src)
-                                           for n in fld.children if n.type in ("identifier", "field_identifier")]
+                            field_names = [
+                                get_node_text(n, src)
+                                for n in fld.children
+                                if n.type in ("identifier", "field_identifier")
+                            ]
                             field_type_node = fld.child_by_field_name("type")
-                            field_type = get_node_text(field_type_node, src) if field_type_node else None
+                            field_type = (
+                                get_node_text(field_type_node, src)
+                                if field_type_node
+                                else None
+                            )
                             tag = None
                             tag_node = None
                             for n in fld.named_children:
@@ -364,26 +411,34 @@ class GoComponentExtractor(ComponentExtractor):
                                     tag_node = n
                                     tag = get_node_text(tag_node, src)
                             if not field_names and field_type:
-                                fields.append({"name": None, "type": field_type, "tag": tag})
+                                fields.append(
+                                    {"name": None, "type": field_type, "tag": tag}
+                                )
                                 field_types.add(field_type)
                             for fname in field_names:
-                                fields.append({"name": fname, "type": field_type, "tag": tag})
+                                fields.append(
+                                    {"name": fname, "type": field_type, "tag": tag}
+                                )
                                 if field_type:
                                     field_types.add(field_type)
-                types.append({
-                    "kind": "struct",
-                    "name": tname,
-                    "start_line": start_line,
-                    "end_line": end_line,
-                    "doc_comment": doc,
-                    "fields": fields,
-                    "field_types": list(field_types),
-                    "methods": [],
-                    "type_parameters": self._extract_type_params(type_params_node, src),
-                    "code": code,
-                    "import_map": self.import_map,
-                    "package": self.package_name,
-                })
+                types.append(
+                    {
+                        "kind": "struct",
+                        "name": tname,
+                        "start_line": start_line,
+                        "end_line": end_line,
+                        "doc_comment": doc,
+                        "fields": fields,
+                        "field_types": list(field_types),
+                        "methods": [],
+                        "type_parameters": self._extract_type_params(
+                            type_params_node, src
+                        ),
+                        "code": code,
+                        "import_map": self.import_map,
+                        "package": self.package_name,
+                    }
+                )
             elif type_kind == "interface_type":
                 methods = []
                 type_deps = set()
@@ -392,61 +447,75 @@ class GoComponentExtractor(ComponentExtractor):
                     for elem in iface_body.named_children:
                         if elem.type == "method_elem":
                             mname_node = elem.child_by_field_name("name")
-                            mname = get_node_text(mname_node, src) if mname_node else None
-                            params, param_types = self._extract_params_and_types(elem.child_by_field_name("parameters"), src)
+                            mname = (
+                                get_node_text(mname_node, src) if mname_node else None
+                            )
+                            params, param_types = self._extract_params_and_types(
+                                elem.child_by_field_name("parameters"), src
+                            )
                             ret_type = None
                             result_node = elem.child_by_field_name("result")
                             if result_node:
                                 ret_type = get_node_text(result_node, src)
                                 type_deps.add(ret_type)
-                            methods.append({
-                                "name": mname,
-                                "parameters": params,
-                                "parameter_types": param_types,
-                                "return_type": ret_type,
-                            })
+                            methods.append(
+                                {
+                                    "name": mname,
+                                    "parameters": params,
+                                    "parameter_types": param_types,
+                                    "return_type": ret_type,
+                                }
+                            )
                         elif elem.type == "type_elem":
                             type_str = get_node_text(elem, src)
                             type_deps.add(type_str)
-                types.append({
-                    "kind": "interface",
-                    "name": tname,
-                    "start_line": start_line,
-                    "end_line": end_line,
-                    "doc_comment": doc,
-                    "methods": methods,
-                    "type_dependencies": list(type_deps),
-                    "type_parameters": self._extract_type_params(type_params_node, src),
-                    "code": code,
-                    "import_map": self.import_map,
-                    "package": self.package_name,
-                })
+                types.append(
+                    {
+                        "kind": "interface",
+                        "name": tname,
+                        "start_line": start_line,
+                        "end_line": end_line,
+                        "doc_comment": doc,
+                        "methods": methods,
+                        "type_dependencies": list(type_deps),
+                        "type_parameters": self._extract_type_params(
+                            type_params_node, src
+                        ),
+                        "code": code,
+                        "import_map": self.import_map,
+                        "package": self.package_name,
+                    }
+                )
             elif type_kind == "qualified_type":
                 aliased_type = get_node_text(type_node, src)
-                types.append({
-                    "kind": "type_alias",
-                    "name": tname,
-                    "aliased_type": aliased_type,
-                    "start_line": start_line,
-                    "end_line": end_line,
-                    "doc_comment": doc,
-                    "code": code,
-                    "import_map": self.import_map,
-                    "package": self.package_name,
-                })
+                types.append(
+                    {
+                        "kind": "type_alias",
+                        "name": tname,
+                        "aliased_type": aliased_type,
+                        "start_line": start_line,
+                        "end_line": end_line,
+                        "doc_comment": doc,
+                        "code": code,
+                        "import_map": self.import_map,
+                        "package": self.package_name,
+                    }
+                )
             else:
                 aliased_type = get_node_text(type_node, src)
-                types.append({
-                    "kind": "type_alias",
-                    "name": tname,
-                    "aliased_type": aliased_type,
-                    "start_line": start_line,
-                    "end_line": end_line,
-                    "doc_comment": doc,
-                    "code": code,
-                    "import_map": self.import_map,
-                    "package": self.package_name,
-                })
+                types.append(
+                    {
+                        "kind": "type_alias",
+                        "name": tname,
+                        "aliased_type": aliased_type,
+                        "start_line": start_line,
+                        "end_line": end_line,
+                        "doc_comment": doc,
+                        "code": code,
+                        "import_map": self.import_map,
+                        "package": self.package_name,
+                    }
+                )
         return types
 
     def _extract_type_params(self, node, src):
@@ -505,18 +574,20 @@ class GoComponentExtractor(ComponentExtractor):
                         type_str = guess_literal_type(literal_node, src)
                     else:
                         type_str = None
-                    vars_.append({
-                        "kind": "variable",
-                        "name": name,
-                        "type": type_str,
-                        "value": value,
-                        "doc_comment": doc,
-                        "location": {
-                            "start": node.start_point[0] + 1,
-                            "end": node.end_point[0] + 1,
-                        },
-                        "scope": "global" if global_scope else "local"
-                    })
+                    vars_.append(
+                        {
+                            "kind": "variable",
+                            "name": name,
+                            "type": type_str,
+                            "value": value,
+                            "doc_comment": doc,
+                            "location": {
+                                "start": node.start_point[0] + 1,
+                                "end": node.end_point[0] + 1,
+                            },
+                            "scope": "global" if global_scope else "local",
+                        }
+                    )
         return vars_
 
     def _process_const_decl(self, node: Node, src: bytes):
@@ -545,16 +616,17 @@ class GoComponentExtractor(ComponentExtractor):
                         type_str = guess_literal_type(literal_node, src)
                     else:
                         type_str = None
-                    consts_.append({
-                        "kind": "constant",
-                        "name": name,
-                        "type": type_str,
-                        "value": value,
-                        "doc_comment": doc,
-                        "location": {
-                            "start": node.start_point[0] + 1,
-                            "end": node.end_point[0] + 1,
+                    consts_.append(
+                        {
+                            "kind": "constant",
+                            "name": name,
+                            "type": type_str,
+                            "value": value,
+                            "doc_comment": doc,
+                            "location": {
+                                "start": node.start_point[0] + 1,
+                                "end": node.end_point[0] + 1,
+                            },
                         }
-                    })
+                    )
         return consts_
-
