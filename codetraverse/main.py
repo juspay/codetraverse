@@ -21,7 +21,7 @@ parser.add_argument('--OUTPUT_BASE',type=str, default='fdep')
 parser.add_argument('--GRAPH_DIR',  type=str, default='graph')
 parser.add_argument('--LANGUAGE',   type=str, default='haskell')
 args = parser.parse_args()
-
+os.environ["ROOT_DIR"] = args.ROOT_DIR
 ROOT_DIR         = args.ROOT_DIR
 OUTPUT_BASE      = args.OUTPUT_BASE
 GRAPH_OUTPUT_DIR = args.GRAPH_DIR
