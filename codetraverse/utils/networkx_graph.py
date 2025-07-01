@@ -1,10 +1,9 @@
 import os
 import json
 import networkx as nx
-from tqdm import tqdm
+from codetraverse.adapters.rescript_adapter import extract_id
 
 def load_components(fdep_dir):
-    from adapters.rescript_adapter import extract_id
 
     funcs = {}
     for dirpath, _, files in os.walk(fdep_dir):
