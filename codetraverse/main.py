@@ -60,6 +60,7 @@ def create_fdep_data(
 ):
 
     language_file_map = defaultdict(list)
+    os.environ["ROOT_DIR"] = root_dir
 
     for dirpath, _, filenames in os.walk(root_dir):
         for file_name in filenames:

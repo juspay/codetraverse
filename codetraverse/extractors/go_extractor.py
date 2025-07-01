@@ -383,6 +383,8 @@ class GoComponentExtractor(ComponentExtractor):
                     "code": code,
                     "import_map": self.import_map,
                     "package": self.package_name,
+                    "file_path": os.path.relpath(self.current_file_path, start=self.repo_root),
+
                 })
             elif type_kind == "interface_type":
                 methods = []
@@ -420,6 +422,8 @@ class GoComponentExtractor(ComponentExtractor):
                     "code": code,
                     "import_map": self.import_map,
                     "package": self.package_name,
+                    "file_path": os.path.relpath(self.current_file_path, start=self.repo_root),
+
                 })
             elif type_kind == "qualified_type":
                 aliased_type = get_node_text(type_node, src)
@@ -433,6 +437,8 @@ class GoComponentExtractor(ComponentExtractor):
                     "code": code,
                     "import_map": self.import_map,
                     "package": self.package_name,
+                    "file_path": os.path.relpath(self.current_file_path, start=self.repo_root),
+
                 })
             else:
                 aliased_type = get_node_text(type_node, src)
@@ -446,6 +452,8 @@ class GoComponentExtractor(ComponentExtractor):
                     "code": code,
                     "import_map": self.import_map,
                     "package": self.package_name,
+                    "file_path": os.path.relpath(self.current_file_path, start=self.repo_root),
+
                 })
         return types
 
@@ -515,7 +523,9 @@ class GoComponentExtractor(ComponentExtractor):
                             "start": node.start_point[0] + 1,
                             "end": node.end_point[0] + 1,
                         },
-                        "scope": "global" if global_scope else "local"
+                        "scope": "global" if global_scope else "local",
+                        "file_path": os.path.relpath(self.current_file_path, start=self.repo_root),
+
                     })
         return vars_
 
@@ -554,7 +564,9 @@ class GoComponentExtractor(ComponentExtractor):
                         "location": {
                             "start": node.start_point[0] + 1,
                             "end": node.end_point[0] + 1,
-                        }
+                        },
+                        "file_path": os.path.relpath(self.current_file_path, start=self.repo_root),
+
                     })
         return consts_
 
