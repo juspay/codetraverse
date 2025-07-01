@@ -235,5 +235,38 @@ def adapt_typescript_components(raw_components):
                 if from_id != to_id:
                     edges.append({"from": from_id, "to": to_id, "relation": "fdeps"})
 
+    # Class → Method/Field edges
+    for comp in raw_components:
+        if comp.get("kind") in {"method", "field"}:
+            class_name = comp.get("class")
+            if not class_name:
+                continue
+
+            class_id = f"{comp['module']}::{class_name}"
+            member_id = make_node_id(comp)
+
+            if class_id and member_id:
+                edges.append({
+                    "from": class_id,
+                    "to": member_id,
+                    "relation": "defines"
+                })
+
+
+
+    # 101 for Type Literals and Literal Types
+    raw_edges = [c for c in raw_components if c.get("kind") == "edge"]
+    raw_components = [c for c in raw_components if c.get("kind") != "edge"]
+    
+    edges.extend({
+        "from": e["from"],
+        "to": e["to"],
+        "relation": e["relation"]
+    } for e in raw_edges)
+
+
+    # 102 for Mapped Types, Conditional Types, and Indexed Access Types
+
+
     filtered_edges = [e for e in edges if e["from"] and e["to"]]
     return {"nodes": nodes, "edges": filtered_edges}

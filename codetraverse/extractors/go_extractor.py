@@ -217,7 +217,7 @@ class GoComponentExtractor(ComponentExtractor):
 
     def _collect_package_name(self, src: bytes):
         src_text = src.decode(errors="ignore")
-        print("Source Code:\n", src_text)
+        # print("Source Code:\n", src_text)
         match = re.search(r"^\s*package\s+(\w+)", src_text, re.MULTILINE)
         if match:
             return match.group(1)
