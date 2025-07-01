@@ -194,6 +194,102 @@ class TypeScriptComponentExtractor(ComponentExtractor):
             function_calls = self.extract_function_calls(node, code, rel_module_path, imports)
 
 
+            # --- Step: Handle keyof, conditional, lookup types ---
+            for c in node.children:
+                # keyof T (index_type_query)
+                if c.type == "index_type_query":
+                    target_node = c.child_by_field_name("argument") or c.children[0]
+                    type_id = self.get_node_text(target_node, code)
+                    results.append({
+                        "kind": "edge",
+                        "from": f"{rel_module_path}::{type_name}",
+                        "to": f"{rel_module_path}::{type_id}",
+                        "relation": "type_dependency"
+                    })
+
+                # conditional type (T extends U ? X : Y)
+                elif c.type == "conditional_type":
+                    involved = []
+                    for sub in ["left", "right", "consequence", "alternative"]:
+                        t = c.child_by_field_name(sub)
+                        if t is not None:
+                            val = self.get_node_text(t, code)
+                            if val:
+                                involved.append(val)
+
+                    for target in involved:
+                        results.append({
+                            "kind": "edge",
+                            "from": f"{rel_module_path}::{type_name}",
+                            "to": f"{rel_module_path}::{target}",
+                            "relation": "type_dependency"
+                        })
+
+                # indexed/lookup type: T["prop"]
+                elif c.type == "lookup_type":
+                    base = self.get_node_text(c.children[0], code)
+                    key_node = c.children[1]
+                    key_val = self.get_node_text(key_node, code)
+
+                    # Create a literal_type node if the key is a string literal
+                    if key_node.type == "literal_type":
+                        literal_id = f"{rel_module_path}::{key_val}"
+                        results.append({
+                            "kind": "literal_type",
+                            "name": key_val,
+                            "value": key_val,
+                            "module": rel_module_path,
+                            "id": literal_id,
+                            "full_component_path": literal_id,
+                            "start_line": key_node.start_point[0] + 1,
+                            "end_line": key_node.end_point[0] + 1,
+                        })
+
+                    # Add type dependencies
+                    results.append({
+                        "kind": "edge",
+                        "from": f"{rel_module_path}::{type_name}",
+                        "to": f"{rel_module_path}::{base}",
+                        "relation": "type_dependency"
+                    })
+                    results.append({
+                        "kind": "edge",
+                        "from": f"{rel_module_path}::{type_name}",
+                        "to": f"{rel_module_path}::{key_val}",
+                        "relation": "type_dependency"
+                    })
+
+
+            # Literal type extraction (e.g., "admin" | "user")
+            for c in node.children:
+                if c.type == "union_type":
+                    for u in c.children:
+                        if u.type == "literal_type":
+                            literal_value = self.get_node_text(u, code)
+                            literal_id = f"{rel_module_path}::{literal_value}"
+
+                            # Add literal type node
+                            results.append({
+                                "kind": "literal_type",
+                                "name": literal_value,
+                                "value": literal_value,
+                                "module": rel_module_path,
+                                "id": literal_id,
+                                "full_component_path": literal_id,
+                                "start_line": u.start_point[0] + 1,
+                                "end_line": u.end_point[0] + 1,
+                            })
+
+                            # Add edge from type alias to literal
+                            results.append({
+                                "kind": "edge",
+                                "from": f"{rel_module_path}::{type_name}",
+                                "to": literal_id,
+                                "relation": "type_dependency"
+                            })
+
+
+
 
             full_path = f"{rel_module_path}::{type_name}"
             jsdoc = self.extract_jsdoc(node, code)
