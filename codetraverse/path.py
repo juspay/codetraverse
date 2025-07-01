@@ -28,31 +28,10 @@ def format_path(G, node_list):
 def find_from_single_source(G, source, target):
     return nx.shortest_path(G, source=source, target=target)
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Either list all directly related nodes for a given component, "
-                    "or (if --SOURCE is provided) find the shortest path from SOURCE to COMPONENT."
-    )
-    parser.add_argument(
-        "--GRAPH_PATH", "-g",
-        type=str, required=True,
-        help="Path to the saved graph (.gpickle or .graphml)."
-    )
-    parser.add_argument(
-        "--COMPONENT", "-c",
-        type=str, required=True,
-        help="Target fully‐qualified component ID (e.g. PgIntegrationApp::make)."
-    )
-    parser.add_argument(
-        "--SOURCE", "-s",
-        type=str, default=None,
-        help="(Optional) Specific source fully‐qualified ID. If omitted, we list direct neighbors of COMPONENT."
-    )
-
-    args = parser.parse_args()
-    G = load_graph(args.GRAPH_PATH)
-    target = args.COMPONENT
-    source = args.SOURCE
+def find_path(graph_path, component, source=None):
+    G = load_graph(graph_path)
+    target = component
+    source = source
 
     if target not in G:
         print(f"Error: target '{target}' not in graph.")
@@ -87,6 +66,3 @@ def main():
                 print(f"  {target} --[{rel}]--> {s}")
         else:
             print(f"\nNo outgoing edges from '{target}'.")
-
-if __name__ == "__main__":
-    main()
