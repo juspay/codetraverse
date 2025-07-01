@@ -133,7 +133,8 @@ class HaskellComponentExtractor(ComponentExtractor):
                 "exports":     exports
             })
             return components
-        
+        reexported_modules = defaultdict(list)
+
         for child in root_node.children:
             if child.type == "header":
                 print("Skipping header node in top-level extraction")
@@ -232,8 +233,6 @@ class HaskellComponentExtractor(ComponentExtractor):
                         data_comp["code"], import_map, self.current_module
                     )
                     components.append(data_comp)
-            reexported_modules = defaultdict(list)
-
         reexported_modules = defaultdict(list)   
         for comp in components:
             if comp["kind"] == "import" and comp["alias"]:
