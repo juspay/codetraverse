@@ -263,6 +263,21 @@ def adapt_typescript_components(raw_components):
                 })
 
 
+
+    # 101 for Type Literals and Literal Types
+    raw_edges = [c for c in raw_components if c.get("kind") == "edge"]
+    raw_components = [c for c in raw_components if c.get("kind") != "edge"]
+    
+    edges.extend({
+        "from": e["from"],
+        "to": e["to"],
+        "relation": e["relation"]
+    } for e in raw_edges)
+
+
+    # 102 for Mapped Types, Conditional Types, and Indexed Access Types
+
+
     filtered_edges = [e for e in edges if e["from"] and e["to"]]
     return {
         "nodes": nodes,
