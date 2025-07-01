@@ -1,6 +1,6 @@
 import tree_sitter_python
 from tree_sitter import Language, Parser, Node
-import json, re
+import json
 from collections import defaultdict
 from codetraverse.base.component_extractor import ComponentExtractor
 
@@ -10,9 +10,12 @@ class PythonComponentExtractor(ComponentExtractor):
         self.parser = Parser(self.PY_LANGUAGE)
         self.import_map = {}
         self.all_components = []
+        self.current_file_path = ""
 
     def process_file(self, file_path):
-        src = open(file_path, "rb").read()
+        self.current_file_path = file_path
+        with open(file_path, "rb") as f:
+            src = f.read()
         tree = self.parser.parse(src)
         self.import_map = self._collect_imports(tree.root_node, src)
         self.all_components = []
@@ -40,23 +43,27 @@ class PythonComponentExtractor(ComponentExtractor):
         imports = defaultdict(list)
         def walk(n):
             if n.type == "import_statement":
-                module = src[n.child(1).start_byte:n.child(1).end_byte].decode()
-                alias = (n.child_by_field_name("alias") and
-                         src[n.child_by_field_name("alias").start_byte:
-                             n.child_by_field_name("alias").end_byte].decode()) or module
-                imports[alias].append(module)
+                module_node = n.child_by_field_name("name")
+                if not module_node: return
+                
+                # Handles multiple dotted names in one import
+                for module in module_node.named_children:
+                    module_name = src[module.start_byte:module.end_byte].decode()
+                    alias_node = module.child_by_field_name("alias")
+                    alias = src[alias_node.start_byte:alias_node.end_byte].decode() if alias_node else module_name
+                    imports[alias].append(module_name)
+
             elif n.type == "import_from_statement":
-                mod_node = n.child_by_field_name("module")
+                mod_node = n.child_by_field_name("module_name")
                 if not mod_node:
                     return
                 module = src[mod_node.start_byte:mod_node.end_byte].decode()
-                names = n.child_by_field_name("names")
-                if names:
-                    for spec in names.named_children:
+                names_node = n.child_by_field_name("name")
+                if names_node:
+                    for spec in names_node.named_children:
                         name = src[spec.start_byte:spec.end_byte].decode()
-                        alias = (spec.child_by_field_name("alias") and
-                                 src[spec.child_by_field_name("alias").start_byte:
-                                     spec.child_by_field_name("alias").end_byte].decode()) or name
+                        alias_node = spec.child_by_field_name("alias")
+                        alias = src[alias_node.start_byte:alias_node.end_byte].decode() if alias_node else name
                         imports[alias].append(f"{module}.{name}")
             for c in n.children:
                 walk(c)
@@ -70,7 +77,6 @@ class PythonComponentExtractor(ComponentExtractor):
         end_line = node.end_point[0] + 1
         code = src[node.start_byte:node.end_byte].decode(errors="ignore")
 
-        # parameters + types
         params = []
         annotations = {}
         params_node = node.child_by_field_name("parameters")
@@ -88,13 +94,9 @@ class PythonComponentExtractor(ComponentExtractor):
                         params.append(pname)
                         annotations[pname] = tname
                         
-        # return type
-        ret_type = None
-        returns = [c for c in node.children if c.type == "type"]
-        if returns:
-            ret_type = src[returns[0].start_byte:returns[0].end_byte].decode()
+        ret_type_node = node.child_by_field_name("return_type")
+        ret_type = src[ret_type_node.start_byte:ret_type_node.end_byte].decode() if ret_type_node else None
 
-        # extract calls, literals, variables
         calls = []
         literals = []
         variables = []
@@ -105,24 +107,30 @@ class PythonComponentExtractor(ComponentExtractor):
                 if fn:
                     called = src[fn.start_byte:fn.end_byte].decode()
                     calls.append(called)
-            elif n.type == "string" or n.type == "integer" or n.type == "float":
+            elif n.type in ("string", "integer", "float"):
                 lit = src[n.start_byte:n.end_byte].decode()
                 literals.append(lit)
             elif n.type == "assignment":
                 ident = n.child_by_field_name("left")
                 val = n.child_by_field_name("right")
                 if ident and val and ident.type == "identifier":
-                    name = src[ident.start_byte:ident.end_byte].decode()
+                    var_name = src[ident.start_byte:ident.end_byte].decode()
                     val_str = src[val.start_byte:val.end_byte].decode()
-                    variables.append({ "name": name, "value": val_str })
+                    variables.append({ "name": var_name, "value": val_str })
+            
             for c in n.children:
+                if c.parent.type == "function_definition" and c.type == "assignment":
+                    continue
                 walk(c)
-
-        walk(node)
+        
+        body_node = node.child_by_field_name("body")
+        if body_node:
+            walk(body_node)
 
         return {
             "kind": "function",
             "name": name,
+            "file_path": self.current_file_path,
             "start_line": start_line,
             "end_line": end_line,
             "parameters": params,
@@ -130,7 +138,7 @@ class PythonComponentExtractor(ComponentExtractor):
             "return_type": ret_type,
             "variables": variables,
             "literals": literals,
-            "function_calls": calls,
+            "function_calls": sorted(list(set(calls))),
             "code": code,
             "import_map": self.import_map
         }
@@ -150,20 +158,23 @@ class PythonComponentExtractor(ComponentExtractor):
 
         methods = []
         class_vars = []
-        for stmt in node.child_by_field_name("body").named_children:
-            if stmt.type == "function_definition":
-                methods.append(self._process_function(stmt, src))
-            elif stmt.type == "assignment":
-                ident = stmt.child_by_field_name("left")
-                val = stmt.child_by_field_name("right")
-                if ident and val and ident.type == "identifier":
-                    name = src[ident.start_byte:ident.end_byte].decode()
-                    val_str = src[val.start_byte:val.end_byte].decode()
-                    class_vars.append({ "name": name, "value": val_str })
+        body_node = node.child_by_field_name("body")
+        if body_node:
+            for stmt in body_node.named_children:
+                if stmt.type == "function_definition":
+                    methods.append(self._process_function(stmt, src))
+                elif stmt.type == "assignment":
+                    ident = stmt.child_by_field_name("left")
+                    val = stmt.child_by_field_name("right")
+                    if ident and val and ident.type == "identifier":
+                        var_name = src[ident.start_byte:ident.end_byte].decode()
+                        val_str = src[val.start_byte:val.end_byte].decode()
+                        class_vars.append({ "name": var_name, "value": val_str })
 
         return {
             "kind": "class",
             "name": name,
+            "file_path": self.current_file_path,
             "start_line": start_line,
             "end_line": end_line,
             "base_classes": bases,
@@ -174,19 +185,21 @@ class PythonComponentExtractor(ComponentExtractor):
         }
 
     def _process_global_assignment(self, node: Node, src: bytes):
-        targets = [c for c in node.children if c.type == "identifier"]
-        value_node = node.child_by_field_name("value")
-        if not targets or not value_node:
+        left_node = node.child_by_field_name("left")
+        value_node = node.child_by_field_name("right")
+        if not left_node or left_node.type != "identifier" or not value_node:
             return None
+        
+        name = src[left_node.start_byte:left_node.end_byte].decode()
         valuestr = src[value_node.start_byte:value_node.end_byte].decode()
-        for ident in targets:
-            name = src[ident.start_byte:ident.end_byte].decode()
-            return {
-                "kind": "variable",
-                "name": name,
-                "value": valuestr,
-                "location": {
-                    "start": node.start_point[0] + 1,
-                    "end": node.end_point[0] + 1
-                }
+        
+        return {
+            "kind": "variable",
+            "name": name,
+            "value": valuestr,
+            "file_path": self.current_file_path,
+            "location": {
+                "start": node.start_point[0] + 1,
+                "end": node.end_point[0] + 1
             }
+        }

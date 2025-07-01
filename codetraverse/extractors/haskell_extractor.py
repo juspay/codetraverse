@@ -133,7 +133,8 @@ class HaskellComponentExtractor(ComponentExtractor):
                 "exports":     exports
             })
             return components
-        
+        reexported_modules = defaultdict(list)
+
         for child in root_node.children:
             if child.type == "header":
                 print("Skipping header node in top-level extraction")
@@ -199,7 +200,10 @@ class HaskellComponentExtractor(ComponentExtractor):
                     comp["type_signature"] = sigs[fn_name]
                 
                 # Extract function calls from body
-                comp["function_calls"] = self.extract_function_calls(body_code, import_map, self.current_module)
+                if body_node != None:
+                    comp["function_calls"] = self.extract_function_calls_node(body_node, src_bytes, import_map, self.current_module)
+                else:
+                    comp["function_calls"] = self.extract_function_calls(body_code, import_map, self.current_module)
                 
                 # Extract where definitions using Tree-sitter
                 where_defs = self.extract_where_definitions(child, src_bytes)
@@ -229,14 +233,205 @@ class HaskellComponentExtractor(ComponentExtractor):
                         data_comp["code"], import_map, self.current_module
                     )
                     components.append(data_comp)
-            reexported_modules = defaultdict(list)
-
         reexported_modules = defaultdict(list)   
         for comp in components:
             if comp["kind"] == "import" and comp["alias"]:
                 reexported_modules[comp["module"]].append(comp["alias"])
 
         return components
+    
+    def extract_function_calls_node(self, function_node, src_bytes, import_map, current_module):
+        """Extract function calls using Tree-sitter AST traversal"""
+        identifiers = []
+        
+        current_file_functions = set()
+        for comp in self.all_components:
+            if comp.get("kind") == "function":
+                current_file_functions.add(comp.get("name", ""))
+        
+        def traverse_node(node):
+            if node.type == "qualified":
+                module_node = node.child_by_field_name("module")
+                id_node = node.child_by_field_name("id") or node.child_by_field_name("variable")
+                
+                if module_node and id_node:
+                    module_parts = []
+                    for child in module_node.children:
+                        if child.type == "module_id":
+                            module_parts.append(src_bytes[child.start_byte:child.end_byte].decode())
+                    
+                    prefix = ".".join(module_parts)
+                    base_name = src_bytes[id_node.start_byte:id_node.end_byte].decode()
+                    
+                    # Resolve module aliases
+                    resolved_modules = [prefix]
+                    if module_parts:
+                        first_component = module_parts[0]
+                        if first_component in import_map:
+                            resolved = import_map[first_component]
+                            if len(module_parts) > 1:
+                                resolved = [f"{r}.{'.'.join(module_parts[1:])}" for r in resolved]
+                            resolved_modules = resolved
+                    
+                    identifiers.append({
+                        'name': f"{prefix}.{base_name}",
+                        'type': 'qualified',
+                        'modules': resolved_modules,
+                        'base': base_name,
+                        'context': 'function_call'
+                    })
+            
+            # Variable/function references
+            elif node.type == "variable":
+                # Skip if this variable is in a binding position (function definition, let binding, etc.)
+                if self._is_in_binding_position(node):
+                    pass  # Skip binding positions
+                else:
+                    var_name = src_bytes[node.start_byte:node.end_byte].decode()
+                    
+                    # Skip Haskell keywords
+                    if var_name not in {'if', 'then', 'else', 'let', 'in', 'do', 'case', 'of', 'where', 
+                                    'data', 'type', 'newtype', 'class', 'instance', 'deriving', 
+                                    'import', 'module', 'as', 'hiding', 'qualified', 'infix', 
+                                    'infixl', 'infixr', 'pure', 'return', 'mempty', 'mappend'}:
+                        
+                        identifiers.append({
+                            'name': var_name,
+                            'type': 'function',
+                            'modules': [current_module],
+                            'base': var_name,
+                            'context': 'function_call',
+                            'local_function': var_name in current_file_functions
+                        })
+            
+            # Constructor references
+            elif node.type == "constructor":
+                ctor_name = src_bytes[node.start_byte:node.end_byte].decode()
+                identifiers.append({
+                    'name': ctor_name,
+                    'type': 'type_constructor',
+                    'context': 'type_system'
+                })
+            
+            # Operators
+            elif node.type == "operator":
+                op_name = src_bytes[node.start_byte:node.end_byte].decode()
+                identifiers.append({
+                    'name': op_name,
+                    'type': 'operator',
+                    'context': 'operation'
+                })
+            
+            # Literals
+            elif node.type == "integer":
+                num_val = src_bytes[node.start_byte:node.end_byte].decode()
+                identifiers.append({
+                    'name': num_val,
+                    'type': 'literal',
+                    'subtype': 'numeric',
+                    'value': num_val
+                })
+            
+            elif node.type == "float":
+                num_val = src_bytes[node.start_byte:node.end_byte].decode()
+                identifiers.append({
+                    'name': num_val,
+                    'type': 'literal',
+                    'subtype': 'numeric',
+                    'value': num_val
+                })
+            
+            elif node.type == "string":
+                str_val = src_bytes[node.start_byte:node.end_byte].decode()
+                identifiers.append({
+                    'name': str_val,
+                    'type': 'literal',
+                    'subtype': 'string'
+                })
+            
+            elif node.type == "list":
+                list_content = src_bytes[node.start_byte:node.end_byte].decode()
+                identifiers.append({
+                    'name': list_content,
+                    'type': 'literal',
+                    'subtype': 'list'
+                })
+            
+            elif node.type == "tuple":
+                tuple_content = src_bytes[node.start_byte:node.end_byte].decode()
+                element_count = tuple_content.count(',') + 1 if ',' in tuple_content else 2
+                identifiers.append({
+                    'name': tuple_content,
+                    'type': 'literal',
+                    'subtype': 'tuple',
+                    'length': element_count
+                })
+            
+            elif node.type == "lambda":
+                identifiers.append({
+                    'name': 'λ',
+                    'type': 'lambda',
+                    'context': 'anonymous_function'
+                })
+            
+            for child in node.children:
+                traverse_node(child)
+        
+        traverse_node(function_node)
+        
+        seen = set()
+        unique_identifiers = []
+        for ident in identifiers:
+            key = (ident['name'], ident.get('type'), ident.get('context'))
+            if key not in seen:
+                seen.add(key)
+                unique_identifiers.append(ident)
+        
+        return unique_identifiers
+
+    def _is_in_binding_position(self, node):
+        """Check if a variable node is in a binding position (should not be treated as function call)"""
+        parent = node.parent
+        if not parent:
+            return False
+        
+        if parent.type == "bind":
+            name_field = parent.child_by_field_name("name")
+            if name_field == node:
+                return True
+        
+        elif parent.type == "function":
+            name_field = parent.child_by_field_name("name")
+            if name_field == node:
+                return True
+
+            patterns_field = parent.child_by_field_name("patterns")
+            if patterns_field and self._node_contains_child(patterns_field, node):
+                return True
+        
+        elif parent.type in ["patterns", "pattern"]:
+            return True
+        
+        elif parent.type == "signature":
+            name_field = parent.child_by_field_name("name")
+            if name_field == node:
+                return True
+        
+        elif parent.type == "local_binds":
+            return self._is_in_binding_position(parent)
+        
+        return False
+
+    def _node_contains_child(self, parent_node, target_node):
+        """Check if parent_node contains target_node as a descendant"""
+        if parent_node == target_node:
+            return True
+        
+        for child in parent_node.children:
+            if self._node_contains_child(child, target_node):
+                return True
+        
+        return False
     
     def extract_where_definitions(self, function_node, src_bytes):
         """Extract where definitions using Tree-sitter nodes"""
