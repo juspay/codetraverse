@@ -128,6 +128,8 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                 "end_line": node.end_point[0] + 1,
                 "full_component_path": full_path,
                 "jsdoc": jsdoc,
+                "file_path": os.path.relpath(file_path, start=root_folder)
+
             })
         
         if node.type in ("class_declaration", "abstract_class_declaration", "class"):
@@ -148,6 +150,8 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                 "function_calls": function_calls,
                 "full_component_path": full_class_path,
                 "jsdoc": jsdoc,
+                "file_path": os.path.relpath(file_path, start=root_folder)
+
             })
 
             for child in node.children:
@@ -170,6 +174,8 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                                     "start_line": member.start_point[0] + 1,
                                     "end_line": member.end_point[0] + 1,
                                     "full_component_path": method_path,
+                                    "file_path": os.path.relpath(file_path, start=root_folder)
+
                                 })
 
                         # Field
@@ -186,6 +192,8 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                                     "start_line": member.start_point[0] + 1,
                                     "end_line": member.end_point[0] + 1,
                                     "full_component_path": f"{rel_module_path}::{class_name}::{field_name}",
+                                    "file_path": os.path.relpath(file_path, start=root_folder)
+
                                 })
         if node.type == "type_alias_declaration":
             type_name = self.extract_ident(node, code)
@@ -207,6 +215,8 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                 "function_calls": function_calls,
                 "full_component_path": full_path,
                 "jsdoc": jsdoc,
+                "file_path": os.path.relpath(file_path, start=root_folder)
+
             })
         if node.type == "interface_declaration":
             iface_name = self.extract_ident(node, code)
@@ -224,6 +234,8 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                 "end_line": node.end_point[0] + 1,
                 "full_component_path": full_path,
                 "jsdoc": jsdoc,
+                "file_path": os.path.relpath(file_path, start=root_folder)
+
             })
         if node.type == "enum_declaration":
             enum_name = self.extract_ident(node, code)
@@ -241,6 +253,8 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                     "end_line": node.end_point[0] + 1,
                     "full_component_path": full_path,
                     "jsdoc": jsdoc,
+                    "file_path": os.path.relpath(file_path, start=root_folder)
+
                 })
         if node.type == "lexical_declaration":
             for child in node.children:
@@ -261,6 +275,8 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                         "start_line": child.start_point[0] + 1,
                         "end_line": child.end_point[0] + 1,
                         "full_component_path": f"{rel_module_path}::{name}",
+                        "file_path": os.path.relpath(file_path, start=root_folder)
+
                     })
         if node.type in ("internal_module", "module"):
             ns_name = self.extract_ident(node, code)
@@ -278,6 +294,8 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                 "end_line": node.end_point[0] + 1,
                 "full_component_path": full_path,
                 "jsdoc": jsdoc,
+                "file_path": os.path.relpath(file_path, start=root_folder)
+
             })
         for child in node.children:
             results.extend(self.walk_node(child, code, file_path, root_folder, rel_module_path, imports, context))
