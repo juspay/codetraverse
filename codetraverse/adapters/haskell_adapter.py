@@ -1,7 +1,7 @@
 from tqdm import tqdm
 from collections import defaultdict
 
-def adapt_haskell_components(raw_components):
+def adapt_haskell_components(raw_components, quiet: bool = True):
     nodes = []
     edges = []
     
@@ -49,7 +49,7 @@ def adapt_haskell_components(raw_components):
 
     # --- 2. Edge Creation Pass ---
     # Create edges based on dependencies.
-    for comp in raw_components:
+    for comp in tqdm(raw_components, total=len(raw_components), desc="Adapting Haskell components"):
         # **FIX**: Only process components that can be a source of edges
         # and are guaranteed to have a "name" key.
         kind = comp.get("kind")
