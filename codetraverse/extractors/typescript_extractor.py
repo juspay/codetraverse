@@ -105,8 +105,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
         # Add per-node extract logic here (function/class/interface/etc.)
         # We'll populate this part in Phase 1.4 onward
         if node.type in ("function_declaration", "function_signature"):
-            function_calls = self.extract_function_calls(node, code, rel_module_path, imports)
-
+            function_calls = self.extract_function_calls(node, code, rel_module_path, imports, file_path)
             fn_name = self.extract_ident(node, code)
             if not fn_name:
                 return results  # skip anonymous
@@ -117,42 +116,43 @@ class TypeScriptComponentExtractor(ComponentExtractor):
             full_path = f"{rel_module_path}::{fn_name}"
             jsdoc = self.extract_jsdoc(node, code)
 
-            results.append({
-                "kind": "function",
-                "name": fn_name,
-                "module": rel_module_path,
-                "parameters": params,
-                "type_signature": type_sig,
-                "function_calls": function_calls,
-                "start_line": node.start_point[0] + 1,
-                "end_line": node.end_point[0] + 1,
-                "full_component_path": full_path,
-                "jsdoc": jsdoc,
-                "file_path": os.path.relpath(file_path, start=root_folder)
+            results.append(
+                {
+                    "kind": "function",
+                    "name": fn_name,
+                    "module": rel_module_path,
+                    "parameters": params,
+                    "type_signature": type_sig,
+                    "function_calls": function_calls,
+                    "start_line": node.start_point[0] + 1,
+                    "end_line": node.end_point[0] + 1,
+                    "full_component_path": full_path,
+                    "jsdoc": jsdoc,
+                    "file_path": os.path.relpath(file_path, start=root_folder),
+                }
+            )
 
-            })
-        
         if node.type in ("class_declaration", "abstract_class_declaration", "class"):
             class_name = self.extract_ident(node, code)
             if not class_name:
                 return results
-            function_calls = self.extract_function_calls(node, code, rel_module_path, imports, class_name)
-
+            function_calls = self.extract_function_calls(node, code, rel_module_path, imports, file_path, class_name)
             full_class_path = f"{rel_module_path}::{class_name}"
             jsdoc = self.extract_jsdoc(node, code)
 
-            results.append({
-                "kind": "class",
-                "name": class_name,
-                "module": rel_module_path,
-                "start_line": node.start_point[0] + 1,
-                "end_line": node.end_point[0] + 1,
-                "function_calls": function_calls,
-                "full_component_path": full_class_path,
-                "jsdoc": jsdoc,
-                "file_path": os.path.relpath(file_path, start=root_folder)
-
-            })
+            results.append(
+                {
+                    "kind": "class",
+                    "name": class_name,
+                    "module": rel_module_path,
+                    "start_line": node.start_point[0] + 1,
+                    "end_line": node.end_point[0] + 1,
+                    "function_calls": function_calls,
+                    "full_component_path": full_class_path,
+                    "jsdoc": jsdoc,
+                    "file_path": os.path.relpath(file_path, start=root_folder),
+                }
+            )
 
             for child in node.children:
                 if child.type == "class_body":
@@ -164,43 +164,44 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                                 method_path = f"{rel_module_path}::{class_name}::{method_name}"
                                 method_sig = self.extract_type_annotation(member, code)
                                 method_params = self.extract_parameters(member, code)
-                                results.append({
-                                    "kind": "method",
-                                    "name": method_name,
-                                    "class": class_name,
-                                    "module": rel_module_path,
-                                    "parameters": method_params,
-                                    "type_signature": method_sig,
-                                    "start_line": member.start_point[0] + 1,
-                                    "end_line": member.end_point[0] + 1,
-                                    "full_component_path": method_path,
-                                    "file_path": os.path.relpath(file_path, start=root_folder)
-
-                                })
+                                results.append(
+                                    {
+                                        "kind": "method",
+                                        "name": method_name,
+                                        "class": class_name,
+                                        "module": rel_module_path,
+                                        "parameters": method_params,
+                                        "type_signature": method_sig,
+                                        "start_line": member.start_point[0] + 1,
+                                        "end_line": member.end_point[0] + 1,
+                                        "full_component_path": method_path,
+                                        "file_path": os.path.relpath(file_path, start=root_folder),
+                                    }
+                                )
 
                         # Field
                         elif member.type == "public_field_definition":
                             field_name = self.extract_ident(member, code)
                             field_sig = self.extract_type_annotation(member, code)
                             if field_name:
-                                results.append({
-                                    "kind": "field",
-                                    "name": field_name,
-                                    "class": class_name,
-                                    "module": rel_module_path,
-                                    "type_signature": field_sig,
-                                    "start_line": member.start_point[0] + 1,
-                                    "end_line": member.end_point[0] + 1,
-                                    "full_component_path": f"{rel_module_path}::{class_name}::{field_name}",
-                                    "file_path": os.path.relpath(file_path, start=root_folder)
-
-                                })
+                                results.append(
+                                    {
+                                        "kind": "field",
+                                        "name": field_name,
+                                        "class": class_name,
+                                        "module": rel_module_path,
+                                        "type_signature": field_sig,
+                                        "start_line": member.start_point[0] + 1,
+                                        "end_line": member.end_point[0] + 1,
+                                        "full_component_path": f"{rel_module_path}::{class_name}::{field_name}",
+                                        "file_path": os.path.relpath(file_path, start=root_folder),
+                                    }
+                                )
         if node.type == "type_alias_declaration":
             type_name = self.extract_ident(node, code)
             if not type_name:
                 return results
-            function_calls = self.extract_function_calls(node, code, rel_module_path, imports)
-
+            function_calls = self.extract_function_calls(node, code, rel_module_path, imports, file_path)
 
             # --- Step: Handle keyof, conditional, lookup types ---
             for c in node.children:
@@ -212,7 +213,8 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                         "kind": "edge",
                         "from": f"{rel_module_path}::{type_name}",
                         "to": f"{rel_module_path}::{type_id}",
-                        "relation": "type_dependency"
+                        "relation": "type_dependency",
+                        "file_path": os.path.relpath(file_path, start=root_folder),
                     })
 
                 # conditional type (T extends U ? X : Y)
@@ -230,7 +232,8 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                             "kind": "edge",
                             "from": f"{rel_module_path}::{type_name}",
                             "to": f"{rel_module_path}::{target}",
-                            "relation": "type_dependency"
+                            "relation": "type_dependency",
+                            "file_path": os.path.relpath(file_path, start=root_folder),
                         })
 
                 # indexed/lookup type: T["prop"]
@@ -251,6 +254,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                             "full_component_path": literal_id,
                             "start_line": key_node.start_point[0] + 1,
                             "end_line": key_node.end_point[0] + 1,
+                            "file_path": os.path.relpath(file_path, start=root_folder),
                         })
 
                     # Add type dependencies
@@ -258,13 +262,15 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                         "kind": "edge",
                         "from": f"{rel_module_path}::{type_name}",
                         "to": f"{rel_module_path}::{base}",
-                        "relation": "type_dependency"
+                        "relation": "type_dependency",
+                        "file_path": os.path.relpath(file_path, start=root_folder),
                     })
                     results.append({
                         "kind": "edge",
                         "from": f"{rel_module_path}::{type_name}",
                         "to": f"{rel_module_path}::{key_val}",
-                        "relation": "type_dependency"
+                        "relation": "type_dependency",
+                        "file_path": os.path.relpath(file_path, start=root_folder),
                     })
 
 
@@ -286,6 +292,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                                 "full_component_path": literal_id,
                                 "start_line": u.start_point[0] + 1,
                                 "end_line": u.end_point[0] + 1,
+                                "file_path": os.path.relpath(file_path, start=root_folder),
                             })
 
                             # Add edge from type alias to literal
@@ -293,7 +300,8 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                                 "kind": "edge",
                                 "from": f"{rel_module_path}::{type_name}",
                                 "to": literal_id,
-                                "relation": "type_dependency"
+                                "relation": "type_dependency",
+                                "file_path": os.path.relpath(file_path, start=root_folder),
                             })
 
 
@@ -302,18 +310,19 @@ class TypeScriptComponentExtractor(ComponentExtractor):
             full_path = f"{rel_module_path}::{type_name}"
             jsdoc = self.extract_jsdoc(node, code)
 
-            results.append({
-                "kind": "type_alias",
-                "name": type_name,
-                "module": rel_module_path,
-                "start_line": node.start_point[0] + 1,
-                "end_line": node.end_point[0] + 1,
-                "function_calls": function_calls,
-                "full_component_path": full_path,
-                "jsdoc": jsdoc,
-                "file_path": os.path.relpath(file_path, start=root_folder)
-
-            })
+            results.append(
+                {
+                    "kind": "type_alias",
+                    "name": type_name,
+                    "module": rel_module_path,
+                    "start_line": node.start_point[0] + 1,
+                    "end_line": node.end_point[0] + 1,
+                    "function_calls": function_calls,
+                    "full_component_path": full_path,
+                    "jsdoc": jsdoc,
+                    "file_path": os.path.relpath(file_path, start=root_folder),
+                }
+            )
         if node.type == "interface_declaration":
             iface_name = self.extract_ident(node, code)
             if not iface_name:
@@ -330,8 +339,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                 "end_line": node.end_point[0] + 1,
                 "full_component_path": full_path,
                 "jsdoc": jsdoc,
-                "file_path": os.path.relpath(file_path, start=root_folder)
-
+                "file_path": os.path.relpath(file_path, start=root_folder),
             })
         if node.type == "enum_declaration":
             enum_name = self.extract_ident(node, code)
@@ -349,9 +357,28 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                     "end_line": node.end_point[0] + 1,
                     "full_component_path": full_path,
                     "jsdoc": jsdoc,
-                    "file_path": os.path.relpath(file_path, start=root_folder)
+                    "file_path": os.path.relpath(file_path, start=root_folder),
+                }
+            )
+        if node.type == "enum_declaration":
+            enum_name = self.extract_ident(node, code)
+            if enum_name:
 
-                })
+                full_path = f"{rel_module_path}::{enum_name}"
+                jsdoc = self.extract_jsdoc(node, code)
+
+                results.append(
+                    {
+                        "kind": "enum",
+                        "name": enum_name,
+                        "module": rel_module_path,
+                        "start_line": node.start_point[0] + 1,
+                        "end_line": node.end_point[0] + 1,
+                        "full_component_path": full_path,
+                        "jsdoc": jsdoc,
+                        "file_path": os.path.relpath(file_path, start=root_folder),
+                    }
+                )
         if node.type == "lexical_declaration":
             for child in node.children:
                 if child.type == "variable_declarator":
@@ -362,18 +389,19 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                     value = self.get_node_text(child, code)
                     type_sig = self.extract_type_annotation(child, code)
 
-                    results.append({
-                        "kind": "variable",
-                        "name": name,
-                        "module": rel_module_path,
-                        "value": value,
-                        "type_signature": type_sig,
-                        "start_line": child.start_point[0] + 1,
-                        "end_line": child.end_point[0] + 1,
-                        "full_component_path": f"{rel_module_path}::{name}",
-                        "file_path": os.path.relpath(file_path, start=root_folder)
-
-                    })
+                    results.append(
+                        {
+                            "kind": "variable",
+                            "name": name,
+                            "module": rel_module_path,
+                            "value": value,
+                            "type_signature": type_sig,
+                            "start_line": child.start_point[0] + 1,
+                            "end_line": child.end_point[0] + 1,
+                            "full_component_path": f"{rel_module_path}::{name}",
+                            "file_path": os.path.relpath(file_path, start=root_folder),
+                        }
+                    )
         if node.type in ("internal_module", "module"):
             ns_name = self.extract_ident(node, code)
             if not ns_name:
@@ -382,22 +410,24 @@ class TypeScriptComponentExtractor(ComponentExtractor):
             full_path = f"{rel_module_path}::{ns_name}"
             jsdoc = self.extract_jsdoc(node, code)
 
-            results.append({
-                "kind": "namespace",
-                "name": ns_name,
-                "module": rel_module_path,
-                "start_line": node.start_point[0] + 1,
-                "end_line": node.end_point[0] + 1,
-                "full_component_path": full_path,
-                "jsdoc": jsdoc,
-                "file_path": os.path.relpath(file_path, start=root_folder)
-
-            })
+            results.append(
+                {
+                    "kind": "namespace",
+                    "name": ns_name,
+                    "module": rel_module_path,
+                    "start_line": node.start_point[0] + 1,
+                    "end_line": node.end_point[0] + 1,
+                    "full_component_path": full_path,
+                    "jsdoc": jsdoc,
+                    "file_path": os.path.relpath(file_path, start=root_folder),
+                }
+            )
         for child in node.children:
             results.extend(self.walk_node(child, code, file_path, root_folder, rel_module_path, imports, context))
 
         return results
-    def extract_function_calls(self, node, code, rel_module_path, imports, class_name=None):
+    
+    def extract_function_calls(self, node, code, rel_module_path, imports, file_path, class_name=None):
         calls = []
 
         def visit(n):
@@ -416,6 +446,8 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                         "name": base_name,
                         "resolved_callee": full,
                         "full_component_path": full,
+                        "file_path": os.path.relpath(file_path, start=self.root_folder),  # ADD THIS
+
                     })
 
                 elif fn.type == "member_expression":
@@ -436,6 +468,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                             "name": f"{obj_name}.{prop_name}",
                             "resolved_callee": callee,
                             "full_component_path": callee,
+                            "file_path": os.path.relpath(file_path, start=self.root_folder),  # ADD THIS
                         })
 
             for child in getattr(n, 'children', []):
@@ -503,5 +536,3 @@ class TypeScriptComponentExtractor(ComponentExtractor):
             results.extend(self.walk_node(child, code, file_path, root_folder, rel_module_path, imports, context))
 
         return results
-
-
