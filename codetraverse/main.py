@@ -3,11 +3,7 @@ import networkx as nx
 import pickle
 from tqdm import tqdm
 from codetraverse.registry.extractor_registry import get_extractor
-from codetraverse.utils.networkx_graph import (
-    load_components,
-    build_graph_from_schema,
-    load_components_without_hash,
-)
+from codetraverse.utils.networkx_graph import build_graph_from_schema, load_components_without_hash
 from codetraverse.adapters.haskell_adapter import adapt_haskell_components
 from codetraverse.adapters.python_adapter import adapt_python_components
 from codetraverse.adapters.rescript_adapter import adapt_rescript_components
@@ -19,8 +15,7 @@ import shutil
 import traceback
 from pathlib import Path
 from collections import defaultdict
-
-
+from concurrent.futures import ProcessPoolExecutor
 
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -31,19 +26,19 @@ adapter_map = {
     "rescript": adapt_rescript_components,
     "rust": adapt_rust_components,
     "golang": adapt_go_components,
-    "typescript": adapt_typescript_components,
+    "typescript": adapt_typescript_components
 }
 
 EXT_MAP = {
-    "haskell": ".hs",
-    "python": ".py",
-    "rescript": ".res",
-    "golang": ".go",
-    "rust": ".rs",
-    "typescript": ".ts",
+    "haskell": [".hs" , ".lhs" , ".hs-boot"],
+    "python": [".py"],
+    "rescript": [".res"],
+    "golang": [".go"],
+    "rust": [".rs"],
+    "typescript": [".ts"]
 }
-INVERSE_EXTS = {val: key for key, val in EXT_MAP.items()}
 
+INVERSE_EXTS = {ext: lang for lang, exts in EXT_MAP.items() for ext in exts}
 
 def combine_schemas(old, new):
     new_dict = {}
@@ -51,13 +46,22 @@ def combine_schemas(old, new):
     new_dict["edges"] = old["edges"] + new["edges"]
     return new_dict
 
+def _process_single_file_worker(args):
+    code_path, language_str, root_dir_path, output_base_path = args
+    try:
+        extractor_instance = get_extractor(language_str)
+        extractor_instance.process_file(code_path)
+        rel_path = os.path.relpath(code_path, root_dir_path)
+        json_rel = os.path.splitext(rel_path)[0] + ".json"
+        out_path = os.path.join(output_base_path, json_rel)
+        os.makedirs(os.path.dirname(out_path), exist_ok=True)
+        extractor_instance.write_to_file(out_path)
+    except Exception as e:
+        print(traceback.format_exc())
+        print(f"Unable to process - {code_path}. Skipping it.")
 
-def create_fdep_data(
-    root_dir,
-    output_base: str = "./output/fdep",
-    graph_dir: str = "./output/graph",
-    clear_existing: bool = True,
-):
+
+def create_fdep_data(root_dir, output_base: str = "./output/fdep", graph_dir: str = "./output/graph", clear_existing: bool = True):
 
     language_file_map = defaultdict(list)
     os.environ["ROOT_DIR"] = root_dir
@@ -75,21 +79,13 @@ def create_fdep_data(
 
     os.makedirs(output_base, exist_ok=True)
     os.makedirs(graph_dir, exist_ok=True)
-
+    num_parallel_workers = os.cpu_count() - 1
     for language in language_file_map:
         try:
-            extractor = get_extractor(language)
-            for code_path in tqdm(
-                language_file_map[language], desc=f"Processing - {language} - files"
-            ):
-                extractor.process_file(code_path)
-                rel_path = os.path.relpath(code_path, root_dir)
-                json_rel = (
-                    os.path.splitext(rel_path)[0] + Path(code_path).suffix + ".json"
-                )
-                out_path = os.path.join(output_base, json_rel)
-                os.makedirs(os.path.dirname(out_path), exist_ok=True)
-                extractor.write_to_file(out_path)
+            tasks_args = [(code_path, language, root_dir, output_base) for code_path in language_file_map[language]]
+
+            with ProcessPoolExecutor(max_workers=num_parallel_workers) as executor:
+                list(tqdm(executor.map(_process_single_file_worker, tasks_args), total=len(language_file_map[language]), desc=f"Processing - {language} - files"))
         except Exception as e:
             print(traceback.format_exc())
             print("ERROR -", e)
