@@ -29,8 +29,16 @@ adapter_map = {
     "typescript": adapt_typescript_components
 }
 
-EXT_MAP = {'haskell': '.hs', 'python':  '.py', 'rescript': '.res', 'golang': '.go', 'rust': '.rs', 'typescript': '.ts'}
-INVERSE_EXTS = {val: key for key, val in EXT_MAP.items()}
+EXT_MAP = {
+    "haskell": [".hs" , ".lhs" , ".hs-boot"],
+    "python": [".py"],
+    "rescript": [".res"],
+    "golang": [".go"],
+    "rust": [".rs"],
+    "typescript": [".ts"]
+}
+
+INVERSE_EXTS = {ext: lang for lang, exts in EXT_MAP.items() for ext in exts}
 
 def combine_schemas(old, new):
     new_dict = {}
@@ -40,14 +48,17 @@ def combine_schemas(old, new):
 
 def _process_single_file_worker(args):
     code_path, language_str, root_dir_path, output_base_path = args
-    extractor_instance = get_extractor(language_str)
-    extractor_instance.process_file(code_path)
-    rel_path = os.path.relpath(code_path, root_dir_path)
-    json_rel = os.path.splitext(rel_path)[0] + ".json"
-    out_path = os.path.join(output_base_path, json_rel)
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
-    extractor_instance.write_to_file(out_path)
-    return None
+    try:
+        extractor_instance = get_extractor(language_str)
+        extractor_instance.process_file(code_path)
+        rel_path = os.path.relpath(code_path, root_dir_path)
+        json_rel = os.path.splitext(rel_path)[0] + ".json"
+        out_path = os.path.join(output_base_path, json_rel)
+        os.makedirs(os.path.dirname(out_path), exist_ok=True)
+        extractor_instance.write_to_file(out_path)
+    except Exception as e:
+        print(traceback.format_exc())
+        print(f"Unable to process - {code_path}. Skipping it.")
 
 
 def create_fdep_data(root_dir, output_base: str = "./output/fdep", graph_dir: str = "./output/graph", clear_existing: bool = True):
@@ -68,12 +79,12 @@ def create_fdep_data(root_dir, output_base: str = "./output/fdep", graph_dir: st
 
     os.makedirs(output_base, exist_ok=True)
     os.makedirs(graph_dir, exist_ok=True)
-
+    num_parallel_workers = os.cpu_count() - 1
     for language in language_file_map:
         try:
             tasks_args = [(code_path, language, root_dir, output_base) for code_path in language_file_map[language]]
 
-            with ProcessPoolExecutor() as executor:
+            with ProcessPoolExecutor(max_workers=num_parallel_workers) as executor:
                 list(tqdm(executor.map(_process_single_file_worker, tasks_args), total=len(language_file_map[language]), desc=f"Processing - {language} - files"))
         except Exception as e:
             print(traceback.format_exc())
