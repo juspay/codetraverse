@@ -15,7 +15,7 @@ import shutil
 import traceback
 from pathlib import Path
 from collections import defaultdict
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -84,7 +84,7 @@ def create_fdep_data(root_dir, output_base: str = "./output/fdep", graph_dir: st
         try:
             tasks_args = [(code_path, language, root_dir, output_base) for code_path in language_file_map[language]]
 
-            with ProcessPoolExecutor(max_workers=num_parallel_workers) as executor:
+            with ThreadPoolExecutor(max_workers=num_parallel_workers) as executor:
                 list(tqdm(executor.map(_process_single_file_worker, tasks_args), total=len(language_file_map[language]), desc=f"Processing - {language} - files"))
         except Exception as e:
             print(traceback.format_exc())
