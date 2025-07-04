@@ -10,5 +10,3 @@ graph*/
 .idea/
 *.swp
 *.zip
-node_modules
-bridge/dist
