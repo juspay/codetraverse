@@ -61,7 +61,7 @@ def _process_single_file_worker(args):
         print(f"Unable to process - {code_path}. Skipping it.")
 
 
-def create_fdep_data(root_dir, output_base: str = "./output/fdep", graph_dir: str = "./output/graph", clear_existing: bool = True):
+def create_fdep_data(root_dir, output_base: str = "./output/fdep", graph_dir: str = "./output/graph", clear_existing: bool = True, skip_adaptor:bool = False):
 
     language_file_map = defaultdict(list)
     os.environ["ROOT_DIR"] = root_dir
@@ -91,6 +91,9 @@ def create_fdep_data(root_dir, output_base: str = "./output/fdep", graph_dir: st
             print("ERROR -", e)
 
     print(f"Done! All outputs in: {output_base}")
+    if skip_adaptor:
+        return
+    
     raw_funcs = load_components_without_hash(output_base)
 
     lang_comp_dict = defaultdict(list)
