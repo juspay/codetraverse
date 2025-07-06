@@ -14,6 +14,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
         self.language = Language(tree_sitter_typescript.language_typescript())
         self.parser = Parser(self.language)
         self.all_components = []
+        
 
     def parse_file(self, file_path):
         with open(file_path, 'r', encoding='utf-8') as f:
