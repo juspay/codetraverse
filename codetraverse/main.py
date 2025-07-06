@@ -97,9 +97,22 @@ def create_fdep_data(root_dir, output_base: str = "./output/fdep", graph_dir: st
     raw_funcs = load_components_without_hash(output_base)
 
     lang_comp_dict = defaultdict(list)
+    count_unprocessable_fucntion =0
+
     for func in raw_funcs:
-        comp_language = INVERSE_EXTS.get(Path(func["file_path"]).suffix, None)
-        lang_comp_dict[comp_language].append(func)
+        try:
+            comp_language = INVERSE_EXTS.get(Path(func["file_path"]).suffix, None)
+            lang_comp_dict[comp_language].append(func)
+        except Exception as e:
+            count_unprocessable_fucntion += 1
+    print(f"Total unprocessable functions: {count_unprocessable_fucntion}")
+
+    unsupported_languages = [lang for lang in lang_comp_dict if lang not in adapter_map]
+    if unsupported_languages:
+        print(f"Skipping unsupported languages: {unsupported_languages}")
+        
+    lang_comp_dict = {lang: comps for lang, comps in lang_comp_dict.items() if lang in adapter_map}
+
     schemas = [
         adapter_map[language](comps) for language, comps in lang_comp_dict.items()
     ]

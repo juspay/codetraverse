@@ -8,9 +8,15 @@ def infer_project_root(components):
     return None
 
 def make_node_id(comp):
-    module = comp.get("module")
+    ROOT_DIR = os.environ.get("ROOT_DIR", "")
+    module = comp.get("file_path")
+    last_dir = os.path.basename(ROOT_DIR)
+    index = module.find(last_dir)
+    if index != -1:
+        module = module[index:]
+
     if not module:
-        return None
+        module = os.environ.get("CURRENT_FILE", "unknown")
 
     if comp.get("kind") in ("method", "field") and comp.get("class") and comp.get("name"):
         return f"{module}::{comp['class']}::{comp['name']}"
@@ -21,9 +27,15 @@ def make_node_id(comp):
     if comp.get("id"):
         return comp["id"]
     return None
+
 def adapt_typescript_components(raw_components):
     nodes = []
     edges = []
+
+    if raw_components:
+        first = raw_components[0]
+        os.environ["ROOT_DIR"] = first.get("root_folder", "")
+        os.environ["CURRENT_FILE"] = first.get("file_path", "")
 
     project_root = infer_project_root(raw_components)
     import_map = {}
@@ -197,27 +209,53 @@ def adapt_typescript_components(raw_components):
         kind = comp.get("kind")
         from_id = make_node_id(comp)
 
-        if kind in {"function", "method", "variable", "function_call"} and comp.get("function_calls"):
+        # if kind in {"function", "method", "variable", "function_call","arrow_function"} and comp.get("function_calls"):
+        #     for call in comp["function_calls"]:
+        #         target_id = call.get("resolved_callee")
+        #         if target_id and from_id != target_id:
+        #             edges.append({
+        #                 "from": from_id,
+        #                 "to": target_id,
+        #                 "relation": "calls"
+        #             })
+
+        # import os
+
+        if kind in {"function", "method", "variable", "function_call", "arrow_function"} and comp.get("function_calls"):
+            from_id = make_node_id(comp)
+
             for call in comp["function_calls"]:
                 target_id = call.get("resolved_callee")
-                if target_id and from_id != target_id:
+
+                if not from_id or not target_id:
+                    continue
+
+                # Fix relative target paths like "./x.ts::func" or "../x/y.ts::func"
+                if target_id.startswith("."):
+                    target_file_and_symbol = target_id.split("::")
+                    if len(target_file_and_symbol) != 2:
+                        continue
+
+                    target_file = target_file_and_symbol[0]     # e.g. ../folder2/func2.ts
+                    target_symbol = target_file_and_symbol[1]   # e.g. function2
+
+                    # Extract the folder part of from_id (like mini-repo/folder1/func1.ts)
+                    from_file_path = from_id.split("::")[0]
+                    from_dir = os.path.dirname(from_file_path)
+
+                    # Resolve correct full path of the target file
+                    combined_path = os.path.normpath(os.path.join(from_dir, target_file)).replace("\\", "/")
+
+                    target_id = f"{combined_path}::{target_symbol}"
+
+                # Final check before appending edge
+                if from_id != target_id:
                     edges.append({
                         "from": from_id,
                         "to": target_id,
                         "relation": "calls"
                     })
 
-
-    for comp in raw_components:
-        if comp.get("kind") == "namespace" and comp.get("exports"):
-            from_id = make_node_id(comp)
-            for export in comp["exports"]:
-                to_id = f"{comp['module']}::{export['name']}"
-                edges.append({
-                    "from": from_id,
-                    "to": to_id,
-                    "relation": "exports"
-                })
 
 
     for comp in raw_components:
@@ -237,6 +275,7 @@ def adapt_typescript_components(raw_components):
         if comp.get("operator") in {"typeof", "keyof"} and comp.get("deps"):
             from_id = comp["id"]
             for dep in comp["deps"]:
+                
                 to_id = f"{comp['module']}::{dep}" if "::" not in dep else dep
                 if from_id != to_id:
                     edges.append({
@@ -244,39 +283,6 @@ def adapt_typescript_components(raw_components):
                         "to": to_id,
                         "relation": "fdeps"
                     })
-
-    # Class → Method/Field edges
-    for comp in raw_components:
-        if comp.get("kind") in {"method", "field"}:
-            class_name = comp.get("class")
-            if not class_name:
-                continue
-
-            class_id = f"{comp['module']}::{class_name}"
-            member_id = make_node_id(comp)
-
-            if class_id and member_id:
-                edges.append({
-                    "from": class_id,
-                    "to": member_id,
-                    "relation": "defines"
-                })
-
-
-
-    # 101 for Type Literals and Literal Types
-    raw_edges = [c for c in raw_components if c.get("kind") == "edge"]
-    raw_components = [c for c in raw_components if c.get("kind") != "edge"]
-    
-    edges.extend({
-        "from": e["from"],
-        "to": e["to"],
-        "relation": e["relation"]
-    } for e in raw_edges)
-
-
-    # 102 for Mapped Types, Conditional Types, and Indexed Access Types
-
 
     filtered_edges = [e for e in edges if e["from"] and e["to"]]
     return {
