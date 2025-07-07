@@ -160,7 +160,7 @@ export class CodeTraverseBridge {
     }
     console.log(`FDEP data created:\n${stdout}`);
   }
-  
+
   /**
    * Get the all the components a module is exporting
    */
@@ -417,4 +417,4 @@ export class CodeTraverseBridge {
   }
 }
 
-// new CodeTraverseBridge({pythonPath: "/usr/local/bin/python3.10", codetraversePath: "./"}).createEnv()
+// new CodeTraverseBridge({ pythonPath: "/usr/local/bin/python3.10", codetraversePath: "/Users/jignyas.s/Desktop/Juspay/code/node_modules/codetraverse-bridge-jp" }).createFdepData("/Users/jignyas.s/Desktop/Juspay/euler-api-gateway", "./output/fdep", "./output/graph", false)

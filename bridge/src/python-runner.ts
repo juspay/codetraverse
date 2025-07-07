@@ -42,7 +42,7 @@ export class PythonRunner {
     await this.validatePath(rootDir);
 
     const args = [
-      '-m', this.codetraversePath,
+      '-m', "codetraverse.utils.blackbox",
       '--ROOT_DIR', rootDir,
       '--LANGUAGE', language
     ];
@@ -68,7 +68,7 @@ export class PythonRunner {
   ): Promise<{ stdout: string; stderr: string }> {
     await this.validatePath(graphPath);
 
-    const pathModule = path.join(this.codetraversePath, 'path.py');
+    const pathModule = path.join(this.codetraversePath, "codetraverse", 'path.py');
     const args = [pathModule, '--GRAPH_PATH', graphPath, '--COMPONENT', component];
 
     if (source) {
@@ -89,7 +89,7 @@ export class PythonRunner {
     await this.validatePath(filePath);
 
     const args = [
-      '-m', this.codetraversePath,
+      '-m', "codetraverse.utils.blackbox",
       '--SINGLE_FILE', filePath,
       '--LANGUAGE', language,
       '--OUTPUT_FORMAT', outputFormat,
@@ -111,7 +111,7 @@ export class PythonRunner {
     await this.validatePath(rootDir);
 
     const args = [
-      '-m', this.codetraversePath,
+      '-m', "codetraverse.utils.blackbox",
       '--ROOT_DIR', rootDir,
       '--LANGUAGE', language,
       '--JSON_SCHEMA',
@@ -133,7 +133,7 @@ export class PythonRunner {
     fn: string,
     args: string[]
   ): Promise<{ stdout: string; stderr: string }> {
-    const cmd = ['-m', `${this.codetraversePath}.utils.blackbox`, fn, ...args];
+    const cmd = ["-m", "codetraverse.utils.blackbox", fn, ...args];
     return this.executeCommand(cmd);
   }
 
@@ -153,7 +153,7 @@ export class PythonRunner {
       args.push('--no_clear');
     }
     // Use the main.py entrypoint instead of utils.blackbox
-    const cmd = ['-m', this.codetraversePath, ...args];
+    const cmd = ['-m', "codetraverse.main", ...args];
     return this.executeCommand(cmd);
   }
 
@@ -166,7 +166,7 @@ export class PythonRunner {
       await this.executeCommand(['--version'], 5000);
 
       // Check codetraverse module
-      await this.executeCommand(['-m', this.codetraversePath, '--help'], 10000);
+      await this.executeCommand(['-m', "codetraverse.utils.blackbox", '--help'], 10000);
     } catch (error) {
       if (error instanceof PythonProcessError) {
         throw new PythonProcessError(
@@ -251,7 +251,7 @@ export class PythonRunner {
       const actualTimeout = timeoutMs || this.timeout;
       let stdout = '';
       let stderr = '';
-
+      console.log(this.pythonPath, ...["-m", "uv", "run", ...args])
       const child: ChildProcess = spawn(this.pythonPath, ["-m", "uv", "run", ...args], {
         cwd: this.workingDirectory,
         stdio: ['pipe', 'pipe', 'pipe'],
