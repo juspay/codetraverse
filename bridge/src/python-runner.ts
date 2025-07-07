@@ -133,7 +133,7 @@ export class PythonRunner {
     fn: string,
     args: string[]
   ): Promise<{ stdout: string; stderr: string }> {
-    const cmd = ['-m', `${this.codetraversePath}.blackbox`, fn, ...args];
+    const cmd = ['-m', `${this.codetraversePath}.utils.blackbox`, fn, ...args];
     return this.executeCommand(cmd);
   }
 
