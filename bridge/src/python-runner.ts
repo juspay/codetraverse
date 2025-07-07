@@ -137,6 +137,26 @@ export class PythonRunner {
     return this.executeCommand(cmd);
   }
 
+  async runCreateFdepDataAndGraph(
+    rootDir: string,
+    outputBase: string,
+    graphDir: string,
+    noClear: boolean
+  ): Promise<{ stdout: string; stderr: string }> {
+    const args = [
+      'create_fdep_data',
+      rootDir,
+      '--output_base', outputBase,
+      '--graph_dir', graphDir
+    ];
+    if (noClear) {
+      args.push('--no_clear');
+    }
+    // Use the main.py entrypoint instead of utils.blackbox
+    const cmd = ['-m', this.codetraversePath, ...args];
+    return this.executeCommand(cmd);
+  }
+
   /**
    * Check if Python and codetraverse are available
    */
