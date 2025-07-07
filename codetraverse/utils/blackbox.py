@@ -1,9 +1,11 @@
 import os
 import json
 from typing import List, Dict, Any
-import networkx as nx
 from codetraverse.path import load_graph
 from collections import deque
+import sys
+import argparse 
+
 
 def getModuleInfo(fdep_folder: str, module_name: str) -> List[Dict[str, Any]]:
     
@@ -225,6 +227,102 @@ def getCommonChildren(graph_path: str, module_name1: str, component_name1: str, 
     common_children.sort(key=lambda x: x[3] + x[4])
     
     return common_children
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Code Analysis Tool')
+    subparsers = parser.add_subparsers(dest='function', help='Available functions')
+    
+    parser_module = subparsers.add_parser('getModuleInfo', help='Get module information')
+    parser_module.add_argument('fdep_folder', help='Path to fdep folder')
+    parser_module.add_argument('module_name', help='Module name to search for')
+    
+    parser_func = subparsers.add_parser('getFunctionInfo', help='Get function information')
+    parser_func.add_argument('fdep_folder', help='Path to fdep folder')
+    parser_func.add_argument('module_name', help='Module name')
+    parser_func.add_argument('component_name', help='Component name')
+    parser_func.add_argument('--component_type', default='function', help='Component type (default: function)')
+    
+    parser_children = subparsers.add_parser('getFunctionChildren', help='Get function children')
+    parser_children.add_argument('graph_path', help='Path to graph file')
+    parser_children.add_argument('module_name', help='Module name')
+    parser_children.add_argument('component_name', help='Component name')
+    parser_children.add_argument('--depth', type=int, default=1, help='Search depth (default: 1)')
+    
+    parser_parent = subparsers.add_parser('getFunctionParent', help='Get function parents')
+    parser_parent.add_argument('graph_path', help='Path to graph file')
+    parser_parent.add_argument('module_name', help='Module name')
+    parser_parent.add_argument('component_name', help='Component name')
+    parser_parent.add_argument('--depth', type=int, default=1, help='Search depth (default: 1)')
+    
+    parser_subgraph = subparsers.add_parser('getSubgraph', help='Get subgraph')
+    parser_subgraph.add_argument('graph_path', help='Path to graph file')
+    parser_subgraph.add_argument('module_name', help='Module name')
+    parser_subgraph.add_argument('component_name', help='Component name')
+    parser_subgraph.add_argument('--parent_depth', type=int, default=1, help='Parent depth (default: 1)')
+    parser_subgraph.add_argument('--child_depth', type=int, default=1, help='Child depth (default: 1)')
+    
+    parser_common_parents = subparsers.add_parser('getCommonParents', help='Get common parents')
+    parser_common_parents.add_argument('graph_path', help='Path to graph file')
+    parser_common_parents.add_argument('module_name1', help='First module name')
+    parser_common_parents.add_argument('component_name1', help='First component name')
+    parser_common_parents.add_argument('module_name2', help='Second module name')
+    parser_common_parents.add_argument('component_name2', help='Second component name')
+    
+    parser_common_children = subparsers.add_parser('getCommonChildren', help='Get common children')
+    parser_common_children.add_argument('graph_path', help='Path to graph file')
+    parser_common_children.add_argument('module_name1', help='First module name')
+    parser_common_children.add_argument('component_name1', help='First component name')
+    parser_common_children.add_argument('module_name2', help='Second module name')
+    parser_common_children.add_argument('component_name2', help='Second component name')
+    
+    args = parser.parse_args()
+    
+    if not args.function:
+        parser.print_help()
+        return
+    
+    try:
+        if args.function == 'getModuleInfo':
+            result = getModuleInfo(args.fdep_folder, args.module_name)
+            print(json.dumps(result, indent=2))
+            
+        elif args.function == 'getFunctionInfo':
+            result = getFunctionInfo(args.fdep_folder, args.module_name, args.component_name, args.component_type)
+            
+        elif args.function == 'getFunctionChildren':
+            result = getFunctionChildren(args.graph_path, args.module_name, args.component_name, args.depth)
+            print(json.dumps(result, indent=2))
+            
+        elif args.function == 'getFunctionParent':
+            result = getFunctionParent(args.graph_path, args.module_name, args.component_name, args.depth)
+            print(json.dumps(result, indent=2))
+            
+        elif args.function == 'getSubgraph':
+            result = getSubgraph(args.graph_path, args.module_name, args.component_name, args.parent_depth, args.child_depth)
+            if result:
+                print(f"Subgraph created with {len(result.nodes)} nodes and {len(result.edges)} edges")
+                print("Nodes:", list(result.nodes))
+                print("Edges:", list(result.edges))
+            else:
+                print("No subgraph created")
+                
+        elif args.function == 'getCommonParents':
+            result = getCommonParents(args.graph_path, args.module_name1, args.component_name1, 
+                                    args.module_name2, args.component_name2)
+            print(json.dumps(result, indent=2))
+            
+        elif args.function == 'getCommonChildren':
+            result = getCommonChildren(args.graph_path, args.module_name1, args.component_name1, 
+                                     args.module_name2, args.component_name2)
+            print(json.dumps(result, indent=2))
+            
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
 
 
 #### use cases
