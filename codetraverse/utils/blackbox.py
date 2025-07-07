@@ -1,6 +1,8 @@
 import os
 import json
 from typing import List, Dict, Any
+import networkx as nx
+from codetraverse.path import load_graph
 
 def getModuleInfo(fdep_folder: str, module_name: str) -> List[Dict[str, Any]]:
     
@@ -114,6 +116,17 @@ def getFunctionInfo(fdep_folder: str, module_name:str, component_name: str, comp
             return [comp]
     print(f"❌ Function '{component_name}' not found in module '{module_name}''")
     return []
+
+# def getFunctionChildren(graph_path, module_name: str, component_name: str, depth=1) -> List[Dict[str, Any]]:
+#     G = load_graph(graph_path)
+#     if not G:
+#         print(f"❌ Graph not found at {graph_path}")
+#         return []
+#     target = f"{module_name}::{component_name}"
+#     if target not in G:
+#         print(f"Error: target '{target}' not in graph.")
+#         return []
+#     return []
 
 if __name__ == "__main__":
     fdep_folder = "/Users/suryansh.s/codetraverse/fdep_xyne"
