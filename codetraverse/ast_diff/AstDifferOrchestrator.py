@@ -19,21 +19,33 @@ from git import Repo
 from unidiff import PatchSet
 
 class AstDiffOrchestrator:
-    """
-    Manages and provides the correct parser and differ for multiple languages
-    based on file extensions.
-    """
+
+    EXT_MAP = {
+        "rescript":   ['.res'],
+        "haskell":    ['.hs', '.lhs', '.hs-boot'],
+        "typescript": ['.ts', '.tsx'],
+        "go":         ['.go'],
+        "rust":       ['.rs'],
+    }
+
+    INVERSE_EXTS = {ext: lang for lang, exts in EXT_MAP.items() for ext in exts}
+
     def __init__(self):
-        self.language_config = {
-            '.res': {'lang_obj': Language(tree_sitter_rescript.language()), 'differ_class': RescriptFileDiff},
-            '.hs': {'lang_obj': Language(tree_sitter_haskell.language()), 'differ_class': HaskellFileDiff},
-            '.ts': {'lang_obj': Language(tree_sitter_typescript.language_typescript()), 'differ_class': TypeScriptFileDiff},
-            '.tsx': {'lang_obj': Language(tree_sitter_typescript.language_tsx()), 'differ_class': TypeScriptFileDiff},
-            '.go': {'lang_obj': Language(tree_sitter_go.language()), 'differ_class': GoFileDiff},
-            '.rs': {'lang_obj': Language(tree_sitter_rust.language()), 'differ_class': RustFileDiff},
+        # Maps the language name to its specific tools
+        self.language_handlers = {
+            "rescript":   {'lang_obj': Language(tree_sitter_rescript.language()), 'differ_class': RescriptFileDiff},
+            "haskell":    {'lang_obj': Language(tree_sitter_haskell.language()), 'differ_class': HaskellFileDiff},
+            "typescript": {'lang_obj': Language(tree_sitter_typescript.language_typescript()), 'differ_class': TypeScriptFileDiff},
+            "go":         {'lang_obj': Language(tree_sitter_go.language()), 'differ_class': GoFileDiff},
+            "rust":       {'lang_obj': Language(tree_sitter_rust.language()), 'differ_class': RustFileDiff},
         }
-        self.parsers = {ext: Parser(config['lang_obj']) for ext, config in self.language_config.items()}
-        # Pre-initialize a parser for each language
+        
+        # Pre-initialize a parser for each language handler
+        self.parsers = {lang: Parser(handler['lang_obj']) for lang, handler in self.language_handlers.items()}
+        
+        # Special handling for TSX which uses a different language object but the same differ
+        self.parsers['.tsx'] = Parser(Language(tree_sitter_typescript.language_tsx()))
+
 
     def _get_extension(self, filename: str) -> str:
         """Gets the primary extension for a given filename."""
@@ -42,17 +54,25 @@ class AstDiffOrchestrator:
 
     def is_supported(self, filename: str) -> bool:
         """Checks if a file extension is supported."""
-        return self._get_extension(filename) in self.language_config
+        return self._get_extension(filename) in self.INVERSE_EXTS
 
     def get_parser(self, filename: str) -> Parser:
         """Gets the appropriate parser for the file."""
-        return self.parsers.get(self._get_extension(filename))
+        ext = self._get_extension(filename)
+        # Handle the special case for .tsx parser
+        if ext == '.tsx':
+            return self.parsers['.tsx']
+        
+        lang = self.INVERSE_EXTS.get(ext)
+        return self.parsers.get(lang)
 
     def get_differ(self, filename: str) -> Optional[Any]:
         """Gets an instance of the appropriate differ class for the file."""
-        config = self.language_config.get(self._get_extension(filename))
-        if config:
-            return config['differ_class'](filename)
+        ext = self._get_extension(filename)
+        lang = self.INVERSE_EXTS.get(ext)
+        handler = self.language_handlers.get(lang)
+        if handler:
+            return handler['differ_class'](filename)
         return None
     
 def generate_ast_diff(
@@ -164,29 +184,29 @@ def run_ast_diff_from_config(config: Dict[str, Any]):
         print(f"FATAL ERROR in configuration or execution: {e}")
         traceback.print_exc()
         
-# if __name__ == "__main__":
+if __name__ == "__main__":
     
     
-#     print("\n--- RUNNING EXAMPLE 1: LOCAL GIT REPO ---")
-#     local_repo_config = {
-#         "provider_type": "local",
-#         "local": {
-#             "repo_path": "/Users/pramod.p/xyne/"
-#         },
-#         "from_branch": "feat/dummy-sheet",
-#         "to_branch": "main",
-#         "output_dir": "./ast_diff_local_example",
-#         "quiet": False
-#     }
-#     run_ast_diff_from_config(local_repo_config)
-#     print("\n" + "="*50 + "\n")
+    print("\n--- RUNNING EXAMPLE 1: LOCAL GIT REPO ---")
+    local_repo_config = {
+        "provider_type": "local",
+        "local": {
+            "repo_path": "/Users/pramod.p/xyne/"
+        },
+        "from_branch": "feat/dummy-sheet",
+        "to_branch": "main",
+        "output_dir": "./ast_diff_local_example",
+        "quiet": False
+    }
+    run_ast_diff_from_config(local_repo_config)
+    print("\n" + "="*50 + "\n")
     
-    # print("\n" + "="*50 + "\n")
+    print("\n" + "="*50 + "\n")
 
     # --- EXAMPLE 2: BITBUCKET PULL REQUEST ---
     # print("\n--- RUNNING EXAMPLE 2: BITBUCKET PULL REQUEST ---")
     
-    # # IMPORTANT: Replace these placeholder values with your actual Bitbucket details.
+    # IMPORTANT: Replace these placeholder values with your actual Bitbucket details.
     # bitbucket_repo_config = {
     #     "provider_type": "bitbucket",
     #     "bitbucket": {
