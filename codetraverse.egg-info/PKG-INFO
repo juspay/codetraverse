@@ -28,13 +28,16 @@ Requires-Dist: pytz==2025.2
 Requires-Dist: scipy==1.15.3
 Requires-Dist: six==1.17.0
 Requires-Dist: tqdm==4.67.1
-Requires-Dist: tree-sitter
+Requires-Dist: tree-sitter@ git+https://github.com/tree-sitter/py-tree-sitter
 Requires-Dist: tree-sitter-haskell==0.23.1
 Requires-Dist: tree-sitter-python==0.23.6
 Requires-Dist: tree-sitter-rescript@ git+https://github.com/JignyasAnand/tree-sitter-rescript
 Requires-Dist: tree-sitter-rust==0.24.0
 Requires-Dist: tree-sitter-go==0.23.4
 Requires-Dist: tree-sitter-typescript==0.23.2
+Requires-Dist: unidiff
+Requires-Dist: GitPython
+Requires-Dist: requests
 Dynamic: author
 Dynamic: author-email
 Dynamic: classifier
