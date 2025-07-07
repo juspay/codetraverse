@@ -14,34 +14,18 @@ def getModuleInfo(fdep_folder: str, module_name: str) -> List[Dict[str, Any]]:
         return path.replace('\\', '/').strip('/')
     
     def generate_patterns(module_name: str) -> List[str]:
-        patterns = [module_name]
+        """Generate patterns for the exact module path."""
         norm = normalize_path(module_name)
-        
-        if norm != module_name:
-            patterns.append(norm)
-        
-        basename = os.path.basename(norm)
-        if basename and basename != norm:
-            patterns.append(basename)
-        
-        parts = norm.split('/')
-        if len(parts) > 1:
-            patterns.append('/'.join(parts[-2:]))
-            if len(parts) > 2:
-                patterns.append('/'.join(parts[-3:]))
-        
-        return list(dict.fromkeys(patterns))
-    
+        return [norm]  # Return only the normalized absolute path
+
     def matches_pattern(module_path: str, patterns: List[str]) -> bool:
         """Check if module_path matches any pattern."""
         norm_path = normalize_path(module_path)
         
         for pattern in patterns:
             norm_pattern = normalize_path(pattern)
-            if (norm_path == norm_pattern or 
-                norm_path.endswith(norm_pattern) or 
-                norm_pattern.endswith(norm_path) or
-                os.path.basename(norm_path) == os.path.basename(norm_pattern)):
+            # Strict match: Only return True if the paths are exactly the same
+            if norm_path == norm_pattern:
                 return True
         return False
     
