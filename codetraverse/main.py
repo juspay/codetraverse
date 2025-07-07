@@ -113,3 +113,6 @@ def create_fdep_data(root_dir, output_base: str = "./output/fdep", graph_dir: st
         pickle.dump(G, f)
 
     print(f"Wrote {graph_ml} and {graph_gp}")
+
+def main():
+    print(1)

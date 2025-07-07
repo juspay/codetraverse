@@ -1,11 +1,9 @@
 {
-  "name": "codetraverse-monorepo",
+  "name": "codetraverse-bridge-jp",
   "version": "0.1.0",
   "description": "CodeTraverse - Multi-language static code analysis tool with Node.js bridge",
-  "private": true,
-  "workspaces": [
-    "bridge"
-  ],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
     "build": "npm run build --workspace=bridge",
     "test": "npm run test --workspace=bridge",
@@ -13,10 +11,20 @@
     "clean": "npm run clean --workspace=bridge",
     "bridge:build": "npm run build --workspace=bridge",
     "bridge:test": "npm run test --workspace=bridge",
-    "bridge:publish": "npm run build --workspace=bridge && npm publish --workspace=bridge",
+    "bridge:publish": "npm publish",
     "install:bridge": "npm install --workspace=bridge",
-    "dev:bridge": "npm run dev --workspace=bridge"
+    "dev:bridge": "npm run dev --workspace=bridge",
+    "prepublishOnly": "npm run build && rm -rf dist && ncp bridge/dist dist",
+    "postpublish": "rm -rf dist"
   },
+  "files": [
+    "dist",
+    "codetraverse",
+    "scripts"
+  ],
+  "workspaces": [
+    "bridge"
+  ],
   "keywords": [
     "static-analysis",
     "code-analysis",
@@ -44,6 +52,7 @@
     "npm": ">=7.0.0"
   },
   "devDependencies": {
-    "@types/node": "^18.0.0"
+    "@types/node": "^18.0.0",
+    "ncp": "^2.0.0"
   }
 }

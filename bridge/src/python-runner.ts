@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import { 
   BridgeConfig, 
   PythonProcessError, 
+  ShellScriptError,
   FileNotFoundError,
   Language 
 } from './types';
@@ -22,6 +23,11 @@ export class PythonRunner {
     this.codetraversePath = config.codetraversePath || 'codetraverse';
     this.timeout = config.timeout || 60000; // 60 seconds default
     this.workingDirectory = config.workingDirectory || process.cwd();
+  }
+
+  async createEnv(){
+    console.log(this.pythonPath, this.codetraversePath)
+    await this.executeShell(["scripts/setup.sh", "setup_env" , this.pythonPath, this.codetraversePath])
   }
 
   /**
@@ -143,6 +149,66 @@ export class PythonRunner {
       }
       throw error;
     }
+  }
+
+  private async executeShell(
+    args: string[]
+  ): Promise<{stdout: string, stderr: string}> {
+    return new Promise((resolve, reject) => {
+      const actualTimeout = 5 * 60 * 1000;
+      let stdout = '';
+      let stderr = '';
+
+      const child: ChildProcess = spawn("sh", args, {
+        cwd: this.workingDirectory,
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
+
+      // Set up timeout
+      const timer = setTimeout(() => {
+        child.kill('SIGKILL');
+        reject(new ShellScriptError(
+          `Python process timed out after ${actualTimeout}ms`,
+          -1,
+          'Process timeout'
+        ));
+      }, actualTimeout);
+
+      // Collect stdout
+      child.stdout?.on('data', (data: Buffer) => {
+        stdout += data.toString();
+      });
+
+      // Collect stderr
+      child.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString();
+      });
+
+      // Handle process completion
+      child.on('close', (code: number | null) => {
+        clearTimeout(timer);
+        
+        if (code === 0) {
+          resolve({ stdout: stdout.trim(), stderr: stderr.trim() });
+        } else {
+          reject(new ShellScriptError(
+            `shell script exited with code ${code || 'unknown'}`,
+            code || -1,
+            stderr.trim()
+          ));
+        }
+      });
+
+      // Handle process errors
+      child.on('error', (error: Error) => {
+        clearTimeout(timer);
+        reject(new ShellScriptError(
+          `Failed to spawn Python process: ${error.message}`,
+          -1,
+          error.message
+        ));
+      });
+    });
   }
 
   /**
