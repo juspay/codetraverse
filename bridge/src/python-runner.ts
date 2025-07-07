@@ -252,9 +252,13 @@ export class PythonRunner {
       let stdout = '';
       let stderr = '';
 
-      const child: ChildProcess = spawn("VIRTUAL_ENV=" + path.join(this.codetraversePath, ".venv"), [this.pythonPath, "-m", "uv", "run"].concat(args), {
+      const child: ChildProcess = spawn(this.pythonPath, ["-m", "uv", "run", ...args], {
         cwd: this.workingDirectory,
-        stdio: ['pipe', 'pipe', 'pipe']
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: {
+          ...process.env,
+          VIRTUAL_ENV: path.join(this.codetraversePath, ".venv"),
+        }
       });
 
       // Set up timeout
