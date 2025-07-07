@@ -3,6 +3,7 @@ import json
 from typing import List, Dict, Any
 import networkx as nx
 from codetraverse.path import load_graph
+from collections import deque
 
 def getModuleInfo(fdep_folder: str, module_name: str) -> List[Dict[str, Any]]:
     
@@ -23,14 +24,13 @@ def getModuleInfo(fdep_folder: str, module_name: str) -> List[Dict[str, Any]]:
         if basename and basename != norm:
             patterns.append(basename)
         
-        # Path variations
         parts = norm.split('/')
         if len(parts) > 1:
-            patterns.append('/'.join(parts[-2:]))  # Last 2 parts
+            patterns.append('/'.join(parts[-2:]))
             if len(parts) > 2:
-                patterns.append('/'.join(parts[-3:]))  # Last 3 parts
+                patterns.append('/'.join(parts[-3:]))
         
-        return list(dict.fromkeys(patterns))  # Remove duplicates
+        return list(dict.fromkeys(patterns))
     
     def matches_pattern(module_path: str, patterns: List[str]) -> bool:
         """Check if module_path matches any pattern."""
@@ -79,7 +79,6 @@ def getModuleInfo(fdep_folder: str, module_name: str) -> List[Dict[str, Any]]:
                 except (json.JSONDecodeError, FileNotFoundError, IOError):
                     continue
     
-    # Remove duplicates
     seen = set()
     unique_components = []
     for comp in all_components:
@@ -117,23 +116,109 @@ def getFunctionInfo(fdep_folder: str, module_name:str, component_name: str, comp
     print(f"❌ Function '{component_name}' not found in module '{module_name}''")
     return []
 
-# def getFunctionChildren(graph_path, module_name: str, component_name: str, depth=1) -> List[Dict[str, Any]]:
-#     G = load_graph(graph_path)
-#     if not G:
-#         print(f"❌ Graph not found at {graph_path}")
-#         return []
-#     target = f"{module_name}::{component_name}"
-#     if target not in G:
-#         print(f"Error: target '{target}' not in graph.")
-#         return []
-#     return []
+def getFunctionChildren(graph_path: str, module_name: str, component_name: str, depth: int = 1) -> List[List[Any]]:
+    G = load_graph(graph_path)
+    if not G:
+        print(f"❌ Graph not found at {graph_path}")
+        return []
+    target = f"{module_name}::{component_name}"
+    if target not in G:
+        print(f"Error: target '{target}' not in graph.")
+        return []
+    
+    result = []
+    visited = set()
+    queue = deque([(target, 0)])
+    visited.add(target)
+    while queue:
+        current_node, current_depth = queue.popleft()
+        if current_depth >= depth:
+            continue
+            
+        for child in G.successors(current_node):
+            if child not in visited:
+                visited.add(child)
+                child_depth = current_depth + 1
+                if "::" in child:
+                    child_module, child_component = child.split("::", 1)
+                else:
+                    child_module, child_component = "", child
+                result.append([child, child_module, child_component, child_depth])
+                if child_depth < depth:
+                    queue.append((child, child_depth))
+    return result
 
-if __name__ == "__main__":
-    fdep_folder = "/Users/suryansh.s/codetraverse/fdep_xyne"
-    module_name = "webview-ui/src/hooks/useKeyboardShortcuts"
-    component_name = "UseKeyboardShortcutsProps"
-    component_type = "interface"
+def getFunctionParent(graph_path: str, module_name: str, component_name: str, depth: int = 1) -> List[List[Any]]:
+    G = load_graph(graph_path)
+    if not G:
+        print(f"❌ Graph not found at {graph_path}")
+        return []
+    
+    target = f"{module_name}::{component_name}"
+    if target not in G:
+        print(f"Error: target '{target}' not in graph.")
+        return []
+    
+    result = []
+    visited = set()
+    queue = deque([(target, 0)]) 
+    visited.add(target)
+    
+    while queue:
+        current_node, current_depth = queue.popleft()
+        if current_depth >= depth:
+            continue
+        for parent in G.predecessors(current_node):
+            if parent not in visited:
+                visited.add(parent)
+                parent_depth = current_depth + 1
+                if "::" in parent:
+                    parent_module, parent_component = parent.split("::", 1)
+                else:
+                    parent_module, parent_component = "", parent
+                result.append([parent, parent_module, parent_component, parent_depth])
+                if parent_depth < depth:
+                    queue.append((parent, parent_depth))
+    return result
+
+def getFunctionSubgraph(graph_path: str, module_name: str, component_name: str, parent_depth: int = 1, child_depth: int = 1):
+    G = load_graph(graph_path)
+    if not G:
+        return None
+    target = f"{module_name}::{component_name}"
+    if target not in G:
+        return None
+    nodes_to_include = {target}
+    parents = getFunctionParent(graph_path, module_name, component_name, parent_depth)
+    for parent in parents:
+        nodes_to_include.add(parent[0])
+    children = getFunctionChildren(graph_path, module_name, component_name, child_depth)
+    for child in children:
+        nodes_to_include.add(child[0])
+    subgraph = G.subgraph(nodes_to_include).copy()
+    return subgraph
+
+
+#### use cases
+
+# if __name__ == "__main__":
+#     fdep_folder = "/Users/suryansh.s/codetraverse/fdep_xyne"
+#     graph_path = "/Users/suryansh.s/codetraverse/graph_xyne/repo_function_calls.graphml"
+#     module_name = "node_modules/typescript/lib/lib.es5.d"
+#     component_name = "NumberFormatOptionsUseGroupingRegistry"
+    # component_type = "interface"
 
     # components = debug_getModuleInfo(fdep_folder, module_name)
-    getFunctionInfo(fdep_folder, module_name, component_name, component_type)
-    
+    # getFunctionInfo(fdep_folder, module_name, component_name, component_type)
+
+    # children = getFunctionParentWithDepth(graph_path, module_name, component_name, depth=100)
+    # for child in children:
+    #     print(f"Child: {child[0]}, Module: {child[1]}, Component: {child[2]}, Depth: {child[3]}")
+
+    # parents_depth = getFunctionParentWithDepth(graph_path, module_name, component_name, depth=2)
+    # for parent in parents_depth:
+    #     print(f"Parent: {parent[0]}, Module: {parent[1]}, Component: {parent[2]}, Depth: {parent[3]}")
+
+    # sub_graph = getFunctionSubgraph(graph_path, module_name, component_name, parent_depth=2, child_depth=2)
+    # nx.write_graphml(sub_graph, "subgraph.graphml")
+
