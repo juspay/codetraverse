@@ -144,6 +144,24 @@ export class CodeTraverseBridge {
     }
   }
 
+  async createFdepData(
+    rootDir: string,
+    outputBase = 'fdep',
+    graphDir = 'graph',
+    noClear = true
+  ): Promise<void> {
+    const args = [rootDir, '--output_base', outputBase, '--graph_dir', graphDir];
+    if (noClear) {
+      args.push('--no_clear');
+    }
+    const { stdout, stderr } = await this.runner.runBlackbox('create_fdep_data', args);
+    if (stderr) {
+      console.error(`Error while creating FDEP data:\n${stderr}`);
+      throw new Error(stderr);
+    }
+    console.log(`FDEP data created:\n${stdout}`);
+  }
+  
   /**
    * Get the all the components a module is exporting
    */

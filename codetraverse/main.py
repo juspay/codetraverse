@@ -16,7 +16,8 @@ import traceback
 from pathlib import Path
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
-
+import argparse
+import sys
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -115,4 +116,45 @@ def create_fdep_data(root_dir, output_base: str = "./output/fdep", graph_dir: st
     print(f"Wrote {graph_ml} and {graph_gp}")
 
 def main():
-    print(1)
+    parser = argparse.ArgumentParser(description='Create FDEP Data Tool')
+    subparsers = parser.add_subparsers(dest='function', help='Available functions')
+    
+    # create_fdep_data
+    parser_create = subparsers.add_parser('create_fdep_data', help='Create FDEP data from source code')
+    parser_create.add_argument('root_dir', help='Root directory to scan for source files')
+    parser_create.add_argument('--output_base', default='./output/fdep', 
+                              help='Output base directory (default: ./output/fdep)')
+    parser_create.add_argument('--graph_dir', default='./output/graph',
+                              help='Graph output directory (default: ./output/graph)')
+    parser_create.add_argument('--no_clear', action='store_true', 
+                              help='Do not clear existing output directories')
+    
+    args = parser.parse_args()
+    
+    if not args.function:
+        parser.print_help()
+        return
+    
+    try:
+        if args.function == 'create_fdep_data':
+            # Convert --no_clear to clear_existing boolean
+            clear_existing = not args.no_clear
+            
+            print(f"Creating FDEP data from: {args.root_dir}")
+            print(f"Output base: {args.output_base}")
+            print(f"Graph directory: {args.graph_dir}")
+            print(f"Clear existing: {clear_existing}")
+            
+            create_fdep_data(
+                root_dir=args.root_dir,
+                output_base=args.output_base,
+                graph_dir=args.graph_dir,
+                clear_existing=clear_existing
+            )
+            
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
