@@ -1,6 +1,7 @@
 {
-  "name": "codetraverse-bridge",
-  "version": "0.1.0",
+  "name": "codetraverse-bridge2",
+  "version": "0.1.1",
+  "private": true,
   "description": "Node.js bridge for CodeTraverse Python static analysis tool",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -9,7 +10,6 @@
     "build:watch": "tsc --watch",
     "dev": "tsc --watch",
     "clean": "rm -rf dist",
-    "prepublishOnly": "npm run clean && npm run build",
     "test": "jest",
     "test:watch": "jest --watch",
     "lint": "eslint src/**/*.ts",
@@ -33,10 +33,6 @@
     "url": "https://github.com/juspay/codetraverse.git",
     "directory": "bridge"
   },
-  "files": [
-    "dist/**/*",
-    "README.md"
-  ],
   "engines": {
     "node": ">=14.0.0"
   },

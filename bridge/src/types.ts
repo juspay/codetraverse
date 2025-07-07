@@ -305,6 +305,17 @@ export class PythonProcessError extends CodeTraverseError {
   }
 }
 
+export class ShellScriptError extends CodeTraverseError {
+  constructor(
+    message: string,
+    public readonly exitCode: number,
+    public readonly stderr: string
+  ) {
+    super(message, 'SHELL_SCRIPT_ERROR', { exitCode, stderr });
+    this.name = 'ShellScriptError';
+  }
+}
+
 export class InvalidLanguageError extends CodeTraverseError {
   constructor(language: string) {
     super(`Unsupported language: ${language}`, 'INVALID_LANGUAGE', { language });

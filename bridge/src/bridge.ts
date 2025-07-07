@@ -26,6 +26,10 @@ export class CodeTraverseBridge {
     this.runner = new PythonRunner(config);
   }
 
+  async createEnv(){
+    await this.runner.createEnv();
+  }
+
   /**
    * Analyze a single file and return extracted components
    */
@@ -300,3 +304,5 @@ export class CodeTraverseBridge {
     );
   }
 }
+
+// new CodeTraverseBridge({pythonPath: "/usr/local/bin/python3.10", codetraversePath: "./"}).createEnv()
