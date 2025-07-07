@@ -6,6 +6,10 @@ import {
   Component, 
   GraphData, 
   PathResult, 
+  ChildInfo,
+  ParentInfo,
+  CommonParentInfo,
+  CommonChildInfo,
   NeighborResult,
   Language,
   CodeTraverseError,
@@ -138,6 +142,97 @@ export class CodeTraverseBridge {
     } catch (error) {
       throw this.wrapError(error, 'validateSetup');
     }
+  }
+
+  /**
+   * Get the all the components a module is exporting
+   */
+  async getModuleInfo(
+    fdepFolder: string,
+    moduleName: string
+  ): Promise<Component[]> {
+    const { stdout } = await this.runner.runBlackbox('getModuleInfo', [fdepFolder, moduleName]);
+    return JSON.parse(stdout) as Component[];
+  }
+
+  /**
+   * get the json output of a particular component
+   */
+  async getFunctionInfo(
+    fdepFolder: string,
+    componentName: string,
+    componentType = 'function'
+  ): Promise<Component[]> {
+    const { stdout } = await this.runner.runBlackbox('getFunctionInfo', [fdepFolder, componentName, '--component_type', componentType]);
+    return JSON.parse(stdout) as Component[];
+  }
+
+  /**
+   * get the children of a component based on the depth provided
+   */
+  async getFunctionChildren(
+    graphPath: string,
+    moduleName: string,
+    componentName: string,
+    depth = 1
+  ): Promise<ChildInfo[]> {
+    const { stdout } = await this.runner.runBlackbox('getFunctionChildren', [graphPath, moduleName, componentName, '--depth', depth.toString()]);
+    return JSON.parse(stdout) as ChildInfo[];
+  }
+
+  /**
+   * get the parents of a component based on the dept provided
+   */
+  async getFunctionParents(
+    graphPath: string,
+    moduleName: string,
+    componentName: string,
+    depth = 1
+  ): Promise<ParentInfo[]> {
+    const { stdout } = await this.runner.runBlackbox('getFunctionParents', [graphPath, moduleName, componentName, '--depth', depth.toString()]);
+    return JSON.parse(stdout) as ParentInfo[];
+  }
+
+  /**
+   * get the subgraph based on the components and depth provided
+   */
+  async getSubgraph(
+    graphPath: string,
+    moduleName: string,
+    componentName: string,
+    parentDepth = 1,
+    childDepth = 1
+  ) {
+    const { stdout } = await this.runner.runBlackbox('getSubgraph', [graphPath, moduleName, componentName, '--parent_depth', parentDepth.toString(), '--child_depth', childDepth.toString()]);
+    return JSON.parse(stdout) as GraphData;
+  }
+
+  /**
+   * get the common parents of two components
+   */
+  async getCommonParents(
+    graphPath: string,
+    moduleName1: string,
+    componentName1: string,
+    moduleName2: string,
+    componentName2: string
+  ): Promise<CommonParentInfo[]> {
+    const { stdout } = await this.runner.runBlackbox('getCommonParents', [graphPath, moduleName1, componentName1, moduleName2, componentName2]);
+    return JSON.parse(stdout) as CommonParentInfo[];
+  }
+
+  /**
+   * get the common children of two components
+   */
+  async getCommonChildren(
+    graphPath: string,
+    moduleName1: string,
+    componentName1: string,
+    moduleName2: string,
+    componentName2: string
+  ): Promise<CommonChildInfo[]> {
+    const { stdout } = await this.runner.runBlackbox('getCommonChildren', [graphPath, moduleName1, componentName1, moduleName2, componentName2]);
+    return JSON.parse(stdout) as CommonChildInfo[];
   }
 
   /**

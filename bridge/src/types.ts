@@ -329,3 +329,22 @@ export class FileNotFoundError extends CodeTraverseError {
     this.name = 'FileNotFoundError';
   }
 }
+
+export type ChildInfo = [
+  string, // id
+  string, // module
+  string, // name
+  number  // depth
+];
+
+export type ParentInfo = ChildInfo;
+
+export type CommonParentInfo = [
+  string, // id
+  string, // module
+  string, // name
+  number, // depth for first comp
+  number  // depth for second comp
+];
+
+export type CommonChildInfo = CommonParentInfo;

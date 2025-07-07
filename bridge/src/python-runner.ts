@@ -129,6 +129,14 @@ export class PythonRunner {
     return this.executeCommand(args);
   }
 
+  async runBlackbox(
+    fn: string,
+    args: string[]
+  ): Promise<{ stdout: string; stderr: string }> {
+    const cmd = ['-m', `${this.codetraversePath}.blackbox`, fn, ...args];
+    return this.executeCommand(cmd);
+  }
+
   /**
    * Check if Python and codetraverse are available
    */
