@@ -31,9 +31,10 @@ setup_env(){
     codetraverse_dir="$2"
     setup_uv "$python_path"
     echo $codetraverse_dir
-    uv init "$codetraverse_dir"
-    uv venv --directory "$codetraverse_dir" --python 3.13
-    uv pip install -r "$codetraverse_dir"/codetraverse/requirements.txt
+    cd "$codetraverse_dir"
+    "$python_path" -m uv init
+    "$python_path" -m uv venv --python 3.13
+    "$python_path" -m uv add -r "$codetraverse_dir"/codetraverse/requirements.txt
 }
 
 # Function call from CLI

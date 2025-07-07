@@ -1,12 +1,12 @@
 import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
-import { 
-  BridgeConfig, 
-  PythonProcessError, 
+import {
+  BridgeConfig,
+  PythonProcessError,
   ShellScriptError,
   FileNotFoundError,
-  Language 
+  Language
 } from './types';
 
 /**
@@ -25,9 +25,9 @@ export class PythonRunner {
     this.workingDirectory = config.workingDirectory || process.cwd();
   }
 
-  async createEnv(){
+  async createEnv() {
     console.log(this.pythonPath, this.codetraversePath)
-    await this.executeShell(["scripts/setup.sh", "setup_env" , this.pythonPath, this.codetraversePath])
+    await this.executeShell([path.join(this.codetraversePath, "scripts/setup.sh"), "setup_env", this.pythonPath, this.codetraversePath])
   }
 
   /**
@@ -144,7 +144,7 @@ export class PythonRunner {
     try {
       // Check Python
       await this.executeCommand(['--version'], 5000);
-      
+
       // Check codetraverse module
       await this.executeCommand(['-m', this.codetraversePath, '--help'], 10000);
     } catch (error) {
@@ -161,7 +161,7 @@ export class PythonRunner {
 
   private async executeShell(
     args: string[]
-  ): Promise<{stdout: string, stderr: string}> {
+  ): Promise<{ stdout: string, stderr: string }> {
     return new Promise((resolve, reject) => {
       const actualTimeout = 5 * 60 * 1000;
       let stdout = '';
@@ -169,7 +169,8 @@ export class PythonRunner {
 
       const child: ChildProcess = spawn("sh", args, {
         cwd: this.workingDirectory,
-        stdio: ['pipe', 'pipe', 'pipe']
+        stdio: ['pipe', 'pipe', 'pipe'],
+        shell: true
       });
 
       // Set up timeout
@@ -195,7 +196,7 @@ export class PythonRunner {
       // Handle process completion
       child.on('close', (code: number | null) => {
         clearTimeout(timer);
-        
+
         if (code === 0) {
           resolve({ stdout: stdout.trim(), stderr: stderr.trim() });
         } else {
@@ -259,7 +260,7 @@ export class PythonRunner {
       // Handle process completion
       child.on('close', (code: number | null) => {
         clearTimeout(timer);
-        
+
         if (code === 0) {
           resolve({ stdout: stdout.trim(), stderr: stderr.trim() });
         } else {
