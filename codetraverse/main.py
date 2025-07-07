@@ -80,12 +80,11 @@ def create_fdep_data(root_dir, output_base: str = "./output/fdep", graph_dir: st
 
     os.makedirs(output_base, exist_ok=True)
     os.makedirs(graph_dir, exist_ok=True)
-    num_parallel_workers = os.cpu_count() - 1
     for language in language_file_map:
         try:
             tasks_args = [(code_path, language, root_dir, output_base) for code_path in language_file_map[language]]
 
-            with ThreadPoolExecutor(max_workers=num_parallel_workers) as executor:
+            with ThreadPoolExecutor(max_workers=min(32, os.cpu_count() + 4)) as executor:
                 list(tqdm(executor.map(_process_single_file_worker, tasks_args), total=len(language_file_map[language]), desc=f"Processing - {language} - files"))
         except Exception as e:
             print(traceback.format_exc())
