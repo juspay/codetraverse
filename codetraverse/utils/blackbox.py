@@ -161,7 +161,7 @@ def getFunctionParent(graph_path: str, module_name: str, component_name: str, de
                     queue.append((parent, parent_depth))
     return result
 
-def getFunctionSubgraph(graph_path: str, module_name: str, component_name: str, parent_depth: int = 1, child_depth: int = 1):
+def getSubgraph(graph_path: str, module_name: str, component_name: str, parent_depth: int = 1, child_depth: int = 1):
     G = load_graph(graph_path)
     if not G:
         return None
@@ -178,27 +178,95 @@ def getFunctionSubgraph(graph_path: str, module_name: str, component_name: str, 
     subgraph = G.subgraph(nodes_to_include).copy()
     return subgraph
 
+def getCommonParents(graph_path: str, module_name1: str, component_name1: str, module_name2: str, component_name2: str) -> List[List[Any]]:
+    parents1 = getFunctionParent(graph_path, module_name1, component_name1, depth=float('inf'))
+    parents2 = getFunctionParent(graph_path, module_name2, component_name2, depth=float('inf'))
+    parents1_set = {parent[0] for parent in parents1}
+    parents2_set = {parent[0] for parent in parents2}
+    common_parent_ids = parents1_set.intersection(parents2_set)
+    parents1_dict = {parent[0]: parent for parent in parents1}
+    parents2_dict = {parent[0]: parent for parent in parents2}
+    
+    common_parents = []
+    for parent_id in common_parent_ids:
+        parent1_info = parents1_dict[parent_id]
+        parent2_info = parents2_dict[parent_id]
+        common_parents.append([
+            parent_id,
+            parent1_info[1],
+            parent1_info[2],
+            parent1_info[3],
+            parent2_info[3] 
+        ])
+    common_parents.sort(key=lambda x: x[3] + x[4])
+    
+    return common_parents
+
+def getCommonChildren(graph_path: str, module_name1: str, component_name1: str, module_name2: str, component_name2: str) -> List[List[Any]]:
+    children1 = getFunctionChildren(graph_path, module_name1, component_name1, depth=float('inf'))
+    children2 = getFunctionChildren(graph_path, module_name2, component_name2, depth=float('inf'))
+    children1_set = {child[0] for child in children1}
+    children2_set = {child[0] for child in children2}
+    common_child_ids = children1_set.intersection(children2_set)
+    children1_dict = {child[0]: child for child in children1}
+    children2_dict = {child[0]: child for child in children2}
+    
+    common_children = []
+    for child_id in common_child_ids:
+        child1_info = children1_dict[child_id]
+        child2_info = children2_dict[child_id]
+        common_children.append([
+            child_id,
+            child1_info[1],
+            child1_info[2],
+            child1_info[3],
+            child2_info[3] 
+        ])
+    common_children.sort(key=lambda x: x[3] + x[4])
+    
+    return common_children
+
 
 #### use cases
 
 # if __name__ == "__main__":
-#     fdep_folder = "/Users/suryansh.s/codetraverse/fdep_xyne"
-#     graph_path = "/Users/suryansh.s/codetraverse/graph_xyne/repo_function_calls.graphml"
+#     fdep_folder = "/Users/suryansh.s/codetraverse/testing/fdep_xyne"
+#     graph_path = "/Users/suryansh.s/codetraverse/testing/graph_xyne/repo_function_calls.graphml"
 #     module_name = "node_modules/typescript/lib/lib.es5.d"
 #     component_name = "NumberFormatOptionsUseGroupingRegistry"
-    # component_type = "interface"
+#     module_name1 = "partial.test.ts"
+#     componet1 = "string"
+#     module_name2 = "partial.test.ts"
+#     component2 = "number"
+#     module_name3 = "code/node_modules/zod/src/v4/classic/tests/error.test.ts"
+#     component3 = "FormattedErrorWithNumber"
+#     module_name4 = "code/node_modules/zod/src/v3/tests/error.test.ts"
+#     component4 = "FormattedError"
+#     component_type = "interface"
 
-    # components = debug_getModuleInfo(fdep_folder, module_name)
-    # getFunctionInfo(fdep_folder, module_name, component_name, component_type)
 
-    # children = getFunctionParentWithDepth(graph_path, module_name, component_name, depth=100)
-    # for child in children:
-    #     print(f"Child: {child[0]}, Module: {child[1]}, Component: {child[2]}, Depth: {child[3]}")
+#     components = debug_getModuleInfo(fdep_folder, module_name)
+#     getFunctionInfo(fdep_folder, module_name, component_name, component_type)
 
-    # parents_depth = getFunctionParentWithDepth(graph_path, module_name, component_name, depth=2)
-    # for parent in parents_depth:
-    #     print(f"Parent: {parent[0]}, Module: {parent[1]}, Component: {parent[2]}, Depth: {parent[3]}")
+#     module_info = getModuleInfo(fdep_folder, module_name)
+#     for info in module_info:
+#         print(f"Module: {info.get('module', 'N/A')}, Name: {info.get('name', 'N/A')}, Kind: {info.get('kind', 'N/A')}")
 
-    # sub_graph = getFunctionSubgraph(graph_path, module_name, component_name, parent_depth=2, child_depth=2)
-    # nx.write_graphml(sub_graph, "subgraph.graphml")
+#     children = getFunctionChildren(graph_path, module_name, component_name, depth=100)
+#     for child in children:
+#         print(f"Child: {child[0]}, Module: {child[1]}, Component: {child[2]}, Depth: {child[3]}")
 
+#     parents_depth = getFunctionParent(graph_path, module_name, component_name, depth=2)
+#     for parent in parents_depth:
+#         print(f"Parent: {parent[0]}, Module: {parent[1]}, Component: {parent[2]}, Depth: {parent[3]}")
+
+#     sub_graph = getSubgraph(graph_path, module_name, component_name, parent_depth=2, child_depth=2)
+#     nx.write_graphml(sub_graph, "subgraph.graphml")
+
+#     common_parents = getCommonParents(graph_path, module_name1, componet1, module_name2, component2)
+#     for parent in common_parents:
+#         print(f"Common Parent: {parent[0]}, Module: {parent[1]}, Component: {parent[2]}")
+
+#     common_children = getCommonChildren(graph_path, module_name3, component3, module_name4, component4)
+#     for child in common_children:
+#         print(f"Common Child: {child[0]}, Module: {child[1]}, Component: {child[2]}")
