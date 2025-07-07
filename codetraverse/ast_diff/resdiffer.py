@@ -6,55 +6,8 @@ from tree_sitter import Language, Parser, Node
 import tree_sitter_rescript
 import hashlib
 import os
-
-
-class DetailedChanges:
-    def __init__(self, module_name):
-        self.moduleName = module_name
-        self.addedFunctions = []
-        self.modifiedFunctions = []
-        self.deletedFunctions = []
-
-        self.addedTypes = []
-        self.modifiedTypes = []
-        self.deletedTypes = []
-
-        self.addedExternals = []
-        self.modifiedExternals = []
-        self.deletedExternals = []
-
-        self.addedImports = []
-        self.modifiedImports = []
-        self.deletedImports = []
-
-    def to_dict(self):
-        return {
-            "moduleName": self.moduleName,
-            "addedFunctions": self.addedFunctions,
-            "modifiedFunctions": self.modifiedFunctions,
-            "deletedFunctions": self.deletedFunctions,
-            "addedTypes": self.addedTypes,
-            "modifiedTypes": self.modifiedTypes,
-            "deletedTypes": self.deletedTypes,
-            "addedExternals": self.addedExternals,
-            "modifiedExternals": self.modifiedExternals,
-            "deletedExternals": self.deletedExternals,
-        }
-
-    def __str__(self):
-        return (
-            f"Module: {self.moduleName}\n"
-            f"Added Functions: {self.addedFunctions}\n"
-            f"Modified Functions: {self.modifiedFunctions}\n"
-            f"Deleted Functions: {self.deletedFunctions}\n"
-            f"Added Types: {self.addedTypes}\n"
-            f"Modified Types: {self.modifiedTypes}\n"
-            f"Deleted Types: {self.deletedTypes}\n"
-            f"Added Externals: {self.addedExternals}\n"
-            f"Modified Externals: {self.modifiedExternals}\n"
-            f"Deleted Externals: {self.deletedExternals}"
-        )
-
+from Detailedchanges import DetailedChanges
+from basefilediff import BaseFileDiff
 
 def format_rescript_file(file_pth):
     try:
@@ -63,7 +16,7 @@ def format_rescript_file(file_pth):
         pass
 
 
-class RescriptFileDiff:
+class RescriptFileDiff(BaseFileDiff):
     def __init__(self, module_name=""):
         self.changes = DetailedChanges(module_name)
 
@@ -154,25 +107,24 @@ class RescriptFileDiff:
         return {"added": added, "deleted": deleted, "modified": modified}
 
     def compare_two_files(self, old_file_ast, new_file_ast) -> DetailedChanges:
+        """The main method to compare two ReScript files."""
         old_funcs, old_types, old_ext = self.extract_components(old_file_ast.root_node)
         new_funcs, new_types, new_ext = self.extract_components(new_file_ast.root_node)
 
-        funcs_diff = self.diff_components(old_funcs, new_funcs)
-        self.changes.addedFunctions = funcs_diff["added"]
-        self.changes.deletedFunctions = funcs_diff["deleted"]
-        self.changes.modifiedFunctions = funcs_diff["modified"]
+        category_map = {
+            "functions": (old_funcs, new_funcs),
+            "types": (old_types, new_types),
+            "externals": (old_ext, new_ext),
+        }
 
-        types_diff = self.diff_components(old_types, new_types)
-        self.changes.addedTypes = types_diff["added"]
-        self.changes.deletedTypes = types_diff["deleted"]
-        self.changes.modifiedTypes = types_diff["modified"]
-
-        ext_diff = self.diff_components(old_ext, new_ext)
-        self.changes.addedExternals = ext_diff["added"]
-        self.changes.deletedExternals = ext_diff["deleted"]
-        self.changes.modifiedExternals = ext_diff["modified"]
+        for category, (old_map, new_map) in category_map.items():
+            diff = self.diff_components(old_map, new_map)
+            for change_type in ["added", "deleted", "modified"]:
+                for item in diff[change_type]:
+                    self.changes.add_change(category, change_type, item)
 
         return self.changes
+
 
     def process_single_file(self, file_ast, mode="deleted"):
         funcs, types, exts = self.extract_components(file_ast.root_node)
@@ -190,15 +142,3 @@ class RescriptFileDiff:
             self.changes.addedExternals = [(n, exts[n][1], {"start": exts[n][2], "end": exts[n][3]}) for n in sorted(ext_names)]
         
         return self.changes
-
-# if __name__ == "__main__":
-#     RS_LANGUAGE = Language(tree_sitter_rescript.language())
-#     parser = Parser(RS_LANGUAGE)
-#     with open("file1.res", "rb") as f, open("file2.res", "rb") as f2:
-#         content1 = f.read()
-#         content2 = f2.read()
-#     ast = parser.parse(content1)
-#     ast2 = parser.parse(content2)
-#     differ = RescriptFileDiff("fred")
-
-#     print(differ.compare_two_files(ast, ast2))

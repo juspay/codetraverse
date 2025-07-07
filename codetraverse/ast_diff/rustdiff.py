@@ -1,65 +1,9 @@
 import json
 from tree_sitter import Language, Parser, Node
 import tree_sitter_rust
-
-class DetailedChanges:
-    """A data class to hold the results of a diff operation for Rust."""
-    def __init__(self, module_name):
-        self.moduleName = module_name
-        self.addedFunctions = []
-        self.modifiedFunctions = []
-        self.deletedFunctions = []
-        self.addedStructs = []
-        self.modifiedStructs = []
-        self.deletedStructs = []
-        self.addedEnums = []
-        self.modifiedEnums = []
-        self.deletedEnums = []
-        self.addedTraits = []
-        self.modifiedTraits = []
-        self.deletedTraits = []
-        self.addedImpls = []
-        self.modifiedImpls = []
-        self.deletedImpls = []
-        self.addedUses = []
-        self.modifiedUses = []
-        self.deletedUses = []
-        self.addedConsts = []
-        self.modifiedConsts = []
-        self.deletedConsts = []
-
-    def to_dict(self):
-        """Converts the object to a dictionary for JSON serialization."""
-        return {
-            "moduleName": self.moduleName,
-            "addedFunctions": self.addedFunctions, "modifiedFunctions": self.modifiedFunctions, "deletedFunctions": self.deletedFunctions,
-            "addedStructs": self.addedStructs, "modifiedStructs": self.modifiedStructs, "deletedStructs": self.deletedStructs,
-            "addedEnums": self.addedEnums, "modifiedEnums": self.modifiedEnums, "deletedEnums": self.deletedEnums,
-            "addedTraits": self.addedTraits, "modifiedTraits": self.modifiedTraits, "deletedTraits": self.deletedTraits,
-            "addedImpls": self.addedImpls, "modifiedImpls": self.modifiedImpls, "deletedImpls": self.deletedImpls,
-            "addedUses": self.addedUses, "modifiedUses": self.modifiedUses, "deletedUses": self.deletedUses,
-            "addedConsts": self.addedConsts, "modifiedConsts": self.modifiedConsts, "deletedConsts": self.deletedConsts,
-        }
-
-    def __str__(self):
-        parts = []
-        if self.addedFunctions or self.modifiedFunctions or self.deletedFunctions:
-            parts.append(f"Functions: +{len(self.addedFunctions)} ~{len(self.modifiedFunctions)} -{len(self.deletedFunctions)}")
-        if self.addedStructs or self.modifiedStructs or self.deletedStructs:
-            parts.append(f"Structs: +{len(self.addedStructs)} ~{len(self.modifiedStructs)} -{len(self.deletedStructs)}")
-        if self.addedEnums or self.modifiedEnums or self.deletedEnums:
-            parts.append(f"Enums: +{len(self.addedEnums)} ~{len(self.modifiedEnums)} -{len(self.deletedEnums)}")
-        if self.addedTraits or self.modifiedTraits or self.deletedTraits:
-            parts.append(f"Traits: +{len(self.addedTraits)} ~{len(self.modifiedTraits)} -{len(self.deletedTraits)}")
-        if self.addedImpls or self.modifiedImpls or self.deletedImpls:
-            parts.append(f"Impls: +{len(self.addedImpls)} ~{len(self.modifiedImpls)} -{len(self.deletedImpls)}")
-        if self.addedUses or self.modifiedUses or self.deletedUses:
-            parts.append(f"Uses: +{len(self.addedUses)} ~{len(self.modifiedUses)} -{len(self.deletedUses)}")
-        if self.addedConsts or self.modifiedConsts or self.deletedConsts:
-            parts.append(f"Consts: +{len(self.addedConsts)} ~{len(self.modifiedConsts)} -{len(self.deletedConsts)}")
-        return f"Module: {self.moduleName}\n" + "\n".join(parts)
-
-class RustFileDiff:
+from Detailedchanges import DetailedChanges
+from basefilediff import BaseFileDiff
+class RustFileDiff(BaseFileDiff):
     """Analyzes and compares two Rust ASTs for semantic differences."""
     def __init__(self, module_name=""):
         self.changes = DetailedChanges(module_name)
@@ -128,10 +72,10 @@ class RustFileDiff:
         deleted = [(n, before_map[n][1], {"start": before_map[n][2], "end": before_map[n][3]}) for n in sorted(deleted_names)]
         modified = []
         for name in sorted(common_names):
-            _, old_body, _, _ = before_map[name]
-            _, new_body, old_start, old_end = after_map[name]
+            _, old_body, old_start, old_end = before_map[name]
+            _, new_body, new_start, new_end = after_map[name]
             if old_body.strip() != new_body.strip():
-                 modified.append((name, old_body, new_body, {"old_start": old_start, "old_end": old_end}))
+                 modified.append((name, old_body, new_body, {"old_start": old_start, "old_end": old_end, "new_start": new_start, "new_end": new_end}))
         return {"added": added, "deleted": deleted, "modified": modified}
 
     def compare_two_files(self, old_file_ast: Node, new_file_ast: Node) -> DetailedChanges:
@@ -139,27 +83,22 @@ class RustFileDiff:
         old_items = self.extract_components(old_file_ast.root_node)
         new_items = self.extract_components(new_file_ast.root_node)
 
-        # Diff all component types
-        funcs_diff = self.diff_components(old_items["functions"], new_items["functions"])
-        self.changes.addedFunctions, self.changes.deletedFunctions, self.changes.modifiedFunctions = funcs_diff["added"], funcs_diff["deleted"], funcs_diff["modified"]
-        
-        structs_diff = self.diff_components(old_items["structs"], new_items["structs"])
-        self.changes.addedStructs, self.changes.deletedStructs, self.changes.modifiedStructs = structs_diff["added"], structs_diff["deleted"], structs_diff["modified"]
-
-        enums_diff = self.diff_components(old_items["enums"], new_items["enums"])
-        self.changes.addedEnums, self.changes.deletedEnums, self.changes.modifiedEnums = enums_diff["added"], enums_diff["deleted"], enums_diff["modified"]
-
-        traits_diff = self.diff_components(old_items["traits"], new_items["traits"])
-        self.changes.addedTraits, self.changes.deletedTraits, self.changes.modifiedTraits = traits_diff["added"], traits_diff["deleted"], traits_diff["modified"]
-        
-        impls_diff = self.diff_components(old_items["impls"], new_items["impls"])
-        self.changes.addedImpls, self.changes.deletedImpls, self.changes.modifiedImpls = impls_diff["added"], impls_diff["deleted"], impls_diff["modified"]
-
-        uses_diff = self.diff_components(old_items["uses"], new_items["uses"])
-        self.changes.addedUses, self.changes.deletedUses, self.changes.modifiedUses = uses_diff["added"], uses_diff["deleted"], uses_diff["modified"]
-        
-        consts_diff = self.diff_components(old_items["consts"], new_items["consts"])
-        self.changes.addedConsts, self.changes.deletedConsts, self.changes.modifiedConsts = consts_diff["added"], consts_diff["deleted"], consts_diff["modified"]
+        for category in ["functions", "structs", "enums", "traits", "impls", "uses", "consts"]:
+            diff = self.diff_components(old_items[category], new_items[category])
+            for change_type in ["added", "deleted", "modified"]:
+                for data in diff[change_type]:
+                    self.changes.add_change(category, change_type, data)
 
         return self.changes
+    
+    def process_single_file(self, file_ast: Node, mode="deleted") -> DetailedChanges:
+        """Processes a single file that was either entirely added or deleted."""
+        items = self.extract_components(file_ast.root_node)
 
+        for category, component_map in items.items():
+            for name, data_tuple in component_map.items():
+                # data_tuple is (node, text, start_point, end_point)
+                item = (name, data_tuple[1], {"start": data_tuple[2], "end": data_tuple[3]})
+                self.changes.add_change(category, mode, item)
+        
+        return self.changes

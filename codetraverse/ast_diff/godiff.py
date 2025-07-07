@@ -1,53 +1,9 @@
 import json
 from tree_sitter import Language, Parser, Node
 import tree_sitter_go
-
-class DetailedChanges:
-    """A data class to hold the results of a diff operation for Go."""
-    def __init__(self, module_name):
-        self.moduleName = module_name
-        # ... (other component lists remain the same) ...
-        self.addedFunctions = []
-        self.modifiedFunctions = []
-        self.deletedFunctions = []
-
-        self.addedTypes = []
-        self.modifiedTypes = []
-        self.deletedTypes = []
-
-        self.addedVars = []
-        self.modifiedVars = []
-        self.deletedVars = []
-
-        self.addedConsts = []
-        self.modifiedConsts = []
-        self.deletedConsts = []
-        
-        # Added for imports
-        self.addedImports = []
-        self.modifiedImports = []
-        self.deletedImports = []
-
-    def to_dict(self):
-        """Converts the object to a dictionary for JSON serialization."""
-        return {
-            "moduleName": self.moduleName,
-            "addedFunctions": self.addedFunctions, "modifiedFunctions": self.modifiedFunctions, "deletedFunctions": self.deletedFunctions,
-            "addedTypes": self.addedTypes, "modifiedTypes": self.modifiedTypes, "deletedTypes": self.deletedTypes,
-            "addedVars": self.addedVars, "modifiedVars": self.modifiedVars, "deletedVars": self.deletedVars,
-            "addedConsts": self.addedConsts, "modifiedConsts": self.modifiedConsts, "deletedConsts": self.deletedConsts,
-            "addedImports": self.addedImports, "modifiedImports": self.modifiedImports, "deletedImports": self.deletedImports,
-        }
-
-    def __str__(self):
-        parts = []
-        # ... (other summary parts remain the same) ...
-        if self.addedImports or self.modifiedImports or self.deletedImports:
-            parts.append(f"Imports: +{len(self.addedImports)} ~{len(self.modifiedImports)} -{len(self.deletedImports)}")
-        
-        return f"Module: {self.moduleName}\n" + "\n".join(parts)
-
-class GoFileDiff:
+from Detailedchanges import DetailedChanges
+from basefilediff import BaseFileDiff
+class GoFileDiff(BaseFileDiff):
     """Analyzes and compares two Go ASTs for semantic differences."""
     def __init__(self, module_name=""):
         self.changes = DetailedChanges(module_name)
@@ -123,10 +79,10 @@ class GoFileDiff:
         deleted = [(n, before_map[n][1], {"start": before_map[n][2], "end": before_map[n][3]}) for n in sorted(deleted_names)]
         modified = []
         for name in sorted(common_names):
-            _, old_body, _, _ = before_map[name]
-            _, new_body, old_start, old_end = after_map[name]
+            _, old_body, old_start, old_end = before_map[name]
+            _, new_body, new_start, new_end = after_map[name]
             if old_body.strip() != new_body.strip():
-                 modified.append((name, old_body, new_body, {"old_start": old_start, "old_end": old_end}))
+                 modified.append((name, old_body, new_body, {"old_start": old_start, "old_end": old_end, "new_start": new_start, "new_end": new_end}))
         return {"added": added, "deleted": deleted, "modified": modified}
 
     def compare_two_files(self, old_file_ast: Node, new_file_ast: Node) -> DetailedChanges:
@@ -134,19 +90,41 @@ class GoFileDiff:
         old_funcs, old_types, old_vars, old_consts, old_imports = self.extract_components(old_file_ast.root_node)
         new_funcs, new_types, new_vars, new_consts, new_imports = self.extract_components(new_file_ast.root_node)
 
-        funcs_diff = self.diff_components(old_funcs, new_funcs)
-        self.changes.addedFunctions, self.changes.deletedFunctions, self.changes.modifiedFunctions = funcs_diff["added"], funcs_diff["deleted"], funcs_diff["modified"]
-        
-        types_diff = self.diff_components(old_types, new_types)
-        self.changes.addedTypes, self.changes.deletedTypes, self.changes.modifiedDataTypes = types_diff["added"], types_diff["deleted"], types_diff["modified"]
+        # Define what we're comparing
+        category_map = {
+            "Functions": (old_funcs, new_funcs),
+            "Types": (old_types, new_types),
+            "Vars": (old_vars, new_vars),
+            "Consts": (old_consts, new_consts),
+            "Imports": (old_imports, new_imports),
+        }
 
-        vars_diff = self.diff_components(old_vars, new_vars)
-        self.changes.addedVars, self.changes.deletedVars, self.changes.modifiedVars = vars_diff["added"], vars_diff["deleted"], vars_diff["modified"]
+        # Run diff and record changes
+        for category, (old_map, new_map) in category_map.items():
+            diff = self.diff_components(old_map, new_map)
+            for change_type in ["added", "deleted", "modified"]:
+                for item in diff[change_type]:
+                    self.changes.add_change(category.lower(), change_type, item)
 
-        consts_diff = self.diff_components(old_consts, new_consts)
-        self.changes.addedConsts, self.changes.deletedConsts, self.changes.modifiedConsts = consts_diff["added"], consts_diff["deleted"], consts_diff["modified"]
-        
-        imports_diff = self.diff_components(old_imports, new_imports)
-        self.changes.addedImports, self.changes.deletedImports, self.changes.modifiedImports = imports_diff["added"], imports_diff["deleted"], imports_diff["modified"]
+        return self.changes
+    
+    def process_single_file(self, file_ast: Node, mode="deleted") -> DetailedChanges:
+        """Processes a single file that was either entirely added or deleted."""
+        funcs, types, variables, constants, imports = self.extract_components(file_ast.root_node)
+
+        category_map = {
+            "functions": funcs,
+            "types": types,
+            "vars": variables,
+            "consts": constants,
+            "imports": imports,
+        }
+
+        for category, component_map in category_map.items():
+            for name, data_tuple in component_map.items():
+                # data_tuple is (node, text, start_point, end_point)
+                item = (name, data_tuple[1], {"start": data_tuple[2], "end": data_tuple[3]})
+                self.changes.add_change(category, mode, item)
         
         return self.changes
+

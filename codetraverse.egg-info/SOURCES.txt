@@ -18,6 +18,17 @@ codetraverse/adapters/python_adapter.py
 codetraverse/adapters/rescript_adapter.py
 codetraverse/adapters/rust_adapter.py
 codetraverse/adapters/typescript_adapter.py
+codetraverse/ast_diff/Detailedchanges.py
+codetraverse/ast_diff/TSdiff.py
+codetraverse/ast_diff/__init__.py
+codetraverse/ast_diff/basefilediff.py
+codetraverse/ast_diff/bitbucket.py
+codetraverse/ast_diff/gitwrapper.py
+codetraverse/ast_diff/godiff.py
+codetraverse/ast_diff/haskelldiff.py
+codetraverse/ast_diff/orchclass.py
+codetraverse/ast_diff/resdiffer.py
+codetraverse/ast_diff/rustdiff.py
 codetraverse/base/__init__.py
 codetraverse/base/component_extractor.py
 codetraverse/extractors/__init__.py

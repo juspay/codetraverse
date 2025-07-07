@@ -1,61 +1,10 @@
 import json
 from tree_sitter import Language, Parser, Node
 import tree_sitter_haskell
+from Detailedchanges import DetailedChanges
+from basefilediff import BaseFileDiff
 
-class DetailedChanges:
-    """A data class to hold the results of a diff operation."""
-    def __init__(self, module_name):
-        self.moduleName = module_name
-        self.addedFunctions = []
-        self.modifiedFunctions = []
-        self.deletedFunctions = []
-
-        self.addedDataTypes = []
-        self.modifiedDataTypes = []
-        self.deletedDataTypes = []
-        
-        self.addedTypeClasses = []
-        self.modifiedTypeClasses = []
-        self.deletedTypeClasses = []
-
-        self.addedInstances = []
-        self.modifiedInstances = []
-        self.deletedInstances = []
-
-    def to_dict(self):
-        """Converts the object to a dictionary for JSON serialization."""
-        return {
-            "moduleName": self.moduleName,
-            "addedFunctions": self.addedFunctions,
-            "modifiedFunctions": self.modifiedFunctions,
-            "deletedFunctions": self.deletedFunctions,
-            "addedDataTypes": self.addedDataTypes,
-            "modifiedDataTypes": self.modifiedDataTypes,
-            "deletedDataTypes": self.deletedDataTypes,
-            "addedTypeClasses": self.addedTypeClasses,
-            "modifiedTypeClasses": self.modifiedTypeClasses,
-            "deletedTypeClasses": self.deletedTypeClasses,
-            "addedInstances": self.addedInstances,
-            "modifiedInstances": self.modifiedInstances,
-            "deletedInstances": self.deletedInstances,
-        }
-
-    def __str__(self):
-        # Abridged string representation for cleaner printing
-        parts = []
-        if self.addedFunctions or self.modifiedFunctions or self.deletedFunctions:
-            parts.append(f"Functions: +{len(self.addedFunctions)} ~{len(self.modifiedFunctions)} -{len(self.deletedFunctions)}")
-        if self.addedDataTypes or self.modifiedDataTypes or self.deletedDataTypes:
-            parts.append(f"DataTypes: +{len(self.addedDataTypes)} ~{len(self.modifiedDataTypes)} -{len(self.deletedDataTypes)}")
-        if self.addedTypeClasses or self.modifiedTypeClasses or self.deletedTypeClasses:
-            parts.append(f"TypeClasses: +{len(self.addedTypeClasses)} ~{len(self.modifiedTypeClasses)} -{len(self.deletedTypeClasses)}")
-        if self.addedInstances or self.modifiedInstances or self.deletedInstances:
-            parts.append(f"Instances: +{len(self.addedInstances)} ~{len(self.modifiedInstances)} -{len(self.deletedInstances)}")
-        
-        return f"Module: {self.moduleName}\n" + "\n".join(parts)
-
-
-class HaskellFileDiff:
+class HaskellFileDiff(BaseFileDiff):
     """Analyzes and compares two Haskell ASTs for semantic differences."""
     def __init__(self, module_name=""):
         self.changes = DetailedChanges(module_name)
@@ -100,7 +49,6 @@ class HaskellFileDiff:
             declarations_node = next((c for c in root.children if c.type == 'declarations'), None)
             if declarations_node:
                 declarations = declarations_node.children
-        print(declarations)
         for child in declarations:
             if child.type in node_type_map:
                 name = self.get_decl_name(child)
@@ -137,16 +85,36 @@ class HaskellFileDiff:
         old_funcs, old_data, old_classes, old_instances = self.extract_components(old_file_ast.root_node)
         new_funcs, new_data, new_classes, new_instances = self.extract_components(new_file_ast.root_node)
 
-        funcs_diff = self.diff_components(old_funcs, new_funcs)
-        self.changes.addedFunctions, self.changes.deletedFunctions, self.changes.modifiedFunctions = funcs_diff["added"], funcs_diff["deleted"], funcs_diff["modified"]
-        
-        data_diff = self.diff_components(old_data, new_data)
-        self.changes.addedDataTypes, self.changes.deletedDataTypes, self.changes.modifiedDataTypes = data_diff["added"], data_diff["deleted"], data_diff["modified"]
+        category_map = {
+            "functions": (old_funcs, new_funcs),
+            "dataTypes": (old_data, new_data),
+            "typeClasses": (old_classes, new_classes),
+            "instances": (old_instances, new_instances),
+        }
 
-        class_diff = self.diff_components(old_classes, new_classes)
-        self.changes.addedTypeClasses, self.changes.deletedTypeClasses, self.changes.modifiedTypeClasses = class_diff["added"], class_diff["deleted"], class_diff["modified"]
+        for category, (old_map, new_map) in category_map.items():
+            diff = self.diff_components(old_map, new_map)
+            for change_type in ["added", "deleted", "modified"]:
+                for item in diff[change_type]:
+                    self.changes.add_change(category, change_type, item)
 
-        # Diff instances
-        inst_diff = self.diff_components(old_instances, new_instances)
-        self.changes.addedInstances, self.changes.deletedInstances, self.changes.modifiedInstances = inst_diff["added"], inst_diff["deleted"], inst_diff["modified"]
         return self.changes
+    
+    def process_single_file(self, file_ast: Node, mode="deleted") -> DetailedChanges:
+        funcs, data, classes, instances = self.extract_components(file_ast.root_node)
+
+        category_map = {
+            "functions": funcs,
+            "dataTypes": data,
+            "typeClasses": classes,
+            "instances": instances,
+        }
+
+        for category, component_map in category_map.items():
+            for name, data_tuple in component_map.items():
+                # data_tuple is (node, text, start_point, end_point)
+                item = (name, data_tuple[1], {"start": data_tuple[2], "end": data_tuple[3]})
+                self.changes.add_change(category, mode, item)
+        
+        return self.changes
+    

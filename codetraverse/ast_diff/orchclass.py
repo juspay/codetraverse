@@ -2,11 +2,6 @@ import os
 import json
 import traceback
 from typing import Dict, List, Optional, Union, Any
-
-# --- Tree-sitter setup ---
-# Ensure you have installed the necessary packages:
-# pip install tree-sitter gitpython unidiff
-# pip install tree-sitter-rescript tree-sitter-haskell tree-sitter-typescript tree-sitter-go tree-sitter-rust
 from tree_sitter import Language, Parser, Node
 import tree_sitter_rescript
 import tree_sitter_haskell
@@ -14,13 +9,12 @@ import tree_sitter_typescript
 import tree_sitter_go
 import tree_sitter_rust
 from haskelldiff import HaskellFileDiff
-from differ import RescriptFileDiff
+from resdiffer import RescriptFileDiff
 from TSdiff import TypeScriptFileDiff
 from godiff import GoFileDiff
 from rustdiff import RustFileDiff
 from gitwrapper import GitWrapper
 from bitbucket import BitBucket
-# --- Git and Diffing setup ---
 from git import Repo
 from unidiff import PatchSet
 
@@ -30,16 +24,16 @@ class AstDiffOrchestrator:
     based on file extensions.
     """
     def __init__(self):
-        # Central configuration for all supported languages
         self.language_config = {
             '.res': {'lang_obj': Language(tree_sitter_rescript.language()), 'differ_class': RescriptFileDiff},
             '.hs': {'lang_obj': Language(tree_sitter_haskell.language()), 'differ_class': HaskellFileDiff},
             '.ts': {'lang_obj': Language(tree_sitter_typescript.language_typescript()), 'differ_class': TypeScriptFileDiff},
+            '.tsx': {'lang_obj': Language(tree_sitter_typescript.language_tsx()), 'differ_class': TypeScriptFileDiff},
             '.go': {'lang_obj': Language(tree_sitter_go.language()), 'differ_class': GoFileDiff},
             '.rs': {'lang_obj': Language(tree_sitter_rust.language()), 'differ_class': RustFileDiff},
         }
-        # Pre-initialize a parser for each language
         self.parsers = {ext: Parser(config['lang_obj']) for ext, config in self.language_config.items()}
+        # Pre-initialize a parser for each language
 
     def _get_extension(self, filename: str) -> str:
         """Gets the primary extension for a given filename."""
@@ -95,6 +89,7 @@ def generate_ast_diff(
         changed_files = git_provider.get_changed_files_from_commits(to_commit, from_commit)
         all_changes = []
 
+        print(changed_files)
         # --- 3. Process Files ---
         for category in ["modified", "added", "deleted"]:
             for file_path in changed_files.get(category, []):
@@ -137,14 +132,15 @@ def run_ast_diff_from_config(config: Dict[str, Any]):
     git_provider = None
 
     try:
-        # --- 1. Initialize Git Provider from Config ---
         if provider_type == "bitbucket":
             bb_config = config.get("bitbucket", {})
+            # --- FIXED: Use 'auth' and 'headers' instead of 'token' ---
             git_provider = BitBucket(
                 base_url=bb_config.get("base_url"),
                 project_key=bb_config.get("project_key"),
                 repo_slug=bb_config.get("repo_slug"),
-                token=bb_config.get("token")
+                auth=bb_config.get("auth"),
+                headers=bb_config.get("headers", {"Accept": "application/json"})
             )
         elif provider_type == "local":
             local_config = config.get("local", {})
@@ -152,7 +148,6 @@ def run_ast_diff_from_config(config: Dict[str, Any]):
         else:
             raise ValueError(f"Unsupported provider_type: '{provider_type}'. Must be 'bitbucket' or 'local'.")
 
-        # --- 2. Call the Core Function with Parameters from Config ---
         generate_ast_diff(
             git_provider=git_provider,
             output_dir=config.get("output_dir", "./ast_diff_output"),
@@ -176,12 +171,36 @@ def run_ast_diff_from_config(config: Dict[str, Any]):
 #     local_repo_config = {
 #         "provider_type": "local",
 #         "local": {
-#             "repo_path": "/Users/pramod.p/euler-api-gateway"
+#             "repo_path": "/Users/pramod.p/xyne/"
 #         },
-#         "from_branch": "EUL-16517-dsl",
-#         "to_branch": "staging",
+#         "from_branch": "feat/dummy-sheet",
+#         "to_branch": "main",
 #         "output_dir": "./ast_diff_local_example",
 #         "quiet": False
 #     }
 #     run_ast_diff_from_config(local_repo_config)
 #     print("\n" + "="*50 + "\n")
+    
+    # print("\n" + "="*50 + "\n")
+
+    # --- EXAMPLE 2: BITBUCKET PULL REQUEST ---
+    # print("\n--- RUNNING EXAMPLE 2: BITBUCKET PULL REQUEST ---")
+    
+    # # IMPORTANT: Replace these placeholder values with your actual Bitbucket details.
+    # bitbucket_repo_config = {
+    #     "provider_type": "bitbucket",
+    #     "bitbucket": {
+    #         "base_url": "https://bitbucket.juspay.net/rest",
+    #         "project_key": "JBIZ",
+    #         "repo_slug": "rescript-euler-dashboard",
+    #         "auth": ("pramod.p@juspay.in","BBDC-Mzg1MDI2Mzk2MjQwOoonuqXjYa/7A+l03RwECSIiCBBH")# Or use your auth tuple
+    #     },
+    #     # The script will get the 'from' and 'to' commits from the PR
+    #     "pr_id": "23584", 
+    #     "output_dir": "./ast_diff_bitbucket_example",
+    #     "quiet": False
+    # }
+
+    # run_ast_diff_from_config(bitbucket_repo_config)
+
+    

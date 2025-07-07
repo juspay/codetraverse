@@ -1,58 +1,9 @@
 import json
 from tree_sitter import Language, Parser, Node
 import tree_sitter_typescript
-
-class DetailedChanges:
-    """A data class to hold the results of a diff operation for TypeScript."""
-    def __init__(self, module_name):
-        self.moduleName = module_name
-        self.addedFunctions = []
-        self.modifiedFunctions = []
-        self.deletedFunctions = []
-
-        self.addedClasses = []
-        self.modifiedClasses = []
-        self.deletedClasses = []
-
-        self.addedInterfaces = []
-        self.modifiedInterfaces = []
-        self.deletedInterfaces = []
-
-        self.addedTypes = []
-        self.modifiedTypes = []
-        self.deletedTypes = []
-
-        self.addedEnums = []
-        self.modifiedEnums = []
-        self.deletedEnums = []
-
-    def to_dict(self):
-        """Converts the object to a dictionary for JSON serialization."""
-        return {
-            "moduleName": self.moduleName,
-            "addedFunctions": self.addedFunctions, "modifiedFunctions": self.modifiedFunctions, "deletedFunctions": self.deletedFunctions,
-            "addedClasses": self.addedClasses, "modifiedClasses": self.modifiedClasses, "deletedClasses": self.deletedClasses,
-            "addedInterfaces": self.addedInterfaces, "modifiedInterfaces": self.modifiedInterfaces, "deletedInterfaces": self.deletedInterfaces,
-            "addedTypes": self.addedTypes, "modifiedTypes": self.modifiedTypes, "deletedTypes": self.deletedTypes,
-            "addedEnums": self.addedEnums, "modifiedEnums": self.modifiedEnums, "deletedEnums": self.deletedEnums,
-        }
-
-    def __str__(self):
-        parts = []
-        if self.addedFunctions or self.modifiedFunctions or self.deletedFunctions:
-            parts.append(f"Functions: +{len(self.addedFunctions)} ~{len(self.modifiedFunctions)} -{len(self.deletedFunctions)}")
-        if self.addedClasses or self.modifiedClasses or self.deletedClasses:
-            parts.append(f"Classes: +{len(self.addedClasses)} ~{len(self.modifiedClasses)} -{len(self.deletedClasses)}")
-        if self.addedInterfaces or self.modifiedInterfaces or self.deletedInterfaces:
-            parts.append(f"Interfaces: +{len(self.addedInterfaces)} ~{len(self.modifiedInterfaces)} -{len(self.deletedInterfaces)}")
-        if self.addedTypes or self.modifiedTypes or self.deletedTypes:
-            parts.append(f"Types: +{len(self.addedTypes)} ~{len(self.modifiedTypes)} -{len(self.deletedTypes)}")
-        if self.addedEnums or self.modifiedEnums or self.deletedEnums:
-            parts.append(f"Enums: +{len(self.addedEnums)} ~{len(self.modifiedEnums)} -{len(self.deletedEnums)}")
-        
-        return f"Module: {self.moduleName}\n" + "\n".join(parts)
-
-class TypeScriptFileDiff:
+from Detailedchanges import DetailedChanges
+from basefilediff import BaseFileDiff
+class TypeScriptFileDiff(BaseFileDiff):
     """Analyzes and compares two TypeScript ASTs for semantic differences."""
     def __init__(self, module_name=""):
         self.changes = DetailedChanges(module_name)
@@ -146,38 +97,39 @@ class TypeScriptFileDiff:
         old_funcs, old_classes, old_ifaces, old_types, old_enums = self.extract_components(old_file_ast.root_node)
         new_funcs, new_classes, new_ifaces, new_types, new_enums = self.extract_components(new_file_ast.root_node)
 
-        # Diff all component types
-        funcs_diff = self.diff_components(old_funcs, new_funcs)
-        self.changes.addedFunctions, self.changes.deletedFunctions, self.changes.modifiedFunctions = funcs_diff["added"], funcs_diff["deleted"], funcs_diff["modified"]
-        
-        classes_diff = self.diff_components(old_classes, new_classes)
-        self.changes.addedClasses, self.changes.deletedClasses, self.changes.modifiedClasses = classes_diff["added"], classes_diff["deleted"], classes_diff["modified"]
+        # Define what we're comparing
+        category_map = {
+            "functions": (old_funcs, new_funcs),
+            "classes": (old_classes, new_classes),
+            "interfaces": (old_ifaces, new_ifaces),
+            "types": (old_types, new_types),
+            "enums": (old_enums, new_enums),
+        }
 
-        ifaces_diff = self.diff_components(old_ifaces, new_ifaces)
-        self.changes.addedInterfaces, self.changes.deletedInterfaces, self.changes.modifiedInterfaces = ifaces_diff["added"], ifaces_diff["deleted"], ifaces_diff["modified"]
-        
-        types_diff = self.diff_components(old_types, new_types)
-        self.changes.addedTypes, self.changes.deletedTypes, self.changes.modifiedTypes = types_diff["added"], types_diff["deleted"], types_diff["modified"]
-        
-        enums_diff = self.diff_components(old_enums, new_enums)
-        self.changes.addedEnums, self.changes.deletedEnums, self.changes.modifiedEnums = enums_diff["added"], enums_diff["deleted"], enums_diff["modified"]
+        # Run diff and record changes
+        for category, (old_map, new_map) in category_map.items():
+            diff = self.diff_components(old_map, new_map)
+            for change_type in ["added", "deleted", "modified"]:
+                for item in diff[change_type]:
+                    self.changes.add_change(category, change_type, item)
+
         return self.changes
+    def process_single_file(self, file_ast: Node, mode="deleted") -> DetailedChanges:
+        """Processes a single file that was either entirely added or deleted."""
+        funcs, classes, interfaces, types, enums = self.extract_components(file_ast.root_node)
 
-def print_ast_structure(node: Node, indent="    "):
-    """
-    Recursively prints the structure of an AST node.
-    """
-    # Print the current node's type and its position in the source code
-    node_info = f"{indent} {node.type}"
-    
-    # If the node is a leaf (has no children), also print its text content
-    if not node.children:
-        node_info += f", Text: '{node.text.decode('utf8')}'"
-    
-    print(node_info)
+        category_map = {
+            "functions": funcs,
+            "classes": classes,
+            "interfaces": interfaces,
+            "types": types,
+            "enums": enums,
+        }
 
-    # Recursively call this function for each child node
-    for child in node.children:
-        print_ast_structure(child, indent + "  ")
+        for category, component_map in category_map.items():
+            for name, data_tuple in component_map.items():
+                # data_tuple is (node, text, start_point, end_point)
+                item = (name, data_tuple[1], {"start": data_tuple[2], "end": data_tuple[3]})
+                self.changes.add_change(category, mode, item)
         
-
+        return self.changes
