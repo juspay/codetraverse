@@ -16,21 +16,18 @@ def getModuleInfo(fdep_folder: str, module_name: str) -> List[Dict[str, Any]]:
     def generate_patterns(module_name: str) -> List[str]:
         """Generate patterns for the exact module path."""
         norm = normalize_path(module_name)
-        return [norm]  # Return only the normalized absolute path
+        return [norm]
 
     def matches_pattern(module_path: str, patterns: List[str]) -> bool:
-        """Check if module_path matches any pattern."""
         norm_path = normalize_path(module_path)
         
         for pattern in patterns:
             norm_pattern = normalize_path(pattern)
-            # Strict match: Only return True if the paths are exactly the same
             if norm_path == norm_pattern:
                 return True
         return False
     
     def extract_components(data, patterns: List[str]) -> List[Dict[str, Any]]:
-        """Recursively extract matching components from data."""
         components = []
         
         def traverse(obj):
@@ -52,7 +49,6 @@ def getModuleInfo(fdep_folder: str, module_name: str) -> List[Dict[str, Any]]:
     patterns = generate_patterns(module_name)
     all_components = []
     
-    # Walk through all JSON files
     for root, _, files in os.walk(fdep_folder):
         for file in files:
             if file.endswith('.json'):
