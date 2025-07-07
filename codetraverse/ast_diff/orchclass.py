@@ -131,43 +131,57 @@ def generate_ast_diff(
         print(f"ERROR - {e}")
         traceback.print_exc()
 
+def run_ast_diff_from_config(config: Dict[str, Any]):
+    print("--- Starting AST Diff Generation from Config ---")
+    provider_type = config.get("provider_type")
+    git_provider = None
 
-# ##############################################################################
-# SECTION 5: EXAMPLE USAGE
-# ##############################################################################
-
-if __name__ == "__main__":
-    # --- Option 1: Use local Git repository ---
     try:
-        local_repo_path = "/Users/pramod.p/euler-api-gateway" # <--- IMPORTANT: CHANGE THIS PATH
-        git_provider = GitWrapper(local_repo_path)
-        
+        # --- 1. Initialize Git Provider from Config ---
+        if provider_type == "bitbucket":
+            bb_config = config.get("bitbucket", {})
+            git_provider = BitBucket(
+                base_url=bb_config.get("base_url"),
+                project_key=bb_config.get("project_key"),
+                repo_slug=bb_config.get("repo_slug"),
+                token=bb_config.get("token")
+            )
+        elif provider_type == "local":
+            local_config = config.get("local", {})
+            git_provider = GitWrapper(repo_path=local_config.get("repo_path"))
+        else:
+            raise ValueError(f"Unsupported provider_type: '{provider_type}'. Must be 'bitbucket' or 'local'.")
+
+        # --- 2. Call the Core Function with Parameters from Config ---
         generate_ast_diff(
             git_provider=git_provider,
-            from_branch="EUL-16517-dsl",          # Or a feature branch
-            to_branch="staging",       # Or another branch/commit SHA
-            output_dir="./ast_diff_report",
-            quiet=False
+            output_dir=config.get("output_dir", "./ast_diff_output"),
+            quiet=config.get("quiet", False),
+            pr_id=config.get("pr_id"),
+            from_branch=config.get("from_branch"),
+            to_branch=config.get("to_branch"),
+            from_commit=config.get("from_commit"),
+            to_commit=config.get("to_commit"),
         )
-    except (ValueError, FileNotFoundError) as e:
-        print(f"Skipping local GitWrapper example: {e}")
-        print("Please update the 'local_repo_path' to run this example.")
+        print("--- AST Diff Generation Finished ---")
 
-    # print("\n" + "="*50 + "\n")
-
-    # --- Option 2: Use BitBucket API (mocked for this example) ---
-    # Replace with your actual BitBucket credentials and implementation
-    # BASE_URL = "https://bitbucket.juspay.net/rest"
-    # PROJECT_KEY = "EXC"
-    # REPO_SLUG = "euler-api-gateway"
-    # AUTH = ("pramod.p@juspay.in", "")
-    # HEADERS = {"Accept": "application/json"}
+    except Exception as e:
+        print(f"FATAL ERROR in configuration or execution: {e}")
+        traceback.print_exc()
+        
+# if __name__ == "__main__":
     
-    # bitbucket_provider = BitBucket(BASE_URL, PROJECT_KEY, REPO_SLUG, AUTH, HEADERS)
     
-    # generate_ast_diff(
-    #     git_provider=bitbucket_provider,
-    #     pr_id="2776", 
-    #     output_dir="./ast_diff_report_bb",
-    #     quiet=False
-    # )
+#     print("\n--- RUNNING EXAMPLE 1: LOCAL GIT REPO ---")
+#     local_repo_config = {
+#         "provider_type": "local",
+#         "local": {
+#             "repo_path": "/Users/pramod.p/euler-api-gateway"
+#         },
+#         "from_branch": "EUL-16517-dsl",
+#         "to_branch": "staging",
+#         "output_dir": "./ast_diff_local_example",
+#         "quiet": False
+#     }
+#     run_ast_diff_from_config(local_repo_config)
+#     print("\n" + "="*50 + "\n")
