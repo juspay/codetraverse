@@ -232,7 +232,7 @@ export class PythonRunner {
       let stdout = '';
       let stderr = '';
 
-      const child: ChildProcess = spawn(this.pythonPath, args, {
+      const child: ChildProcess = spawn("VIRTUAL_ENV=" + path.join(this.codetraversePath, ".venv"), [this.pythonPath, "-m", "uv", "run"].concat(args), {
         cwd: this.workingDirectory,
         stdio: ['pipe', 'pipe', 'pipe']
       });

@@ -1,11 +1,11 @@
 import * as path from 'path';
 import * as fs from 'fs';
-import { 
-  BridgeConfig, 
-  AnalysisOptions, 
-  Component, 
-  GraphData, 
-  PathResult, 
+import {
+  BridgeConfig,
+  AnalysisOptions,
+  Component,
+  GraphData,
+  PathResult,
   ChildInfo,
   ParentInfo,
   CommonParentInfo,
@@ -30,7 +30,7 @@ export class CodeTraverseBridge {
     this.runner = new PythonRunner(config);
   }
 
-  async createEnv(){
+  async createEnv() {
     await this.runner.createEnv();
   }
 
@@ -39,7 +39,7 @@ export class CodeTraverseBridge {
    */
   async analyzeFile(filePath: string, language: Language): Promise<Component[]> {
     this.validateLanguage(language);
-    
+
     try {
       const result = await this.runner.runSingleFileAnalysis(filePath, language);
       return JSON.parse(result.stdout) as Component[];
@@ -53,7 +53,7 @@ export class CodeTraverseBridge {
    */
   async analyzeWorkspace(rootPath: string, options: AnalysisOptions): Promise<GraphData> {
     this.validateLanguage(options.language);
-    
+
     try {
       const outputBase = options.outputBase || 'fdep';
       const graphDir = options.graphDir || 'graph';
@@ -78,11 +78,11 @@ export class CodeTraverseBridge {
    * Analyze workspace and return raw components (without building graph)
    */
   async analyzeWorkspaceComponents(
-    rootPath: string, 
+    rootPath: string,
     options: AnalysisOptions
   ): Promise<Component[]> {
     this.validateLanguage(options.language);
-    
+
     try {
       const outputBase = options.outputBase || 'fdep';
       const graphDir = options.graphDir || 'graph';
@@ -109,8 +109,8 @@ export class CodeTraverseBridge {
    * Find the shortest path between two components in a graph
    */
   async findPath(
-    graphPath: string, 
-    fromComponent: string, 
+    graphPath: string,
+    fromComponent: string,
     toComponent: string
   ): Promise<PathResult> {
     try {
@@ -261,7 +261,7 @@ export class CodeTraverseBridge {
       // 1. Use a GraphML parsing library
       // 2. Modify Python to also output JSON format
       // 3. Use a lightweight XML parser
-      
+
       throw new CodeTraverseError(
         'GraphML parsing not yet implemented. Consider using analyzeWorkspaceComponents() for raw component data.',
         'GRAPHML_PARSING_NOT_IMPLEMENTED'
@@ -276,16 +276,16 @@ export class CodeTraverseBridge {
    */
   private async loadComponentsFromDirectory(outputBase: string): Promise<Component[]> {
     const components: Component[] = [];
-    
+
     try {
       const files = await this.getJsonFiles(outputBase);
-      
+
       for (const file of files) {
         const content = await fs.promises.readFile(file, 'utf-8');
         const fileComponents = JSON.parse(content) as Component[];
         components.push(...fileComponents);
       }
-      
+
       return components;
     } catch (error) {
       throw this.wrapError(error, 'loadComponentsFromDirectory');
@@ -297,12 +297,12 @@ export class CodeTraverseBridge {
    */
   private async getJsonFiles(dir: string): Promise<string[]> {
     const files: string[] = [];
-    
+
     const entries = await fs.promises.readdir(dir, { withFileTypes: true });
-    
+
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
-      
+
       if (entry.isDirectory()) {
         const subFiles = await this.getJsonFiles(fullPath);
         files.push(...subFiles);
@@ -310,7 +310,7 @@ export class CodeTraverseBridge {
         files.push(fullPath);
       }
     }
-    
+
     return files;
   }
 
@@ -319,22 +319,22 @@ export class CodeTraverseBridge {
    */
   private parsePathResult(stdout: string): PathResult {
     const lines = stdout.trim().split('\n');
-    
+
     // Look for path output pattern
     const pathLine = lines.find(line => line.includes('→'));
-    
+
     if (pathLine) {
       // Extract path from line like: "PgIntegrationApp::init → PgIntegrationApp::process → PgIntegrationApp::make"
       const parts = pathLine.split('→').map(part => part.trim());
       const pathMatch = parts.length > 1 ? parts : null;
-      
+
       return {
         found: true,
         path: pathMatch || [],
         message: stdout
       };
     }
-    
+
     return {
       found: false,
       message: stdout
@@ -348,9 +348,9 @@ export class CodeTraverseBridge {
     const lines = stdout.trim().split('\n');
     const incoming: Array<{ from: string; relation: string }> = [];
     const outgoing: Array<{ to: string; relation: string }> = [];
-    
+
     let section: 'incoming' | 'outgoing' | null = null;
-    
+
     for (const line of lines) {
       if (line.includes('edges INTO')) {
         section = 'incoming';
@@ -359,12 +359,12 @@ export class CodeTraverseBridge {
         section = 'outgoing';
         continue;
       }
-      
+
       // Parse edge lines like: "PgIntegrationApp::process --[calls]--> PgIntegrationApp::make"
       const edgeMatch = line.match(/(.+?)\s+--\[(.+?)\]-->\s+(.+)/);
       if (edgeMatch && section) {
         const [, from, relation, to] = edgeMatch;
-        
+
         if (section === 'incoming' && from && relation) {
           incoming.push({ from: from.trim(), relation: relation.trim() });
         } else if (section === 'outgoing' && to && relation) {
@@ -372,7 +372,7 @@ export class CodeTraverseBridge {
         }
       }
     }
-    
+
     return { incoming, outgoing };
   }
 
