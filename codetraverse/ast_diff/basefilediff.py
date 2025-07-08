@@ -1,7 +1,7 @@
 
 from abc import abstractmethod, ABC
 from typing import Any, Dict
-from Detailedchanges import DetailedChanges
+from .Detailedchanges import DetailedChanges
 from tree_sitter import Language, Parser, Node
 
 
