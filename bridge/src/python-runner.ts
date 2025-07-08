@@ -253,7 +253,7 @@ export class PythonRunner {
       let stderr = '';
       console.log(this.pythonPath, ...["-m", "uv", "run", ...args])
       const child: ChildProcess = spawn(this.pythonPath, ["-m", "uv", "run", ...args], {
-        cwd: this.workingDirectory,
+        cwd: this.codetraversePath,
         stdio: ['pipe', 'pipe', 'pipe'],
         env: {
           ...process.env,
