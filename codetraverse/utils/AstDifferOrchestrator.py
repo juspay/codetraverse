@@ -8,13 +8,13 @@ import tree_sitter_haskell
 import tree_sitter_typescript
 import tree_sitter_go
 import tree_sitter_rust
-from haskelldiff import HaskellFileDiff
-from resdiffer import RescriptFileDiff
-from TSdiff import TypeScriptFileDiff
-from godiff import GoFileDiff
-from rustdiff import RustFileDiff
-from gitwrapper import GitWrapper
-from bitbucket import BitBucket
+from codetraverse.ast_diff.haskelldiff import HaskellFileDiff
+from codetraverse.ast_diff.resdiffer import RescriptFileDiff
+from codetraverse.ast_diff.TSdiff import TypeScriptFileDiff
+from codetraverse.ast_diff.godiff import GoFileDiff
+from codetraverse.ast_diff.rustdiff import RustFileDiff
+from codetraverse.ast_diff.gitwrapper import GitWrapper
+from codetraverse.ast_diff.bitbucket import BitBucket
 from git import Repo
 from unidiff import PatchSet
 
