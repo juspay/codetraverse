@@ -17,6 +17,8 @@ setup_uv(){
         # curl -LsSf https://astral.sh/uv/install.sh | sh
         # source ~/.zshrc 2>/dev/null || true
         # source ~/.bash_profile 2>/dev/null || true
+        "$1" -m venv "$2"/venv
+        source "$2"/venv/bin/activate
         "$1" -m pip install uv
         if ! check_uv "$1"; then
             echo ERROR - unable to install uv
@@ -29,7 +31,7 @@ setup_uv(){
 setup_env(){
     python_path="$1"
     codetraverse_dir="$2"
-    setup_uv "$python_path"
+    setup_uv "$python_path" "$codetraverse_dir"
     echo $codetraverse_dir
     cd "$codetraverse_dir"
     "$python_path" -m uv init
@@ -44,4 +46,3 @@ else
   echo "'$1' is not a known function name" >&2
   exit 1
 fi
-

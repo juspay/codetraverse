@@ -251,8 +251,8 @@ export class PythonRunner {
       const actualTimeout = timeoutMs || this.timeout;
       let stdout = '';
       let stderr = '';
-      console.log(this.pythonPath, ...["-m", "uv", "run", ...args])
-      const child: ChildProcess = spawn(this.pythonPath, ["-m", "uv", "run", ...args], {
+      const uvPath = path.join(this.codetraversePath, "venv", "bin", "uv")
+      const child: ChildProcess = spawn(uvPath, ["run", ...args], {
         cwd: this.codetraversePath,
         stdio: ['pipe', 'pipe', 'pipe'],
         env: {
