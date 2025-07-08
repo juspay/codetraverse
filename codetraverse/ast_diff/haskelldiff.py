@@ -1,8 +1,8 @@
 import json
 from tree_sitter import Language, Parser, Node
 import tree_sitter_haskell
-from Detailedchanges import DetailedChanges
-from basefilediff import BaseFileDiff
+from .Detailedchanges import DetailedChanges
+from .basefilediff import BaseFileDiff
 
 class HaskellFileDiff(BaseFileDiff):
     """Analyzes and compares two Haskell ASTs for semantic differences."""

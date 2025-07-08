@@ -6,8 +6,8 @@ from tree_sitter import Language, Parser, Node
 import tree_sitter_rescript
 import hashlib
 import os
-from Detailedchanges import DetailedChanges
-from basefilediff import BaseFileDiff
+from .Detailedchanges import DetailedChanges
+from .basefilediff import BaseFileDiff
 
 def format_rescript_file(file_pth):
     try:

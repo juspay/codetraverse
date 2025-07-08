@@ -1,8 +1,8 @@
 import json
 from tree_sitter import Language, Parser, Node
 import tree_sitter_go
-from Detailedchanges import DetailedChanges
-from basefilediff import BaseFileDiff
+from .Detailedchanges import DetailedChanges
+from .basefilediff import BaseFileDiff
 class GoFileDiff(BaseFileDiff):
     """Analyzes and compares two Go ASTs for semantic differences."""
     def __init__(self, module_name=""):
