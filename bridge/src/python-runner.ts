@@ -154,7 +154,7 @@ export class PythonRunner {
     }
     // Use the main.py entrypoint instead of utils.blackbox
     const cmd = ['-m', "codetraverse.main", ...args];
-    return this.executeCommand(cmd);
+    return this.executeCommand(cmd, -1);
   }
 
   /**
@@ -262,14 +262,17 @@ export class PythonRunner {
       });
 
       // Set up timeout
-      const timer = setTimeout(() => {
-        child.kill('SIGKILL');
-        reject(new PythonProcessError(
-          `Python process timed out after ${actualTimeout}ms`,
-          -1,
-          'Process timeout'
-        ));
-      }, actualTimeout);
+      let timer = undefined;
+      if (timeoutMs != -1) {
+        const timer = setTimeout(() => {
+          child.kill('SIGKILL');
+          reject(new PythonProcessError(
+            `Python process timed out after ${actualTimeout}ms`,
+            -1,
+            'Process timeout'
+          ));
+        }, actualTimeout);
+      }
 
       // Collect stdout
       child.stdout?.on('data', (data: Buffer) => {
@@ -283,7 +286,9 @@ export class PythonRunner {
 
       // Handle process completion
       child.on('close', (code: number | null) => {
-        clearTimeout(timer);
+        if (timeoutMs != -1) {
+          clearTimeout(timer);
+        }
 
         if (code === 0) {
           resolve({ stdout: stdout.trim(), stderr: stderr.trim() });

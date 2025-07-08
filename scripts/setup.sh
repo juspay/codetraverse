@@ -11,20 +11,19 @@ check_uv(){
 
 # Install UV
 setup_uv(){
-    if check_uv "$1"; then
-        echo "UV Already Installed"
-    else
+    # if check_uv "$1"; then
+    #     echo "UV Already Installed"
+    # else
         # curl -LsSf https://astral.sh/uv/install.sh | sh
         # source ~/.zshrc 2>/dev/null || true
         # source ~/.bash_profile 2>/dev/null || true
         "$1" -m venv "$2"/venv
-        source "$2"/venv/bin/activate
-        "$1" -m pip install uv
+        source "$2"/venv/bin/activate && pip install uv
         if ! check_uv "$1"; then
             echo ERROR - unable to install uv
             exit 1
         fi
-    fi
+    # fi
 }
 
 # Create Env
