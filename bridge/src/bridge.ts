@@ -177,10 +177,11 @@ export class CodeTraverseBridge {
    */
   async getFunctionInfo(
     fdepFolder: string,
+    moduleName: string,
     componentName: string,
     componentType = 'function'
   ): Promise<Component[]> {
-    const { stdout } = await this.runner.runBlackbox('getFunctionInfo', [fdepFolder, componentName, '--component_type', componentType]);
+    const { stdout } = await this.runner.runBlackbox('getFunctionInfo', [fdepFolder, moduleName, componentName, '--component_type', componentType]);
     return JSON.parse(stdout) as Component[];
   }
 
