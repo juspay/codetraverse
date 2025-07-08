@@ -88,14 +88,11 @@ def debug_getModuleInfo(fdep_folder: str, module_name: str) -> List[Dict[str, An
 
 def getFunctionInfo(fdep_folder: str, module_name:str, component_name: str, component_type='function') -> List[Dict[str, Any]]:
     if not os.path.exists(fdep_folder):
-        print(f"Folder doesn't exist: {fdep_folder}")
         return []
     components = getModuleInfo(fdep_folder, module_name)
     for comp in components:
         if comp.get('kind') == component_type and comp.get('name') == component_name:
-            print(json.dumps(comp, indent=2))
             return [comp]
-    print(f"❌ Function '{component_name}' not found in module '{module_name}''")
     return []
 
 def getFunctionChildren(graph_path: str, module_name: str, component_name: str, depth: int = 1) -> List[List[Any]]:
@@ -289,6 +286,7 @@ def main():
             
         elif args.function == 'getFunctionInfo':
             result = getFunctionInfo(args.fdep_folder, args.module_name, args.component_name, args.component_type)
+            print(json.dumps(result, indent=2))
             
         elif args.function == 'getFunctionChildren':
             result = getFunctionChildren(args.graph_path, args.module_name, args.component_name, args.depth)
