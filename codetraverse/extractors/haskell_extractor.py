@@ -175,6 +175,11 @@ class HaskellComponentExtractor(ComponentExtractor):
                 comp = self.extract_import_component(child, src_bytes)
                 if comp:
                     components.append(comp)
+            elif child.type == "class":
+                class_comp = self.extract_class_component(child, src_bytes, import_map)
+                if class_comp:
+                    class_comp["module"] = self.current_module
+                    components.append(class_comp)
             elif child.type == "function":
                 name_node = child.child_by_field_name("name")
                 fn_name = src_bytes[name_node.start_byte:name_node.end_byte].decode() if name_node else "unknown"
@@ -239,6 +244,145 @@ class HaskellComponentExtractor(ComponentExtractor):
                 reexported_modules[comp["module"]].append(comp["alias"])
 
         return components
+    
+    def extract_class_component(self, class_node, src_bytes, import_map):
+        """Extract Haskell class definitions"""
+        start, end = class_node.start_point[0], class_node.end_point[0]
+        class_code = b"\n".join(src_bytes.split(b"\n")[start : end + 1]).decode("utf8")
+        
+        # Extract class name
+        name_node = class_node.child_by_field_name("name")
+        class_name = src_bytes[name_node.start_byte:name_node.end_byte].decode() if name_node else "UnknownClass"
+        
+        # Extract type parameters
+        type_params = []
+        patterns_node = class_node.child_by_field_name("patterns")
+        if patterns_node:
+            for param_node in patterns_node.children:
+                if param_node.type == "variable":
+                    param_name = src_bytes[param_node.start_byte:param_node.end_byte].decode()
+                    type_params.append(param_name)
+        
+        # Extract class declarations (type families, method signatures)
+        declarations = []
+        declarations_node = class_node.child_by_field_name("declarations")
+        if declarations_node:
+            for decl_node in declarations_node.children:
+                if decl_node.type == "declaration":
+                    for inner_decl in decl_node.children:
+                        decl_info = self.extract_class_declaration(inner_decl, src_bytes)
+                        if decl_info:
+                            declarations.append(decl_info)
+                else:
+                    # Direct declarations (not wrapped in declaration node)
+                    decl_info = self.extract_class_declaration(decl_node, src_bytes)
+                    if decl_info:
+                        declarations.append(decl_info)
+        
+        # Extract superclass constraints
+        constraints = []
+        # Look for context/constraints in the class definition
+        for child in class_node.children:
+            if child.type == "context":
+                constraints = self.extract_class_constraints(child, src_bytes)
+        
+        # Extract associated types and methods separately
+        type_families = [d for d in declarations if d.get("declaration_type") == "type_family"]
+        method_sigs = [d for d in declarations if d.get("declaration_type") == "method_signature"]
+        default_methods = [d for d in declarations if d.get("declaration_type") == "default_method"]
+        
+        comp = {
+            "kind": "class",
+            "name": class_name,
+            "start_line": start + 1,
+            "end_line": end + 1,
+            "code": class_code,
+            "type_parameters": type_params,
+            "constraints": constraints,
+            "declarations": declarations,
+            "type_families": type_families,
+            "method_signatures": method_sigs,
+            "default_methods": default_methods
+        }
+        
+        return comp
+    
+    def extract_class_declaration(self, decl_node, src_bytes):
+        """Extract individual declarations within a class"""
+        decl_start, decl_end = decl_node.start_point[0], decl_node.end_point[0]
+        decl_code = b"\n".join(src_bytes.split(b"\n")[decl_start : decl_end + 1]).decode("utf8")
+        
+        if decl_node.type == "type_family":
+            # Extract type family name and parameters
+            name_node = decl_node.child_by_field_name("name")
+            family_name = src_bytes[name_node.start_byte:name_node.end_byte].decode() if name_node else "UnknownTypeFamily"
+            
+            # Extract type family parameters
+            family_params = []
+            patterns_node = decl_node.child_by_field_name("patterns")
+            if patterns_node:
+                for param_node in patterns_node.children:
+                    if param_node.type == "variable":
+                        param_name = src_bytes[param_node.start_byte:param_node.end_byte].decode()
+                        family_params.append(param_name)
+            
+            return {
+                "declaration_type": "type_family",
+                "name": family_name,
+                "parameters": family_params,
+                "code": decl_code.strip(),
+                "start_line": decl_start + 1,
+                "end_line": decl_end + 1
+            }
+        
+        elif decl_node.type == "signature":
+            # Method signature
+            name_node = decl_node.child_by_field_name("name")
+            method_name = src_bytes[name_node.start_byte:name_node.end_byte].decode() if name_node else "UnknownMethod"
+            
+            # Extract the type signature
+            type_node = decl_node.child_by_field_name("type")
+            type_sig = src_bytes[type_node.start_byte:type_node.end_byte].decode() if type_node else ""
+            
+            return {
+                "declaration_type": "method_signature",
+                "name": method_name,
+                "type_signature": type_sig,
+                "code": decl_code.strip(),
+                "start_line": decl_start + 1,
+                "end_line": decl_end + 1
+            }
+        
+        elif decl_node.type == "function":
+            # Default method implementation
+            name_node = decl_node.child_by_field_name("name")
+            method_name = src_bytes[name_node.start_byte:name_node.end_byte].decode() if name_node else "UnknownMethod"
+            
+            return {
+                "declaration_type": "default_method",
+                "name": method_name,
+                "code": decl_code.strip(),
+                "start_line": decl_start + 1,
+                "end_line": decl_end + 1
+            }
+        
+        else:
+            # Generic declaration
+            return {
+                "declaration_type": decl_node.type,
+                "code": decl_code.strip(),
+                "start_line": decl_start + 1,
+                "end_line": decl_end + 1
+            }
+    
+    def extract_class_constraints(self, context_node, src_bytes):
+        """Extract superclass constraints from a class definition"""
+        constraints = []
+        for child in context_node.children:
+            if child.type == "constraint":
+                constraint_text = src_bytes[child.start_byte:child.end_byte].decode()
+                constraints.append(constraint_text)
+        return constraints
     
     def extract_function_calls_node(self, function_node, src_bytes, import_map, current_module):
         """Extract function calls using Tree-sitter AST traversal"""

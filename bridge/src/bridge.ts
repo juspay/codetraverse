@@ -206,7 +206,7 @@ export class CodeTraverseBridge {
     componentName: string,
     depth = 1
   ): Promise<ParentInfo[]> {
-    const { stdout } = await this.runner.runBlackbox('getFunctionParents', [graphPath, moduleName, componentName, '--depth', depth.toString()]);
+    const { stdout } = await this.runner.runBlackbox('getFunctionParent', [graphPath, moduleName, componentName, '--depth', depth.toString()]);
     return JSON.parse(stdout) as ParentInfo[];
   }
 
