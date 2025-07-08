@@ -417,4 +417,4 @@ export class CodeTraverseBridge {
   }
 }
 
-// new CodeTraverseBridge({ pythonPath: "/usr/local/bin/python3.10", codetraversePath: "/Users/jignyas.s/Desktop/Juspay/code/node_modules/codetraverse-bridge-jp" }).createFdepData("/Users/jignyas.s/Desktop/Juspay/euler-api-gateway", "./output/fdep", "./output/graph", false)
+// new CodeTraverseBridge({ pythonPath: "/usr/local/bin/python3.10", codetraversePath: "/Users/jignyas.s/Desktop/Juspay/code/node_modules/codetraverse-bridge-jp" }).createFdepData("/Users/jignyas.s/Desktop/Juspay/euler-api-gateway", "./output/fdep", "./output/graph", true)
