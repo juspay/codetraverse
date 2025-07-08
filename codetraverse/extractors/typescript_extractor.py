@@ -309,7 +309,8 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                 comp["root_folder"] = root_folder.replace("\\", "/")
 
             # --- Set module ---
-            if "module" not in comp or not comp["module"]:
+            # even if the module has only one file.ts kind of thing, we still set it
+            if "module" not in comp or not comp["module"] or 2 == len(comp["file_path"].split(".")):
                 comp["module"] = comp["file_path"]
 
 
