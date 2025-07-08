@@ -299,13 +299,22 @@ def main():
             print(json.dumps(result, indent=2))
             
         elif args.function == 'getSubgraph':
-            result = getSubgraph(args.graph_path, args.module_name, args.component_name, args.parent_depth, args.child_depth)
+            result = getSubgraph(
+                args.graph_path,
+                args.module_name,
+                args.component_name,
+                args.parent_depth,
+                args.child_depth
+            )
+            # Always print exactly one JSON blob
             if result:
-                print(f"Subgraph created with {len(result.nodes)} nodes and {len(result.edges)} edges")
-                print("Nodes:", list(result.nodes))
-                print("Edges:", list(result.edges))
+                out = {
+                    "nodes": list(result.nodes),
+                    "edges": [(u, v) for u, v in result.edges]
+                }
             else:
-                print("No subgraph created")
+                out = {"nodes": [], "edges": []}
+            print(json.dumps(out))
                 
         elif args.function == 'getCommonParents':
             result = getCommonParents(args.graph_path, args.module_name1, args.component_name1, 
