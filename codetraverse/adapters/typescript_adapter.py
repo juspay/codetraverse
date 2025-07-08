@@ -195,17 +195,70 @@ def adapt_typescript_components(raw_components):
 
     for comp in raw_components:
         kind = comp.get("kind")
-        from_id = make_node_id(comp)
+        if kind not in {"function", "method", "variable", "function_call", "arrow_function"}:
+            continue
 
-        if kind in {"function", "method", "variable", "function_call"} and comp.get("function_calls"):
-            for call in comp["function_calls"]:
-                target_id = call.get("resolved_callee")
-                if target_id and from_id != target_id:
-                    edges.append({
-                        "from": from_id,
-                        "to": target_id,
-                        "relation": "calls"
-                    })
+        from_id = make_node_id(comp)
+        if not from_id or not comp.get("function_calls"):
+            continue
+
+        # derive caller path from from_id
+        caller_module = from_id.split("::", 1)[0]
+        caller_dir    = os.path.dirname(caller_module)
+
+        for call in comp.get("function_calls", []):
+            target_id = call.get("resolved_callee")
+            if not target_id:
+                continue
+
+            # ——— handle TS "@/…" alias imports ———
+            if target_id.startswith("@"):
+                # strip leading "@/" to get the suffix
+                alias_suffix = target_id[1:].lstrip("/")
+                # find all existing nodes ending with that suffix
+                candidates = [
+                    nid for nid in existing_nodes
+                    if not nid.startswith("@") and nid.endswith(alias_suffix)
+                ]
+                if candidates:
+                    # score each by shared path segments with caller_dir
+                    scored = []
+                    for nid in candidates:
+                        cand_module = nid.split("::", 1)[0]
+                        common = os.path.commonpath([caller_dir, cand_module])
+                        segments = common.split(os.sep) if common else []
+                        scored.append((len(segments), nid))
+                    max_score = max(score for score, _ in scored)
+                    best = [nid for score, nid in scored if score == max_score]
+                    for nid in best:
+                        if from_id != nid:
+                            edges.append({
+                                "from":     from_id,
+                                "to":       nid,
+                                "relation": "calls"
+                            })
+                continue  # skip the rest and go to next call
+
+            # ——— handle "./" or "../" relative imports ———
+            if target_id.startswith("."):
+                parts = target_id.split("::")
+                if len(parts) == 2:
+                    target_file, target_symbol = parts
+                    from_file = caller_module
+                    from_dir  = os.path.dirname(from_file)
+                    combined = os.path.normpath(
+                        os.path.join(from_dir, target_file)
+                    ).replace("\\", "/")
+                    target_id = f"{combined}::{target_symbol}"
+
+            # ——— emit the edge for non-alias or resolved-relative cases ———
+            if from_id != target_id:
+                edges.append({
+                    "from":     from_id,
+                    "to":       target_id,
+                    "relation": "calls"
+                })
+
 
 
     for comp in raw_components:
