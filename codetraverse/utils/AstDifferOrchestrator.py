@@ -17,6 +17,8 @@ from codetraverse.ast_diff.gitwrapper import GitWrapper
 from codetraverse.ast_diff.bitbucket import BitBucket
 from git import Repo
 from unidiff import PatchSet
+import argparse
+import sys
 
 class AstDiffOrchestrator:
 
@@ -154,7 +156,6 @@ def run_ast_diff_from_config(config: Dict[str, Any]):
     try:
         if provider_type == "bitbucket":
             bb_config = config.get("bitbucket", {})
-            # --- FIXED: Use 'auth' and 'headers' instead of 'token' ---
             git_provider = BitBucket(
                 base_url=bb_config.get("base_url"),
                 project_key=bb_config.get("project_key"),
@@ -181,27 +182,117 @@ def run_ast_diff_from_config(config: Dict[str, Any]):
         print("--- AST Diff Generation Finished ---")
 
     except Exception as e:
-        print(f"FATAL ERROR in configuration or execution: {e}")
+        print(f"FATAL ERROR in configuration or execution: {e}", file=sys.stderr)
         traceback.print_exc()
+        sys.exit(1)
+
+def main():
+    parser = argparse.ArgumentParser(description="Generate an Abstract Syntax Tree (AST) diff for code changes.")
+    
+    # Add a single argument to accept a JSON configuration string
+    parser.add_argument("--config-json", help="A JSON string containing the configuration.")
+
+    # Keep the existing subparsers for backward compatibility and direct CLI use
+    subparsers = parser.add_subparsers(dest="provider_type", help="Specify the Git provider.")
+
+    # --- Common arguments for both providers ---
+    parent_parser = argparse.ArgumentParser(add_help=False)
+    parent_parser.add_argument("--output-dir", default="./ast_diff_output", help="Directory to save the output JSON file.")
+    parent_parser.add_argument("--from-branch", help="The source branch name.")
+    parent_parser.add_argument("--to-branch", help="The target branch name (e.g., main).")
+    parent_parser.add_argument("--from-commit", help="The starting commit hash.")
+    parent_parser.add_argument("--to-commit", help="The ending commit hash.")
+    parent_parser.add_argument("--quiet", action="store_true", help="Suppress processing status messages.")
+
+    # --- Subparser for local Git repository ---
+    parser_local = subparsers.add_parser("local", parents=[parent_parser], help="Use a local Git repository.")
+    parser_local.add_argument("repo_path", nargs='?', default=None, help="The file path to the local Git repository.")
+
+    # --- Subparser for Bitbucket repository ---
+    parser_bb = subparsers.add_parser("bitbucket", parents=[parent_parser], help="Use a remote Bitbucket repository.")
+    parser_bb.add_argument("--base-url", help="Bitbucket server base URL.")
+    parser_bb.add_argument("--project-key", help="Bitbucket project key.")
+    parser_bb.add_argument("--repo-slug", help="Bitbucket repository slug.")
+    parser_bb.add_argument("--user", help="Bitbucket username for authentication.")
+    parser_bb.add_argument("--token", help="Bitbucket password or personal access token.")
+    parser_bb.add_argument("--pr-id", help="Pull Request ID to automatically  commits.")
+
+    args = parser.parse_args()
+
+    if args.config_json:
+        try:
+            config_str = args.config_json
+
+            # Try to parse once
+            config = json.loads(config_str)
+
+            # If still a string (i.e., double-encoded), parse again
+            if isinstance(config, str):
+                config = json.loads(config)
+
+            if not isinstance(config, dict):
+                raise ValueError("Config is not a valid odfvsdbbject.")
+
+            run_ast_diff_from_config(config)
+
+        except Exception as e:
+            print(f"FATAL ERROR: Invalid JSON in --config-json argument: {e}", file=sys.stderr)
+            traceback.print_exc()
+            sys.exit(1)
+
+    elif args.provider_type:
+        # --- Construct the config dictionary from arguments (existing logic) ---
+        config = {
+            "provider_type": args.provider_type,
+            "output_dir": args.output_dir,
+            "quiet": args.quiet,
+            "pr_id": getattr(args, 'pr_id', None),
+            "from_branch": args.from_branch,
+            "to_branch": args.to_branch,
+            "from_commit": args.from_commit,
+            "to_commit": args.to_commit,
+        }
+
+        if args.provider_type == "local":
+            if not args.repo_path:
+                parser.error("the following arguments are required: repo_path")
+            config["local"] = {"repo_path": args.repo_path}
+        elif args.provider_type == "bitbucket":
+            if not all([args.base_url, args.project_key, args.repo_slug, args.user, args.token]):
+                parser.error("missing required arguments for bitbucket provider.")
+            config["bitbucket"] = {
+                "base_url": args.base_url,
+                "project_key": args.project_key,
+                "repo_slug": args.repo_slug,
+                "auth": (args.user, args.token)
+            }
         
+        run_ast_diff_from_config(config)
+    else:
+        parser.print_help()
+        sys.exit(1)
+
 if __name__ == "__main__":
+    main()
+        
+# if __name__ == "__main__":
     
     
-    print("\n--- RUNNING EXAMPLE 1: LOCAL GIT REPO ---")
-    local_repo_config = {
-        "provider_type": "local",
-        "local": {
-            "repo_path": "/Users/pramod.p/xyne/"
-        },
-        "from_branch": "feat/dummy-sheet",
-        "to_branch": "main",
-        "output_dir": "./ast_diff_local_example",
-        "quiet": False
-    }
-    run_ast_diff_from_config(local_repo_config)
-    print("\n" + "="*50 + "\n")
+#     print("\n--- RUNNING EXAMPLE 1: LOCAL GIT REPO ---")
+#     local_repo_config = {
+#         "provider_type": "local",
+#         "local": {
+#             "repo_path": "/Users/pramod.p/xyne/"
+#         },
+#         "from_branch": "feat/dummy-sheet",
+#         "to_branch": "main",
+#         "output_dir": "./ast_diff_local_example",
+#         "quiet": False
+#     }
+#     run_ast_diff_from_config(local_repo_config)
+#     print("\n" + "="*50 + "\n")
     
-    print("\n" + "="*50 + "\n")
+#     print("\n" + "="*50 + "\n")
 
     # --- EXAMPLE 2: BITBUCKET PULL REQUEST ---
     # print("\n--- RUNNING EXAMPLE 2: BITBUCKET PULL REQUEST ---")
@@ -222,5 +313,3 @@ if __name__ == "__main__":
     # }
 
     # run_ast_diff_from_config(bitbucket_repo_config)
-
-    
