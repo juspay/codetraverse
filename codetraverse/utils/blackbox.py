@@ -75,38 +75,56 @@ def getModuleInfo(fdep_folder: str, module_name: str) -> List[Dict[str, Any]]:
 def debug_getModuleInfo(fdep_folder: str, module_name: str) -> List[Dict[str, Any]]:
     print(f"🔍 Searching for: '{module_name}' in {fdep_folder}")
     if not os.path.exists(fdep_folder):
-        print(f"Folder doesn't exist: {fdep_folder}")
-        return []
+        return {
+                "error": True,
+                "message": f"Folder doesn't exist: {fdep_folder}",
+                "components": []
+        }
+    
     components = getModuleInfo(fdep_folder, module_name)
     if components:
         for comp in components:
             print(f"  - {comp.get('kind', '?')}: {comp.get('name', '?')} "
                   f"(module: {comp.get('module', '?')})")
-    else:
-        print("❌ No components found")
-    return components
+    return {
+        "error": False,
+        "message": f"Searching for: '{module_name}' in {fdep_folder}",
+        "components": components,
+        "found": len(components) > 0
+    }
 
 def getFunctionInfo(fdep_folder: str, module_name:str, component_name: str, component_type='function') -> List[Dict[str, Any]]:
     if not os.path.exists(fdep_folder):
-        print(f"Folder doesn't exist: {fdep_folder}")
-        return []
+        return {
+                "error": True,
+                "message": f"Folder doesn't exist: {fdep_folder}",
+                "components": []
+        }
     components = getModuleInfo(fdep_folder, module_name)
     for comp in components:
         if comp.get('kind') == component_type and comp.get('name') == component_name:
-            print(json.dumps(comp, indent=2))
             return [comp]
-    print(f"❌ Function '{component_name}' not found in module '{module_name}''")
-    return []
+    return {
+        "error": True,
+        "message": f"Function '{component_name}' not found in module '{module_name}'",
+        "component": None
+    }
 
 def getFunctionChildren(graph_path: str, module_name: str, component_name: str, depth: int = 1) -> List[List[Any]]:
     G = load_graph(graph_path)
     if not G:
-        print(f"❌ Graph not found at {graph_path}")
-        return []
+        return {
+            "error": True,
+            "message": f"Graph not found at {graph_path}",
+            "children": []
+        }
     target = f"{module_name}::{component_name}"
     if target not in G:
-        print(f"Error: target '{target}' not in graph.")
-        return []
+        return {
+            "error": True,
+            "message": f"Target '{target}' not in graph",
+            "children": []
+        }
     
     result = []
     visited = set()
@@ -133,13 +151,19 @@ def getFunctionChildren(graph_path: str, module_name: str, component_name: str, 
 def getFunctionParent(graph_path: str, module_name: str, component_name: str, depth: int = 1) -> List[List[Any]]:
     G = load_graph(graph_path)
     if not G:
-        print(f"❌ Graph not found at {graph_path}")
-        return []
+        return {
+            "error": True,
+            "message": f"Graph not found at {graph_path}",
+            "children": []
+        }
     
     target = f"{module_name}::{component_name}"
     if target not in G:
-        print(f"Error: target '{target}' not in graph.")
-        return []
+        return {
+            "error": True,
+            "message": f"Target '{target}' not in graph",
+            "children": []
+        }
     
     result = []
     visited = set()
@@ -289,6 +313,7 @@ def main():
             
         elif args.function == 'getFunctionInfo':
             result = getFunctionInfo(args.fdep_folder, args.module_name, args.component_name, args.component_type)
+            print(json.dumps(result, indent=2))
             
         elif args.function == 'getFunctionChildren':
             result = getFunctionChildren(args.graph_path, args.module_name, args.component_name, args.depth)
@@ -299,13 +324,22 @@ def main():
             print(json.dumps(result, indent=2))
             
         elif args.function == 'getSubgraph':
-            result = getSubgraph(args.graph_path, args.module_name, args.component_name, args.parent_depth, args.child_depth)
+            result = getSubgraph(
+                args.graph_path,
+                args.module_name,
+                args.component_name,
+                args.parent_depth,
+                args.child_depth
+            )
+            # Always print exactly one JSON blob
             if result:
-                print(f"Subgraph created with {len(result.nodes)} nodes and {len(result.edges)} edges")
-                print("Nodes:", list(result.nodes))
-                print("Edges:", list(result.edges))
+                out = {
+                    "nodes": list(result.nodes),
+                    "edges": [(u, v) for u, v in result.edges]
+                }
             else:
-                print("No subgraph created")
+                out = {"nodes": [], "edges": []}
+            print(json.dumps(out))
                 
         elif args.function == 'getCommonParents':
             result = getCommonParents(args.graph_path, args.module_name1, args.component_name1, 

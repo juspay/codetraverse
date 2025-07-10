@@ -2,8 +2,151 @@ import os
 import json
 import tree_sitter_typescript
 from tree_sitter import Language, Parser
+from typing import Optional, Dict, Any
+import re
+import html
 
 from codetraverse.base.component_extractor import ComponentExtractor
+
+
+
+def find_tsconfig_dir(root_dir: str, file_path: str, config_filename: str = "tsconfig.json") -> Optional[str]:
+    """
+    Walk from the directory of `file_path` up to `root_dir`, looking for `config_filename`.
+    Returns the directory containing the first `config_filename` found, or None if none is found
+    before hitting `root_dir` or the filesystem root.
+
+    :param root_dir: the topmost directory to stop searching (inclusive)
+    :param file_path: the full path to a file somewhere under root_dir
+    :param config_filename: the name of the config file to look for (default: "tsconfig.json")
+    :return: absolute path of the directory containing config_filename, or None
+    """
+    # Normalize to absolute paths
+    root_dir = os.path.abspath(root_dir)
+    current_dir = os.path.abspath(os.path.dirname(file_path))
+
+    while True:
+        candidate = os.path.join(current_dir, config_filename)
+        if os.path.isfile(candidate):
+            return current_dir
+
+        # Stop if we've reached the root_dir or the filesystem root
+        parent = os.path.dirname(current_dir)
+        if current_dir == root_dir or parent == current_dir:
+            return None
+
+        current_dir = parent
+
+
+
+
+def _strip_json_comments(text: str) -> str:
+    """
+    Remove // single-line comments and /* … */ block comments.
+    """
+    # strip block comments first
+    text = re.sub(r'/\*[\s\S]*?\*/', '', text)
+    # strip line comments
+    text = re.sub(r'//.*', '', text)
+    return text
+
+def paths_aliases_from_tsconfig(config_file_path: str) -> dict:
+    """
+    Read tsconfig.json (with comments) and return compilerOptions.paths as a dict.
+    Returns {} on missing file, empty file, parse errors, or if no "paths" key.
+    """
+    if not os.path.isfile(config_file_path):
+        # debug: print(f"tsconfig.json not found at {config_file_path}")
+        return {}
+
+    try:
+        raw = open(config_file_path, 'r', encoding='utf-8').read()
+    except OSError as e:
+        # debug: print(f"Could not read {config_file_path}: {e}")
+        return {}
+
+    # remove comments
+    clean = _strip_json_comments(raw).strip()
+    if not clean:
+        # debug: print(f"{config_file_path} is empty after stripping comments")
+        return {}
+
+    try:
+        cfg = json.loads(clean)
+    except json.JSONDecodeError as e:
+        # debug: print(f"JSON parse error in {config_file_path}: {e}")
+        return {}
+
+    # dive safely into compilerOptions.paths
+    paths = cfg.get("compilerOptions", {}).get("paths", {})
+    if isinstance(paths, dict):
+        return paths
+    # if it's present but not a dict for some reason
+    return {}
+
+
+
+
+import os
+import re
+from typing import Dict, Optional
+
+def resolve_callee_id(
+    callee_id: str,
+    config_dir: str,
+    alias_paths: Dict[str, list[str]]
+) -> str:
+    """
+    Replace any tsconfig-style alias in callee_id (e.g. "@/foo/bar.ts::method")
+    with its real filesystem path based on config_dir + alias_paths,
+    preserving the "::method" suffix if present.
+    If no alias matches, returns callee_id unchanged.
+    """
+    # 1) split off the ::method part, if any
+    if "::" in callee_id:
+        import_path, method = callee_id.split("::", 1)
+    else:
+        import_path, method = callee_id, None
+
+    # 2) try each alias pattern in order of specificity:
+    #    exact (no '*') first, then wildcard patterns with longer prefixes first
+    def sort_key(item):
+        pat = item[0]
+        return (pat.count("*"), -len(pat))
+    for alias_pattern, targets in sorted(alias_paths.items(), key=sort_key):
+        # build a regex to match the import_path
+        if "*" in alias_pattern:
+            # escape then turn each \* into a capture group
+            regex = "^" + re.escape(alias_pattern).replace(r"\*", "(.+)") + "$"
+            m = re.match(regex, import_path)
+            if not m:
+                continue
+            wildcards = m.groups()
+        else:
+            if import_path != alias_pattern:
+                continue
+            wildcards = ()
+
+        # we have a match—apply it to each target template in order
+        for tpl in targets:
+            rel = tpl
+            # sequentially substitute each '*' in tpl with the corresponding wildcard
+            for w in wildcards:
+                rel = rel.replace("*", w, 1)
+
+            # compute the absolute path
+            abs_path = os.path.normpath(os.path.join(config_dir, rel))
+            # you can optionally check existence:
+            # if not os.path.exists(abs_path): continue
+
+            # re-attach method if there was one
+            if method:
+                return f"{abs_path}::{method}"
+            return abs_path
+
+    # no alias matched → return original
+    return callee_id
+
 
 class TypeScriptComponentExtractor(ComponentExtractor):
     UTILITY_TYPES = {
@@ -54,6 +197,9 @@ class TypeScriptComponentExtractor(ComponentExtractor):
         return imports
 
     def get_text(self, node, code):
+        # print(node.start_byte, node.end_byte, code[node.start_byte:node.end_byte])
+        if "str.ngify" in code[node.start_byte:node.end_byte] :
+            print("DEBUG: ", node.start_byte, node.end_byte, code[node.start_byte:node.end_byte])
         return code[node.start_byte:node.end_byte]
 
     def extract_ident(self, node, code):
@@ -288,13 +434,21 @@ class TypeScriptComponentExtractor(ComponentExtractor):
 
             # --- Normalize file_path ---
             if ROOT_DIR and file_path:
-                index = file_path.find(base_folder)
-                if index != -1:
-                    updated_file_path = file_path[index:].replace("\\", "/")
-                else:
-                    updated_file_path = file_path.replace("\\", "/")
+                # i have this file path : /Users/siraj.shaik/Desktop/test_xyne/xyne/server/integrations/google/index.ts
+                # i have the root_dir : /Users/siraj.shaik/Desktop/test_xyne/xyne
+                # i need the updated file path  as  server/integrations/google/index.ts
+
+                # print(" siraj process_file file_path:", file_path)
+                # index = file_path.find(base_folder)
+                # if index != -1:
+                #     updated_file_path = file_path[index:].replace("\\", "/")
+                # else:
+                #     updated_file_path = file_path.replace("\\", "/")
+                # comp["file_path"] = updated_file_path
+                updated_file_path = file_path.replace(ROOT_DIR, "").lstrip(os.sep).replace("\\", "/")
                 comp["file_path"] = updated_file_path
             else:
+
                 comp["file_path"] = file_path.replace("\\", "/")
 
             # --- Normalize root_folder ---
@@ -427,8 +581,26 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                             
                         })
         return results
+    
 
-    def extract_function_calls(self, node, code, module_name, imports, class_name=None, class_bases=None):
+# right: (call_expression [141, 36] - [145, 13]
+#         function: (identifier [141, 36] - [141, 57])
+#         arguments: (arguments [141, 57] - [145, 13]
+#         (member_expression [142, 14] - [142, 34]
+#             object: (identifier [142, 14] - [142, 20])
+#             property: (property_identifier [142, 21] - [142, 34]))
+#         (as_expression [143, 14] - [143, 47]
+#             (member_expression [143, 14] - [143, 35]
+#             object: (identifier [143, 14] - [143, 20])
+#             property: (property_identifier [143, 21] - [143, 35]))
+#             (array_type [143, 39] - [143, 47]
+#             (predefined_type [143, 39] - [143, 45])))
+#         (identifier [144, 14] - [144, 29])))))
+
+    def extract_function_calls(self,file_path, node, code, module_name, imports, class_name=None, class_bases=None):
+        # print(node)
+        # print(module_name, "module_name in extract_function_calls")
+        # print(code[node.start_byte:node.end_byte], "code in extract_function_calls")
         """
         Recursively extract all function/method calls, handling:
         - direct calls (add(...))
@@ -463,6 +635,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                                 "name": f"super.{method_name}",
                                 "base_name": method_name,
                                 "resolved_callee": callee_id,
+                                "debug_line_1": f"super.{method_name} in {file_path}",
                             })
                         # this.method()
                         elif object_node.type == "this":
@@ -474,6 +647,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                                 "name": f"this.{method_name}",
                                 "base_name": method_name,
                                 "resolved_callee": callee_id,
+                                "debug_line_2": f"this.{method_name} in {file_path}",
                             })
                         # obj.method() (could be console.log, etc)
                         elif object_node.type == "identifier":
@@ -483,6 +657,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                                 "name": f"{obj_name}.{method_name}",
                                 "base_name": method_name,
                                 "resolved_callee": callee_id,
+                                "debug_line_3": f"{obj_name}.{method_name} in {file_path}",
                             })
                     # else: fallthrough for weird AST, do nothing
 
@@ -496,14 +671,54 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                             source_file = source_file + '.ts'
                         # source_file_name = os.path.basename(source_file)
                         # callee_id = f"{source_file_name}::{base_name}"
-                        callee_id = f"{source_file}::{base_name}"
+                        callee_id = f"{file_path}::{base_name}"
                     else:
-                        callee_id = f"{module_name}::{base_name}"
-                    calls.append({
-                        "name": callee_text,
-                        "base_name": base_name,
-                        "resolved_callee": callee_id,
-                    })
+                        callee_id = f"{file_path}::{base_name}"
+                    if "./" in callee_id:
+                        calls.append({
+                            "name": callee_text,
+                            "base_name": base_name,
+                            "resolved_callee": callee_id,
+                            "debug_line_4": f"{callee_text} in {file_path}",
+                        })
+                    # if "getSortedScoredChunks" in callee_text:
+                    #     print("siraj callee_text:", callee_text, "base_name:", base_name, "callee_id:", callee_id, "file_path:", file_path)
+                    else: 
+                        # print(callee_id, "callee_id we have right now")
+                        root_dir = os.environ.get("ROOT_DIR", "") # /Users/siraj.shaik/Desktop/test_xyne /Users/siraj.shaik/Desktop/test_xyne/xyne/server/integrations/google/utils.ts
+                        # print(root_dir, file_path)
+                        # 1. Walk up from each importing file to find the nearest tsconfig.json. till the root_dir and print the tsconfig.json file
+                        config_dir = find_tsconfig_dir(root_dir, file_path)
+                        if config_dir:
+                            # print(f"Found tsconfig.json in: {config_dir}")
+                            comlete_config_path = os.path.join(config_dir, "tsconfig.json") # tsconfig.json path: /Users/siraj.shaik/Desktop/test_xyne/xyne/server/tsconfig.json
+                            # print(f"tsconfig.json path: {comlete_config_path}")
+                            alias_paths = paths_aliases_from_tsconfig(comlete_config_path)
+                            # print(f"Alias paths: {alias_paths}")
+                            absolute_callee_id = resolve_callee_id(
+                                callee_id, config_dir, alias_paths
+                            )
+                            # trim the root_dir from the absolute_callee_id
+                            # as root_dir : /Users/siraj.shaik/Desktop/test_xyne
+                            # and absolute_callee_id : Resolved callee ID: /Users/siraj.shaik/Desktop/test_xyne/xyne/server/db/message.ts::getMessageByExternalId
+                            # but i should get the relative path from the root_dir
+                            # so my resolved callee ID should be: server/db/message.ts::getMessageByExternalId without "xyne" as i need paths from the internal module
+                            if absolute_callee_id.startswith(config_dir):
+                                absolute_callee_id = absolute_callee_id[len(root_dir):].lstrip(os.sep)
+
+                            # print(f"Resolved callee ID: {absolute_callee_id}")
+
+                        else:
+                            print(f"No tsconfig.json found up to {root_dir!r}")
+                        # print("siraj callee_text:", callee_text, "base_name:", base_name, "absolute_callee_id:", absolute_callee_id if 'absolute_callee_id' in locals() else callee_id)
+                        calls.append({
+                            "name": callee_text,
+                            "base_name": base_name,
+                            "resolved_callee": absolute_callee_id if 'absolute_callee_id' in locals() else callee_id,
+                            "debug_line_5": f"{callee_text} in {file_path}",
+                        })
+
+
 
                 # --- Recursive: Check for call expressions inside arguments ---
                 args = n.child_by_field_name('arguments')
@@ -515,6 +730,18 @@ class TypeScriptComponentExtractor(ComponentExtractor):
             for c in getattr(n, 'children', []):
                 visit(c)
         visit(node)
+        # print(calls)
+        # insert all the calls into a txt file 
+        with open("calls.txt", "a") as f:
+            for call in calls:
+                f.write(f"{call['name']} -> {call['resolved_callee']}\n")
+                f.write(f"Debug line: {call.get('debug_line_1', '')}\n")
+                f.write(f"Debug line: {call.get('debug_line_2', '')}\n")
+                f.write(f"Debug line: {call.get('debug_line_3', '')}\n")
+                f.write(f"Debug line: {call.get('debug_line_4', '')}\n")
+                f.write(f"Debug line: {call.get('debug_line_5', '')}\n")
+                f.write("\n")
+        # print("siraj calls:", calls)
         return calls
 
     def extract_type_dependencies(self, node, code):
@@ -559,7 +786,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
             expr = node.children[0] if node.children else None
             if expr and expr.type == "call_expression":
                 fn = expr.child_by_field_name("function")
-                if fn and fn.type == "identifier":
+                if fn and fn.type == "identifier": # siraj you need to handle member_expression too
                     func_name = self.get_text(fn, code)
                     arg_nodes = expr.child_by_field_name("arguments")
                     arguments = []
@@ -582,6 +809,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                         # "file_path":abs_path,
 
                     }
+                    
                     # --- NEW: Add function_from field if this function is imported ---
                     if func_name in imports:
                         entry["function_from"] = imports[func_name]
@@ -609,7 +837,11 @@ class TypeScriptComponentExtractor(ComponentExtractor):
 
 
             })
-
+#  (lexical_declaration [183, 0] - [212, 1]
+#     (variable_declarator [183, 6] - [212, 1]
+#       name: (identifier [183, 6] - [183, 36])
+#       value: (generator_function [183, 39] - [212, 1]
+#         parameters: (formal_parameters [183, 49] - [188, 1]
         # --- Variable Extraction ---
         if node.type == "lexical_declaration":
             for child in node.children:
@@ -619,17 +851,28 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                     value = None
                     calls = []
                     is_arrowed_function = False
+                    is_generator_function = False
 
                     for subchild in child.children:
                         if subchild.type == "identifier":
                             name = self.get_text(subchild, code)
                         elif subchild.type == "type_annotation":
                             type_sig = self.get_text(subchild, code)
+                        
+                        elif subchild.type == "generator_function":
+                            is_generator_function = True
+                            # Handle generator function declarations
+                            value = self.get_text(subchild, code)
+                            function_calls = self.extract_function_calls(
+                                file_path, subchild, code, module_name, imports
+                            )
+                            calls.extend(function_calls)
+                        
                         elif subchild.type == "arrow_function":
                             is_arrowed_function = True
                             # Handle arrow function declarations
                             value = self.get_text(subchild, code)
-                            function_calls = self.extract_function_calls(
+                            function_calls = self.extract_function_calls(file_path,
                                 subchild, code, module_name, imports
                             )
                             calls.extend(function_calls)
@@ -705,10 +948,15 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                         full_path = self._get_full_component_path(module_name, root_folder, name)
                         jsdoc = self.extract_jsdoc(node, code)
                         # abs_path = os.path.abspath(file_path).replace("\\", "/")
+                        kind = "variable"
+                        if is_arrowed_function:
+                            kind = "arrow_function"
+                        if is_generator_function:
+                            kind = "generator_function"
 
                         results.append(
                             {
-                                "kind": "variable" if not is_arrowed_function else "arrow_function",
+                                "kind": kind,
                                 "module": module_name,
                                 "name": name,
                                 "type_signature": type_sig,
@@ -724,6 +972,69 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                             }
                         )
             # return results
+        # a new type of function declaration that is not a function_declaration
+        if node.type == "generator_function_declaration":
+            name = None
+            parameters = []
+            return_type = None
+            body = None
+            calls = []
+            is_async = False
+
+            # Extract the function name
+            name_node = node.child_by_field_name("name")
+            if name_node:
+                name = self.get_text(name_node, code)
+
+            # Check if the function is async
+            if "async" in self.get_text(node, code):
+                is_async = True
+
+            # Extract parameters
+            parameters_node = node.child_by_field_name("parameters")
+            if parameters_node:
+                for param in parameters_node.children:
+                    if param.type in ("required_parameter", "optional_parameter"):
+                        param_name = self.get_text(param.child_by_field_name("pattern"), code)
+                        param_type = None
+                        type_annotation_node = param.child_by_field_name("type")
+                        if type_annotation_node:
+                            param_type = self.get_text(type_annotation_node, code)
+                        parameters.append({"name": param_name, "type": param_type})
+
+            # Extract return type
+            return_type_node = node.child_by_field_name("return_type")
+            if return_type_node:
+                return_type = self.get_text(return_type_node, code)
+
+            # Extract body and function calls
+            body_node = node.child_by_field_name("body")
+            if body_node:
+                body = self.get_text(body_node, code)
+
+                # Use extract_function_calls to extract function calls from the body
+                function_calls = self.extract_function_calls(
+                    file_path, body_node, code, module_name, imports
+                )
+                calls.extend(function_calls)
+
+            # Add the extracted function to the results
+            start_line = node.start_point[0] + 1
+            end_line = node.end_point[0] + 1
+            results.append(
+                {
+                    "kind": "generator_function_declaration",
+                    "module": file_path,
+                    "name": name,
+                    "parameters": parameters,
+                    "return_type": return_type,
+                    "body": body,
+                    "function_calls": calls,
+                    "is_async": is_async,
+                    "start_line": start_line,
+                    "end_line": end_line,
+                }
+            )
 
         # --- Function Extraction ---
         if node.type in ('function_declaration', 'function_signature'):
@@ -742,7 +1053,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                     body = c
                     break
             if body is not None:
-                function_calls = self.extract_function_calls(body, code, module_name, imports)
+                function_calls = self.extract_function_calls(file_path,body, code, module_name, imports)
             else:
                 function_calls = []
             type_deps = self.extract_type_dependencies(node, code)
@@ -820,7 +1131,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                                     method_body = child
                                     break
                             if method_body is not None:
-                                m_calls = self.extract_function_calls(
+                                m_calls = self.extract_function_calls(file_path,
                                     method_body, code, module_name, imports, class_name=class_name, class_bases=bases
                                 )
                             else:
