@@ -313,6 +313,7 @@ def main():
             
         elif args.function == 'getFunctionInfo':
             result = getFunctionInfo(args.fdep_folder, args.module_name, args.component_name, args.component_type)
+            print(json.dumps(result, indent=2))
             
         elif args.function == 'getFunctionChildren':
             result = getFunctionChildren(args.graph_path, args.module_name, args.component_name, args.depth)
