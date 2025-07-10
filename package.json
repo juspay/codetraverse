@@ -1,6 +1,6 @@
 {
   "name": "codetraverse-bridge-jp",
-  "version": "0.1.11",
+  "version": "0.1.13",
   "description": "CodeTraverse - Multi-language static code analysis tool with Node.js bridge",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -52,7 +52,7 @@
     "npm": ">=7.0.0"
   },
   "devDependencies": {
-    "@types/node": "^18.0.0",
+    "@types/node": "^18.19.117",
     "ncp": "^2.0.0"
   }
 }
