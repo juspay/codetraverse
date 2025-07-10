@@ -149,6 +149,7 @@ def resolve_callee_id(
 
 
 class TypeScriptComponentExtractor(ComponentExtractor):
+    flag404 = 0
     UTILITY_TYPES = {
     "Partial", "Required", "Readonly", "Pick", "Omit",
     "ReturnType", "Parameters", "NonNullable", "Record", "InstanceType", "Extract", "Exclude"
@@ -197,6 +198,17 @@ class TypeScriptComponentExtractor(ComponentExtractor):
         return imports
 
     def get_text(self, node, code):
+        # Write debug info to file instead of printing
+        if TypeScriptComponentExtractor.flag404 < 50:
+            with open("debug_node_code.txt", "a", encoding="utf-8") as debug_file:
+                debug_file.write("DEBUG: Node and Code:\n")
+                debug_file.write(f"node-------------------------------node {TypeScriptComponentExtractor.flag404}\n")
+                debug_file.write(f"{node}, {type(node)}, {node.start_byte}, {node.end_byte}, {node.start_point}, {node.end_point}\n")
+                debug_file.write(f"code-------------------------------code {TypeScriptComponentExtractor.flag404}\n")
+                debug_file.write(f"Code excerpt: {code[node.start_byte:node.end_byte]}\n")
+                TypeScriptComponentExtractor.flag404 += 1
+
+
         # print(node.start_byte, node.end_byte, code[node.start_byte:node.end_byte])
         if "str.ngify" in code[node.start_byte:node.end_byte] :
             print("DEBUG: ", node.start_byte, node.end_byte, code[node.start_byte:node.end_byte])
@@ -844,6 +856,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
 #         parameters: (formal_parameters [183, 49] - [188, 1]
         # --- Variable Extraction ---
         if node.type == "lexical_declaration":
+            print(type(node.children[0].type))
             for child in node.children:
                 if child.type == "variable_declarator":
                     name = None
@@ -856,6 +869,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                     for subchild in child.children:
                         if subchild.type == "identifier":
                             name = self.get_text(subchild, code)
+                            print(name, "siraj_name")
                         elif subchild.type == "type_annotation":
                             type_sig = self.get_text(subchild, code)
                         
@@ -869,9 +883,11 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                             calls.extend(function_calls)
                         
                         elif subchild.type == "arrow_function":
+                            # name = self.get_text(subchild, code)
                             is_arrowed_function = True
                             # Handle arrow function declarations
-                            value = self.get_text(subchild, code)
+                            value = self.get_text(node, code)
+                            # print("arrow function value:", value)
                             function_calls = self.extract_function_calls(file_path,
                                 subchild, code, module_name, imports
                             )
