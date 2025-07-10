@@ -158,6 +158,20 @@ export class PythonRunner {
   }
 
   /**
+   * Execute the AST diff orchestrator
+   */
+  async runAstDiff(
+    config: object
+  ): Promise<{ stdout: string; stderr: string }> {
+    const configJson = JSON.stringify(config);
+    const args = [
+      '-m', 'codetraverse.utils.AstDifferOrchestrator',
+      '--config-json', configJson
+    ];
+    return this.executeCommand(args);
+  }
+
+  /**
    * Check if Python and codetraverse are available
    */
   async validateSetup(): Promise<void> {

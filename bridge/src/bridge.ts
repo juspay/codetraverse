@@ -13,7 +13,8 @@ import {
   NeighborResult,
   Language,
   CodeTraverseError,
-  InvalidLanguageError
+  InvalidLanguageError,
+  AstDiffConfig
 } from './types';
 import { PythonRunner } from './python-runner';
 
@@ -251,6 +252,26 @@ export class CodeTraverseBridge {
   ): Promise<CommonChildInfo[]> {
     const { stdout } = await this.runner.runBlackbox('getCommonChildren', [graphPath, moduleName1, componentName1, moduleName2, componentName2]);
     return JSON.parse(stdout) as CommonChildInfo[];
+  }
+
+  /**
+   * Run the AST diff tool with a given configuration
+   */
+  async runAstDiff(config: AstDiffConfig): Promise<string> {
+    try {
+      const { stdout, stderr } = await this.runner.runAstDiff(config);
+      if (stderr) {
+        console.warn(`AST Diff process stderr: ${stderr}`);
+      }
+      // The Python script prints the output file path, so we return that.
+      const match = stdout.match(/Changes written to - (.*)/);
+      if (match && match[1]) {
+        return match[1];
+      }
+      return stdout;
+    } catch (error) {
+      throw this.wrapError(error, 'runAstDiff');
+    }
   }
 
   /**
