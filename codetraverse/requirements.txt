@@ -1,7 +1,13 @@
+certifi==2025.7.9
+charset-normalizer==3.4.2
+codetraverse @ git+https://github.com/juspay/codetraverse@0a92e2cf1c1f12fe0687ca5eef862feeab4324a7
 contourpy==1.3.2
 cycler==0.12.1
 fonttools==4.58.0
+gitdb==4.0.12
+GitPython==3.1.44
 graphviz==0.20.3
+idna==3.10
 kiwisolver==1.4.8
 lxml==5.4.0
 matplotlib==3.10.3
@@ -13,16 +19,18 @@ pillow==11.2.1
 pyparsing==3.2.3
 python-dateutil==2.9.0.post0
 pytz==2025.2
+requests==2.32.4
 scipy==1.15.3
 six==1.17.0
-tqdm==4.67.1 
-tree-sitter @ git+https://github.com/tree-sitter/py-tree-sitter
+smmap==5.0.2
+tqdm==4.67.1
+tree-sitter @ git+https://github.com/tree-sitter/py-tree-sitter@c1bd563b330b2c2fe9894beb652bc58ae8613b0c
+tree-sitter-go==0.23.4
 tree-sitter-haskell==0.23.1
 tree-sitter-python==0.23.6
-tree-sitter-rescript @ git+https://github.com/JignyasAnand/tree-sitter-rescript
+tree-sitter-rescript @ git+https://github.com/JignyasAnand/tree-sitter-rescript@215c56d2cc3ce4ce912dff3ea44fd4e22ac8913d
 tree-sitter-rust==0.24.0
-tree-sitter-go==0.23.4
 tree-sitter-typescript==0.23.2
-unidiff
-GitPython
-requests
+unidiff==0.7.5
+urllib3==2.5.0
+uv==0.7.19
