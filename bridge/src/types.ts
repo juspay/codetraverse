@@ -281,6 +281,30 @@ export interface AnalysisOptions {
 }
 
 /**
+ * Configuration for the AST diff tool
+ */
+export interface AstDiffConfig {
+  provider_type: 'local' | 'bitbucket';
+  local?: {
+    repo_path: string;
+  };
+  bitbucket?: {
+    base_url: string;
+    project_key: string;
+    repo_slug: string;
+    auth: [string, string];
+    headers?: Record<string, string>;
+  };
+  output_dir?: string;
+  quiet?: boolean;
+  pr_id?: string;
+  from_branch?: string;
+  to_branch?: string;
+  from_commit?: string;
+  to_commit?: string;
+}
+
+/**
  * Error types that can occur during bridge operations
  */
 export class CodeTraverseError extends Error {

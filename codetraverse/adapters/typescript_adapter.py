@@ -48,7 +48,7 @@ def adapt_typescript_components(raw_components):
     for comp in raw_components:
         if comp.get("kind") == "import":
             module = comp["module"]
-            stmt = comp["statement"]
+            stmt = comp["code"]
             module_dir = os.path.dirname(module)
 
             if module not in import_map:

@@ -8,6 +8,7 @@ if __name__ == "__main__":
         # root_dir="/Users/siraj.shaik/Desktop/AI_FRAMEWORKS/for_typescript/type_script_files/dense-app/ts-test-project",
         # root_dir="/Users/siraj.shaik/juspay/euler/euler-api-gateway",
         # root_dir="/Users/siraj.shaik/Desktop/AI_FRAMEWORKS/for_typescript/type_script_files/dense-app/mini-repo",
+        # root_dir="/Users/siraj.shaik/Desktop/folder_for_xyne_code/code",
 
         
         output_base="fdep",
