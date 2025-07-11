@@ -581,7 +581,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                         calls.append({
                             "name": callee_text,
                             "base_name": base_name,
-                            "resolved_callee": absolute_callee_id+"siraj5" if 'absolute_callee_id' in locals() else callee_id,
+                            "resolved_callee": absolute_callee_id if 'absolute_callee_id' in locals() else callee_id,
                         })
 
 
