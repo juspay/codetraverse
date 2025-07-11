@@ -1,47 +1,57 @@
 #!/bin/bash
 
+env_root="$HOME/npm_codetraverse"
 
-check_uv(){
-    if "$1" -m uv --version > /dev/null 2>&1; then 
+check_uv() {
+    echo "ROOT - $env_root"
+    if [ -d "$env_root/.venv/bin/uv" ]; then
         return 0
     else
         return 1
     fi
 }
 
-# Install UV
-setup_uv(){
-    # if check_uv "$1"; then
-    #     echo "UV Already Installed"
-    # else
-        # curl -LsSf https://astral.sh/uv/install.sh | sh
-        # source ~/.zshrc 2>/dev/null || true
-        # source ~/.bash_profile 2>/dev/null || true
-        "$1" -m venv "$2"/venv
-        source "$2"/venv/bin/activate && pip install uv
-        if ! check_uv "$1"; then
-            echo ERROR - unable to install uv
-            exit 1
-        fi
-    # fi
+check_python() {
+    python_path="$1"
+    if command -v "$python_path" >/dev/null; then
+        return 0
+    else
+        return 1
+    fi
 }
 
-# Create Env
-setup_env(){
+setup_env_helper() {
     python_path="$1"
     codetraverse_dir="$2"
-    setup_uv "$python_path" "$codetraverse_dir"
-    echo $codetraverse_dir
-    cd "$codetraverse_dir"
-    "$python_path" -m uv init
-    "$python_path" -m uv venv --python 3.13
-    "$python_path" -m uv add -r "$codetraverse_dir"/codetraverse/requirements.txt
+    if check_uv "$env_root"; then
+        echo "UV INSTALLED"
+    else
+        echo "INSTALLING UV (Not system wide)"
+        if check_python "$python_path"; then
+            if [ ! -d "$env_root/tmp_env" ]; then
+                "$python_path" -m venv "$env_root/tmp_env"
+                "$env_root/tmp_env/bin/python" -m pip install uv
+            fi
+            cd "$env_root"
+            if [ ! -f "$env_root/pyproject.toml" ]; then
+                "$env_root/tmp_env/bin/uv" init
+            fi
+            if [ ! -d "$env_root/.venv" ]; then
+                "$env_root/tmp_env/bin/uv" venv "$env_root/.venv"
+            fi
+            "$env_root/tmp_env/bin/uv" add -r "$codetraverse_dir/codetraverse/requirements.txt"
+            echo "SETUP FINISHED"
+            exit 0
+        else
+            echo "VALID PYTHON PATH NOT PROVIDED. ABORTING"
+            exit 1
+        fi
+    fi
 }
 
-# Function call from CLI
-if declare -f "$1" > /dev/null; then
-  "$@"
-else
-  echo "'$1' is not a known function name" >&2
-  exit 1
-fi
+setup_env() {
+    python_path="$1"
+    codetraverse_dir="$2"
+    setup_env_helper "$python_path" "$codetraverse_dir"
+}
+setup_env "$1" "$2"
