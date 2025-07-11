@@ -521,19 +521,19 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                         if object_node.type == "super":
                             if class_bases and len(class_bases) > 0:
                                 base_class = class_bases[0]
-                                callee_id = f"{module_name}::{base_class}::{method_name}"
+                                callee_id = f"{module_name}::{base_class}.{method_name}"
                             else:
-                                callee_id = f"{module_name}::(super_class)::" + (method_name or "")
+                                callee_id = f"{module_name}::(super_class)." + (method_name or "")
                             calls.append({
                                 "name": f"super.{method_name}",
                                 "base_name": method_name,
-                                "resolved_callee": callee_id,
+                                "resolved_callee": callee_id, # there is no such intance in the codebase
                             })
                         elif object_node.type == "this":
                             if class_name:
-                                callee_id = f"{module_name}::{class_name}::{method_name}"
+                                callee_id = f"{module_name}::{class_name}.{method_name}"
                             else:
-                                callee_id = f"{module_name}::(this_class)::" + (method_name or "")
+                                callee_id = f"{module_name}::(this_class)." + (method_name or "")
                             calls.append({
                                 "name": f"this.{method_name}",
                                 "base_name": method_name,
@@ -555,7 +555,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                         source_file = imports[base_name]
                         if not source_file.endswith('.ts'):
                             source_file = source_file + '.ts'
-                        callee_id = f"{file_path}::{base_name}"
+                        callee_id = f"{source_file}::{base_name}"
                     else:
                         callee_id = f"{file_path}::{base_name}"
                     if "./" in callee_id:
@@ -581,7 +581,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                         calls.append({
                             "name": callee_text,
                             "base_name": base_name,
-                            "resolved_callee": absolute_callee_id if 'absolute_callee_id' in locals() else callee_id,
+                            "resolved_callee": absolute_callee_id+"siraj5" if 'absolute_callee_id' in locals() else callee_id,
                         })
 
 
@@ -616,7 +616,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
     def _get_full_component_path(self, file_path, root_folder, name, class_name=None):
         rel_path = os.path.relpath(file_path, root_folder).replace("\\", "/")
         if class_name:
-            return f"{rel_path}::{class_name}::{name}"
+            return f"{rel_path}::{class_name}.{name}"
         return f"{rel_path}::{name}"
     
     def get_relative_module_path(self, file_path: str, root_folder: str) -> str:
@@ -653,6 +653,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                         "start_line": node.start_point[0] + 1,
                         "end_line": node.end_point[0] + 1,
                         "jsdoc": jsdoc,
+                        "code": self.get_text(node, code),
 
                     }
                     
