@@ -679,7 +679,6 @@ class TypeScriptComponentExtractor(ComponentExtractor):
             })
 
         if node.type == "lexical_declaration":
-            print(type(node.children[0].type))
             for child in node.children:
                 if child.type == "variable_declarator":
                     name = None
@@ -692,7 +691,6 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                     for subchild in child.children:
                         if subchild.type == "identifier":
                             name = self.get_text(subchild, code)
-                            print(name, "siraj_name")
                         elif subchild.type == "type_annotation":
                             type_sig = self.get_text(subchild, code)
                         
@@ -708,7 +706,6 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                             # name = self.get_text(subchild, code)
                             is_arrowed_function = True
                             value = self.get_text(node, code)
-                            # print("arrow function value:", value)
                             function_calls = self.extract_function_calls(file_path,
                                 subchild, code, module_name, imports
                             )
