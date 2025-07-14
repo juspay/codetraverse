@@ -1,7 +1,6 @@
 import os
 import networkx as nx
 import pickle
-from tqdm import tqdm
 from codetraverse.registry.extractor_registry import get_extractor
 from codetraverse.utils.networkx_graph import build_graph_from_schema, load_components_without_hash
 from codetraverse.adapters.haskell_adapter import adapt_haskell_components
@@ -85,7 +84,7 @@ def create_fdep_data(root_dir, output_base: str = "./output/fdep", graph_dir: st
             tasks_args = [(code_path, language, root_dir, output_base) for code_path in language_file_map[language]]
 
             with ThreadPoolExecutor(max_workers=min(32, os.cpu_count() + 4)) as executor:
-                list(tqdm(executor.map(_process_single_file_worker, tasks_args), total=len(language_file_map[language]), desc=f"Processing - {language} - files"))
+                list(executor.map(_process_single_file_worker, tasks_args))
         except Exception as e:
             print(traceback.format_exc())
             print("ERROR -", e)

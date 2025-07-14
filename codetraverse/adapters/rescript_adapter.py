@@ -1,6 +1,3 @@
-import json
-from tqdm import tqdm
-
 def extract_id(comp):
     """
     Build a stable ID: "<module>::<name_or_tag>". 
@@ -38,7 +35,7 @@ def adapt_rescript_components(raw_components):
             module_to_fq_map[module_name_part] = []
         module_to_fq_map[module_name_part].append(fq_id_val)
     
-    for comp in tqdm(raw_components, total=len(raw_components), desc="Adapting ReScript components"):
+    for comp in raw_components:
         kind = comp.get("kind")
         if kind not in ("function", "variable", "module"):
             continue

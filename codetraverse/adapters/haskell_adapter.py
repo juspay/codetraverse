@@ -1,4 +1,3 @@
-from tqdm import tqdm
 from collections import defaultdict
 import re
 

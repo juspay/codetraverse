@@ -3,7 +3,6 @@ import json
 import networkx as nx
 from codetraverse.adapters.rescript_adapter import extract_id
 from networkx import DiGraph
-from tqdm import tqdm
 
 def load_components(fdep_dir):
 
@@ -99,7 +98,7 @@ def build_clean_graph(folder_path:str, save_as_json:bool = False, save_as_graphm
 def build_graph_from_folder(folder_path: str, save_as_json:bool = False, save_as_graphml:bool = False, output_path:str="") -> DiGraph:
 
     G = DiGraph()
-    for root, dirs, files in tqdm(os.walk(folder_path)):
+    for root, dirs, files in os.walk(folder_path):
         for fname in files:
             if not fname.endswith(".json"):
                 continue
