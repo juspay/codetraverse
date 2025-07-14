@@ -5,10 +5,19 @@ from tree_sitter import Language, Parser
 from typing import Optional, Dict, Any
 import re
 import html
-
+import chardet
+from bs4 import BeautifulSoup
 from codetraverse.base.component_extractor import ComponentExtractor
 
-
+def parse_html_to_text(file_path: str) -> str:
+    with open(file_path, 'rb') as f:
+        raw = f.read()
+    guess = chardet.detect(raw)
+    encoding = guess['encoding'] or 'utf-8'
+    text = raw.decode(encoding, errors='replace')
+    soup = BeautifulSoup(text, 'html.parser')
+    plain = html.unescape(soup.get_text(separator='\n'))
+    return plain
 
 def find_tsconfig_dir(root_dir: str, file_path: str, config_filename: str = "tsconfig.json") -> Optional[str]:
     root_dir = os.path.abspath(root_dir)
@@ -57,12 +66,6 @@ def paths_aliases_from_tsconfig(config_file_path: str) -> dict:
     return {}
 
 
-
-
-import os
-import re
-from typing import Dict, Optional
-
 def resolve_callee_id(
     callee_id: str,
     config_dir: str,
@@ -103,6 +106,7 @@ def resolve_callee_id(
 
 
 class TypeScriptComponentExtractor(ComponentExtractor):
+    flag404 = 0
     UTILITY_TYPES = {
     "Partial", "Required", "Readonly", "Pick", "Omit",
     "ReturnType", "Parameters", "NonNullable", "Record", "InstanceType", "Extract", "Exclude"
@@ -112,12 +116,6 @@ class TypeScriptComponentExtractor(ComponentExtractor):
         self.parser = Parser(self.language)
         self.all_components = []
         
-
-    def parse_file(self, file_path):
-        with open(file_path, 'r', encoding='utf-8') as f:
-            code = f.read()
-        tree = self.parser.parse(bytes(code, "utf8"))
-        return code, tree
     
     def get_relative_path(self, file_path, root_folder):
         rel_path = os.path.relpath(file_path, root_folder).replace("\\", "/")
@@ -148,10 +146,19 @@ class TypeScriptComponentExtractor(ComponentExtractor):
 
         return imports
 
-    def get_text(self, node, code):
-        if "str.ngify" in code[node.start_byte:node.end_byte] :
-            print("DEBUG: ", node.start_byte, node.end_byte, code[node.start_byte:node.end_byte])
-        return code[node.start_byte:node.end_byte]
+    def parse_file(self, file_path: str) -> (str, object):
+        plain = parse_html_to_text(file_path)
+        # re-encode so offsets line up 1:1
+        plain_bytes = plain.encode('utf-8')
+        tree = self.parser.parse(plain_bytes)
+        return plain, tree
+
+    def get_text(self, node, plain: str) -> str:
+        # encode the same plain text to bytes
+        plain_bytes = plain.encode('utf-8')
+        snippet = plain_bytes[node.start_byte : node.end_byte]
+        return snippet.decode('utf-8', errors='replace')
+
 
     def extract_ident(self, node, code):
         for c in node.children:
@@ -382,15 +389,15 @@ class TypeScriptComponentExtractor(ComponentExtractor):
             else:
                 comp["file_path"] = file_path.replace("\\", "/")
 
-            if ROOT_DIR and root_folder:
-                index = root_folder.find(base_folder)
-                if index != -1:
-                    updated_root_folder = root_folder[index:].replace("\\", "/")
-                else:
-                    updated_root_folder = root_folder.replace("\\", "/")
-                comp["root_folder"] = updated_root_folder
-            else:
-                comp["root_folder"] = root_folder.replace("\\", "/")
+            # if ROOT_DIR and root_folder:
+            #     index = root_folder.find(base_folder)
+            #     if index != -1:
+            #         updated_root_folder = root_folder[index:].replace("\\", "/")
+            #     else:
+            #         updated_root_folder = root_folder.replace("\\", "/")
+            #     comp["root_folder"] = updated_root_folder
+            # else:
+            #     comp["root_folder"] = root_folder.replace("\\", "/")
 
             if "module" not in comp or not comp["module"] or 2 == len(comp["file_path"].split(".")):
                 comp["module"] = comp["file_path"]
@@ -514,25 +521,23 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                         if object_node.type == "super":
                             if class_bases and len(class_bases) > 0:
                                 base_class = class_bases[0]
-                                callee_id = f"{module_name}::{base_class}::{method_name}"
+                                callee_id = f"{module_name}::{base_class}.{method_name}"
                             else:
-                                callee_id = f"{module_name}::(super_class)::" + (method_name or "")
+                                callee_id = f"{module_name}::(super_class)." + (method_name or "")
                             calls.append({
                                 "name": f"super.{method_name}",
                                 "base_name": method_name,
-                                "resolved_callee": callee_id,
-                                "debug_line_1": f"super.{method_name} in {file_path}",
+                                "resolved_callee": callee_id, # there is no such intance in the codebase
                             })
                         elif object_node.type == "this":
                             if class_name:
-                                callee_id = f"{module_name}::{class_name}::{method_name}"
+                                callee_id = f"{module_name}::{class_name}.{method_name}"
                             else:
-                                callee_id = f"{module_name}::(this_class)::" + (method_name or "")
+                                callee_id = f"{module_name}::(this_class)." + (method_name or "")
                             calls.append({
                                 "name": f"this.{method_name}",
                                 "base_name": method_name,
                                 "resolved_callee": callee_id,
-                                "debug_line_2": f"this.{method_name} in {file_path}",
                             })
                         elif object_node.type == "identifier":
                             obj_name = self.get_text(object_node, code)
@@ -541,7 +546,6 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                                 "name": f"{obj_name}.{method_name}",
                                 "base_name": method_name,
                                 "resolved_callee": callee_id,
-                                "debug_line_3": f"{obj_name}.{method_name} in {file_path}",
                             })
 
                 elif fn.type == "identifier":
@@ -551,7 +555,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                         source_file = imports[base_name]
                         if not source_file.endswith('.ts'):
                             source_file = source_file + '.ts'
-                        callee_id = f"{file_path}::{base_name}"
+                        callee_id = f"{source_file}::{base_name}"
                     else:
                         callee_id = f"{file_path}::{base_name}"
                     if "./" in callee_id:
@@ -559,7 +563,6 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                             "name": callee_text,
                             "base_name": base_name,
                             "resolved_callee": callee_id,
-                            "debug_line_4": f"{callee_text} in {file_path}",
                         })
                     else: 
                         root_dir = os.environ.get("ROOT_DIR", "") 
@@ -579,7 +582,6 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                             "name": callee_text,
                             "base_name": base_name,
                             "resolved_callee": absolute_callee_id if 'absolute_callee_id' in locals() else callee_id,
-                            "debug_line_5": f"{callee_text} in {file_path}",
                         })
 
 
@@ -592,15 +594,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
             for c in getattr(n, 'children', []):
                 visit(c)
         visit(node)
-        with open("calls.txt", "a") as f:
-            for call in calls:
-                f.write(f"{call['name']} -> {call['resolved_callee']}\n")
-                f.write(f"Debug line: {call.get('debug_line_1', '')}\n")
-                f.write(f"Debug line: {call.get('debug_line_2', '')}\n")
-                f.write(f"Debug line: {call.get('debug_line_3', '')}\n")
-                f.write(f"Debug line: {call.get('debug_line_4', '')}\n")
-                f.write(f"Debug line: {call.get('debug_line_5', '')}\n")
-                f.write("\n")
+        
         return calls
 
     def extract_type_dependencies(self, node, code):
@@ -622,7 +616,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
     def _get_full_component_path(self, file_path, root_folder, name, class_name=None):
         rel_path = os.path.relpath(file_path, root_folder).replace("\\", "/")
         if class_name:
-            return f"{rel_path}::{class_name}::{name}"
+            return f"{rel_path}::{class_name}.{name}"
         return f"{rel_path}::{name}"
     
     def get_relative_module_path(self, file_path: str, root_folder: str) -> str:
@@ -659,6 +653,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                         "start_line": node.start_point[0] + 1,
                         "end_line": node.end_point[0] + 1,
                         "jsdoc": jsdoc,
+                        "code": self.get_text(node, code),
 
                     }
                     
@@ -709,8 +704,9 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                             calls.extend(function_calls)
                         
                         elif subchild.type == "arrow_function":
+                            # name = self.get_text(subchild, code)
                             is_arrowed_function = True
-                            value = self.get_text(subchild, code)
+                            value = self.get_text(node, code)
                             function_calls = self.extract_function_calls(file_path,
                                 subchild, code, module_name, imports
                             )
@@ -1165,7 +1161,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
             results.append({
                 "kind": "import",
                 "module": module_name,
-                "statement": self.get_text(node, code),
+                # "statement": self.get_text(node, code),
                 "start_line": node.start_point[0] + 1,
                 "end_line": node.end_point[0] + 1,
                 "jsdoc": jsdoc,
@@ -1177,7 +1173,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
             results.append({
                 "kind": "export",
                 "module": module_name,
-                "statement": self.get_text(node, code),
+                # "statement": self.get_text(node, code),
                 "start_line": node.start_point[0] + 1,
                 "end_line": node.end_point[0] + 1,
                 "jsdoc": jsdoc,

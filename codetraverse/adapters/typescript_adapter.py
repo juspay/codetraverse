@@ -48,7 +48,7 @@ def adapt_typescript_components(raw_components):
     for comp in raw_components:
         if comp.get("kind") == "import":
             module = comp["module"]
-            stmt = comp["statement"]
+            stmt = comp["code"]
             module_dir = os.path.dirname(module)
 
             if module not in import_map:
@@ -213,8 +213,6 @@ def adapt_typescript_components(raw_components):
         kind = comp.get("kind")
         if kind not in {"function", "method", "variable", "function_call", "arrow_function", "generator_function", "generator_function_declaration"}:
             continue
-        if kind == "generator_function_declaration":
-            print("siraj kind:", kind)
 
         from_id = make_node_id(comp)
         if not from_id or not comp.get("function_calls"):

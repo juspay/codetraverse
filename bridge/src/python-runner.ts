@@ -27,7 +27,7 @@ export class PythonRunner {
 
   async createEnv() {
     console.log(this.pythonPath, this.codetraversePath)
-    await this.executeShell([path.join(this.codetraversePath, "scripts/setup.sh"), "setup_env", this.pythonPath, this.codetraversePath])
+    await this.executeShell([path.join(this.codetraversePath, "scripts/setup.sh"), this.pythonPath, this.codetraversePath])
   }
 
   /**
@@ -265,13 +265,13 @@ export class PythonRunner {
       const actualTimeout = timeoutMs || this.timeout;
       let stdout = '';
       let stderr = '';
-      const uvPath = path.join(this.codetraversePath, "venv", "bin", "uv")
+      const uvPath = path.join(process.env.HOME || "./", "npm_codetraverse", "tmp_env", "bin", "uv")
       const child: ChildProcess = spawn(uvPath, ["run", ...args], {
         cwd: this.codetraversePath,
         stdio: ['pipe', 'pipe', 'pipe'],
         env: {
           ...process.env,
-          VIRTUAL_ENV: path.join(this.codetraversePath, ".venv"),
+          VIRTUAL_ENV: path.join(process.env.HOME || "./", "npm_codetraverse", ".venv"),
         }
       });
 
