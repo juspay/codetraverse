@@ -1,16 +1,6 @@
 name: Run Component Tests
 
-on:
-  push:
-    paths:
-      - 'sample_code_repo_test/**'
-      - 'codetraverse/**'
-      - 'tests/**'
-  pull_request:
-    paths:
-      - 'sample_code_repo_test/**'
-      - 'codetraverse/**'
-      - 'tests/**'
+on: [push, pull_request]
 
 jobs:
   test:
