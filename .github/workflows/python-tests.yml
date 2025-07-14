@@ -1,38 +1,55 @@
 name: Run Component Tests
 
-on: [push, pull_request]
+on:
+  push:
+    paths:
+      - 'sample_code_repo_test/**'
+      - 'codetraverse/**'
+      - 'tests/**'
+  pull_request:
+    paths:
+      - 'sample_code_repo_test/**'
+      - 'codetraverse/**'
+      - 'tests/**'
 
 jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        lang: [typescript, golang, haskell ] # Add more languages as needed
+        include:
+          - name: go
+            dir: golang
+          - name: typescript
+            dir: typescript
+          - name: haskell
+            dir: haskell
     steps:
       - uses: actions/checkout@v3
 
       - name: Set up Python
         uses: actions/setup-python@v4
-        with: { python-version: '3.11' }
+        with:
+          python-version: '3.11'
 
       - name: Install dependencies
         run: |
-          pip install --upgrade pip
+          python -m pip install --upgrade pip
           pip install -r codetraverse/requirements.txt
 
       - name: Clean old outputs
         run: rm -rf output/fdep output/graph
 
-      - name: Generate all language FDEPs & Graphs
+      - name: Generate FDEP & Graph for ${{ matrix.name }}
         run: |
           export PYTHONPATH=.
-          for sd in sample_code_repo_test/*; do
-            lang=$(basename "$sd")
-            python scripts/generate_tests_fdep_graph.py \
-              --root-dir "$sd" \
-              --out-fdep "output/fdep/$lang" \
-              --out-graph "output/graph/$lang"
-          done
+          python scripts/generate_tests_fdep_graph.py \
+            --root-dir sample_code_repo_test/${{ matrix.dir }} \
+            --out-fdep output/fdep/${{ matrix.dir }} \
+            --out-graph output/graph/${{ matrix.dir }}
 
-      - name: Run tests
-        run: pytest -v
+      - name: Run ${{ matrix.name }} tests
+        run: |
+          pytest -q \
+            tests/adapters/test_${{ matrix.name }}_adapter.py \
+            tests/extractors/test_${{ matrix.name }}_extractor.py
