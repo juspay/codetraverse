@@ -56,4 +56,8 @@ jobs:
       #   run: |
       #     pytest -q \
       #       tests/adapters/test_${{ matrix.name }}_adapter.py \
+<<<<<<< HEAD
       #       tests/extractors/test_${{ matrix.name }}_extractor.py
+=======
+      #       tests/extractors/test_${{ matrix.name }}_extractor.py
+>>>>>>> 440d816 (github yaml env run options)
