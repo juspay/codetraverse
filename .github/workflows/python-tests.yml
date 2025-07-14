@@ -39,8 +39,19 @@ jobs:
             --out-fdep output/fdep/${{ matrix.dir }} \
             --out-graph output/graph/${{ matrix.dir }}
 
+      # Option A: export in the same shell
       - name: Run ${{ matrix.name }} tests
         run: |
+          export PYTHONPATH=.
           pytest -q \
             tests/adapters/test_${{ matrix.name }}_adapter.py \
             tests/extractors/test_${{ matrix.name }}_extractor.py
+
+      # Option B: set it via env
+      # - name: Run ${{ matrix.name }} tests
+      #   env:
+      #     PYTHONPATH: .
+      #   run: |
+      #     pytest -q \
+      #       tests/adapters/test_${{ matrix.name }}_adapter.py \
+      #       tests/extractors/test_${{ matrix.name }}_extractor.py
