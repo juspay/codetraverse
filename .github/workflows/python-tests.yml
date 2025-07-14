@@ -1,0 +1,38 @@
+name: Run Component Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        lang: [typescript, golang, haskell ] # Add more languages as needed
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with: { python-version: '3.11' }
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r codetraverse/requirements.txt
+
+      - name: Clean old outputs
+        run: rm -rf output/fdep output/graph
+
+      - name: Generate all language FDEPs & Graphs
+        run: |
+          export PYTHONPATH=.
+          for sd in sample_code_repo_test/*; do
+            lang=$(basename "$sd")
+            python scripts/generate_tests_fdep_graph.py \
+              --root-dir "$sd" \
+              --out-fdep "output/fdep/$lang" \
+              --out-graph "output/graph/$lang"
+          done
+
+      - name: Run tests
+        run: pytest -v
