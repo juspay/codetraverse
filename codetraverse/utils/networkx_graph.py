@@ -72,7 +72,7 @@ def preprocess_graph(G: nx.DiGraph) -> nx.DiGraph:
     """
     nodes_to_remove = [node for node, attrs in G.nodes(data=True) if attrs.get("code", "") == ""]
     G.remove_nodes_from(nodes_to_remove)
-    print(f"Removed {len(nodes_to_remove)} nodes with empty code attribute during preprocessing")
+    # print(f"Removed {len(nodes_to_remove)} nodes with empty code attribute during preprocessing")
     return G
 
 
@@ -81,18 +81,18 @@ def build_clean_graph(folder_path:str, save_as_json:bool = False, save_as_graphm
     json_folder = folder_path
     fdep_nx = build_graph_from_folder(json_folder, save_as_json=save_as_json, save_as_graphml=save_as_graphml, output_path=output_path)
     num_nodes = fdep_nx.number_of_nodes()
-    print(f"Total nodes in graph before preprocessing: {num_nodes}")
+    # print(f"Total nodes in graph before preprocessing: {num_nodes}")
     
     # Preprocess the graph to remove nodes with empty code
     fdep_nx = preprocess_graph(fdep_nx)
     num_nodes_after = fdep_nx.number_of_nodes()
-    print(f"Total nodes in graph after preprocessing: {num_nodes_after}")
+    # print(f"Total nodes in graph after preprocessing: {num_nodes_after}")
     
     root_nodes = [n for n, deg in fdep_nx.in_degree() if deg == 0]
-    print("Root nodes:", len(root_nodes))
+    # print("Root nodes:", len(root_nodes))
     top5 = top_roots_by_descendants(fdep_nx, top_n=5)
-    for node, cnt in top5:
-        print(f"{node!r} has {cnt} descendants")
+    # for node, cnt in top5:
+        # print(f"{node!r} has {cnt} descendants")
     
     return fdep_nx
 
@@ -184,13 +184,15 @@ def add_or_update_node(G: DiGraph, key: str, meta: dict, merge_lists: bool = Tru
 
 def process_module(module_data: list[dict], G: DiGraph):
     for node in module_data:
+        if type(node) != dict:
+            continue
         if node.get("kind") != "function":
             continue
         node_key = f"{node.get('name','_')}--{node.get('module','_')}"
         children = {
             f"{c.get('base','_')}--{c.get('modules',['_'])[0]}"
             for c in node.get("function_calls", [])
-            if c.get("context") == "function_call"
+            if type(c) == dict and c.get("context") == "function_call"
         }
         node_meta = {
             "code": add_line_num(node),

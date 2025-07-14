@@ -3,9 +3,11 @@ import json
 from typing import List, Dict, Any
 from codetraverse.path import load_graph
 from collections import deque
+from codetraverse.utils.networkx_graph import build_clean_graph
+from codetraverse.utils.graph_partitioner import compute_node_metrics
 import sys
 import argparse 
-
+import traceback
 
 def getModuleInfo(fdep_folder: str, module_name: str) -> List[Dict[str, Any]]:
     
@@ -252,6 +254,24 @@ def getCommonChildren(graph_path: str, module_name1: str, component_name1: str, 
     
     return common_children
 
+def getImportantNodes(fdep_path: str, output_path: str="",  epsilon: float = 0.2, percentage: float = 5):
+    
+    os.makedirs(fdep_path+"/xyne_tmp", exist_ok=True)
+    if not os.path.exists(fdep_path):
+        raise FileNotFoundError(f"The specified fdep path does not exist: {fdep_path}")
+    if epsilon > 1 or epsilon < 0:
+        epsilon = 0.2
+    if percentage > 20 or percentage <= 0:
+        percentage = 5
+    
+    fdep_nx = build_clean_graph(folder_path=fdep_path, save_as_json=False, save_as_graphml=False, output_path=output_path)
+    count = fdep_nx.number_of_nodes()
+    num_selections = int(count * percentage / 100)
+    heavy_nodes_by_metric = compute_node_metrics(graph=fdep_nx, epsilon=epsilon, num_selections=num_selections)
+    with open(f"{fdep_path}/xyne_tmp/ImportantNodes.json", "w") as f:
+        json.dump(heavy_nodes_by_metric, f)
+    return json.dumps({"status" : "ok"})
+
 
 def main():
     parser = argparse.ArgumentParser(description='Code Analysis Tool')
@@ -299,6 +319,12 @@ def main():
     parser_common_children.add_argument('component_name1', help='First component name')
     parser_common_children.add_argument('module_name2', help='Second module name')
     parser_common_children.add_argument('component_name2', help='Second component name')
+    
+    parser_get_important_nodes = subparsers.add_parser('getImportantNodes', help='Get important nodes in the repository using a custom metric and epsilon greedy algorithm')
+    parser_get_important_nodes.add_argument('fdep_path', help ='The file path to fdep created by code traverse')
+    parser_get_important_nodes.add_argument('--output_path', type=str, default="", help ='The file path to save the network graph created. (not needed)')
+    parser_get_important_nodes.add_argument('--epsilon', type=float, default=0.2, help ='The epsilon value to perform epsilon greedy algorithm to choose the important nodes while exploring the codebase using random numbers')
+    parser_get_important_nodes.add_argument('--percentage', type=int, default=5, help ='The percentage of codebase that is represented in important nodes output')
     
     args = parser.parse_args()
     
@@ -349,6 +375,10 @@ def main():
         elif args.function == 'getCommonChildren':
             result = getCommonChildren(args.graph_path, args.module_name1, args.component_name1, 
                                      args.module_name2, args.component_name2)
+            print(json.dumps(result, indent=2))
+        
+        elif args.function == 'getImportantNodes':
+            result = getImportantNodes(fdep_path=args.fdep_path, output_path=args.output_path, epsilon=args.epsilon, percentage=args.percentage)
             print(json.dumps(result, indent=2))
             
     except Exception as e:

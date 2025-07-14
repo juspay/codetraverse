@@ -254,6 +254,16 @@ export class CodeTraverseBridge {
     return JSON.parse(stdout) as CommonChildInfo[];
   }
 
+  async getImportantNodes(
+    fdep_path: string,
+    output_path: string,
+    epsilon = 0.2,
+    percentage = 5
+  ): Promise<any> {
+    const { stdout } = await this.runner.runBlackbox('getImportantNodes', [fdep_path, "--output_path", output_path, "--epsilon", epsilon.toString(), "--percentage", percentage.toString()]);
+    return JSON.parse("{}") as any;
+  }
+
   /**
    * Run the AST diff tool with a given configuration
    */
