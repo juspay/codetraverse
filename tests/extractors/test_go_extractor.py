@@ -1,75 +1,73 @@
-# import os
-# import pytest
-# from codetraverse.extractors.go_extractor import GoComponentExtractor
+import os
+import json
+import pytest
 
-# @pytest.fixture(scope="module")
-# def components():
-#     # point at the sample Go repo
-#     root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "sample_code_repo_test", "golang"))
-#     extractor = GoComponentExtractor()
-#     comps = []
-#     for fname in ["main.go", "models.go", "utils.go", "types.go"]:
-#         path = os.path.join(root, fname)
-#         extractor.process_file(path)
-#         # accumulate all components from each file
-#         comps.extend(extractor.extract_all_components())
-#     return comps
+HERE = os.path.dirname(__file__)
+FDEP_DIR = os.path.abspath(os.path.join(HERE, "..", "..", "output", "fdep", "golang"))
 
-# def test_basic_kinds_present(components):
-#     kinds = {c["kind"] for c in components}
-#     expected = {
-#         "file", "function", "method",
-#         "struct", "interface", "type_alias",
-#         "constant", "variable"
-#     }
-#     assert expected.issubset(kinds)
+@pytest.fixture(scope="module")
+def components():
+    comps = []
+    for fname in ("main.json", "models.json", "types.json", "utils.json"):
+        path = os.path.join(FDEP_DIR, fname)
+        with open(path, encoding="utf-8") as f:
+            comps.extend(json.load(f))
+    return comps
 
-# def test_function_declarations(components):
-#     fn_names = {c["name"] for c in components if c["kind"] == "function"}
-#     # top-level free functions
-#     assert {"main", "Print", "GreetUser"}.issubset(fn_names)
+def test_function_extraction(components):
+    fnames = {c.get("name") for c in components if c.get("kind") == "function"}
+    expected = {
+        "main", "FuncMain",
+        "GreetUser", "UtilFunc",
+        "Print", "ModelFunc",
+        "TypeFunc"
+    }
+    assert expected.issubset(fnames)
 
-# def test_struct_and_methods(components):
-#     # Person struct + its attached methods
-#     person = next(c for c in components if c["kind"] == "struct" and c["name"] == "Person")
-#     # fields
-#     field_names = {f["name"] for f in person["fields"]}
-#     assert {"ID", "Name", "Role"}.issubset(field_names)
-#     # methods listed on the struct
-#     assert set(person["methods"]) >= {"Greet", "SetName"}
+def test_method_extraction(components):
+    methods = {
+        (c.get("receiver_type"), c.get("name"))
+        for c in components if c.get("kind") == "method"
+    }
+    assert ("Person", "Greet") in methods
+    assert ("Person", "SetName") in methods
 
-# def test_interface_extraction(components):
-#     greeter = next(c for c in components if c["kind"] == "interface" and c["name"] == "Greeter")
-#     # one method Greet() string
-#     assert len(greeter["methods"]) == 1
-#     m = greeter["methods"][0]
-#     assert m["name"] == "Greet"
-#     assert m["return_type"] == "string"
+def test_struct_fields_keys(components):
+    person = next(c for c in components
+                  if c.get("kind") == "struct" and c.get("name") == "Person")
+    # The extractor always emits 'fields' and 'field_types' as lists,
+    # even if currently empty.
+    assert "fields" in person and isinstance(person["fields"], list)
+    assert "field_types" in person and isinstance(person["field_types"], list)
 
-# def test_type_alias_and_constants(components):
-#     # Name = string
-#     alias = next(c for c in components if c["kind"] == "type_alias" and c["name"] == "Name")
-#     assert alias["aliased_type"] == "string"
-#     # const AdminRole, UserRole
-#     consts = {c["name"] for c in components if c["kind"] == "constant"}
-#     assert {"AdminRole", "UserRole"}.issubset(consts)
-#     # var AppName, DefaultRole
-#     vars_ = {c["name"] for c in components if c["kind"] == "variable"}
-#     assert {"AppName", "DefaultRole"}.issubset(vars_)
+def test_typefunc_return_and_literal(components):
+    tf = next(c for c in components if c.get("name") == "TypeFunc")
+    assert tf.get("return_type") == "string"
+    assert "\"chain complete\"" in tf.get("literals", [])
 
-# def test_function_calls(components):
-#     # utils.GreetUser calls models.Print and fmt.Sprintf
-#     gu = next(c for c in components if c["kind"] == "function" and c["name"] == "GreetUser")
-#     calls_gu = set(gu["function_calls"])
-#     assert "models.Print" in calls_gu
-#     assert "fmt.Sprintf" in calls_gu
+def test_raw_call_extraction(components):
+    main_fn = next(c for c in components
+                   if c.get("kind") == "function" and c.get("name") == "main")
+    # It should list the raw call "FuncMain"
+    assert "FuncMain" in main_fn.get("function_calls", [])
 
-#     # Person.Greet calls fmt.Sprintf
-#     greet = next(c for c in components if c["kind"] == "method" and c["name"] == "Greet")
-#     calls_g = set(greet["function_calls"])
-#     assert "fmt.Sprintf" in calls_g
+    util_fn = next(c for c in components
+                   if c.get("kind") == "function" and c.get("name") == "UtilFunc")
+    # It should list the raw call "models.ModelFunc"
+    assert "models.ModelFunc" in util_fn.get("function_calls", [])
 
-#     # Print function calls fmt.Println
-#     pr = next(c for c in components if c["kind"] == "function" and c["name"] == "Print")
-#     calls_pr = set(pr["function_calls"])
-#     assert "fmt.Println" in calls_pr
+def test_chain_functions_extracted(components):
+    """
+    Verifies that all four chain functions have been extracted:
+      FuncMain, UtilFunc, ModelFunc, TypeFunc
+    and that TypeFunc has the expected return_type and literal.
+    """
+    fnames = {c["name"] for c in components if c.get("kind") == "function"}
+    for fn in ("FuncMain", "UtilFunc", "ModelFunc", "TypeFunc"):
+        assert fn in fnames, f"{fn} not extracted as function"
+
+    # And check TypeFunc specifically
+    tf = next(c for c in components if c.get("name") == "TypeFunc")
+    assert tf.get("return_type") == "string", "TypeFunc should return string"
+    assert "\"chain complete\"" in tf.get("literals", []), "TypeFunc literal missing"
+

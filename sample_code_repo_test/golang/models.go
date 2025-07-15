@@ -1,3 +1,4 @@
+// models.go
 package models
 
 import (
@@ -25,4 +26,9 @@ func (p *Person) SetName(name string) {
 // Print outputs the person's details.
 func Print(p Person) {
     fmt.Println("Person details:", p.ID, p.Name, p.Role)
+}
+
+// ModelFunc is the third link in the call chain.
+func ModelFunc() {
+    types.TypeFunc()
 }

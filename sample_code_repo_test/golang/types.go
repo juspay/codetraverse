@@ -1,3 +1,4 @@
+// types.go
 package types
 
 // Role is a user role.
@@ -20,3 +21,8 @@ type Greeter interface {
 
 // DefaultRole is the default user role.
 var DefaultRole Role = UserRole
+
+// TypeFunc is the final link in the call chain.
+func TypeFunc() string {
+    return "chain complete"
+}

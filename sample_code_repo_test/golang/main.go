@@ -1,10 +1,11 @@
+// main.go
 package main
 
 import (
+    "fmt"
     "example.com/sample/models"
     "example.com/sample/utils"
     "example.com/sample/types"
-    "fmt"
 )
 
 var AppName = "GoTraverse"
@@ -23,4 +24,12 @@ func main() {
 
     var greeter types.Greeter = &models.Person{ID: 2, Name: "Bob", Role: types.UserRole}
     fmt.Println("Greeter says:", greeter.Greet())
+
+    // ── Chain entry point ──
+    FuncMain()
+}
+
+// FuncMain is the entry point for our cross-package call chain.
+func FuncMain() {
+    utils.UtilFunc()
 }
