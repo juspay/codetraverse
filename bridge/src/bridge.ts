@@ -370,11 +370,10 @@ export class CodeTraverseBridge {
     const lines = stdout.trim().split('\n');
 
     // Look for path output pattern
-    const pathLine = lines.find(line => line.includes('→'));
-
+    const pathLine = lines.find(line => line.includes('->'));
     if (pathLine) {
-      // Extract path from line like: "PgIntegrationApp::init → PgIntegrationApp::process → PgIntegrationApp::make"
-      const parts = pathLine.split('→').map(part => part.trim());
+      // Extract path from line like: "PgIntegrationApp::init -> PgIntegrationApp::process -> PgIntegrationApp::make"
+      const parts = pathLine.split('->').map(part => part.trim());
       const pathMatch = parts.length > 1 ? parts : null;
 
       return {
@@ -449,4 +448,7 @@ export class CodeTraverseBridge {
   }
 }
 
-// new CodeTraverseBridge({ pythonPath: "/usr/local/bin/python3.10", codetraversePath: "/Users/jignyas.s/Desktop/Juspay/code/node_modules/codetraverse-bridge-jp" }).createFdepData("/Users/jignyas.s/Desktop/Juspay/euler-api-gateway", "./output/fdep", "./output/graph", true)
+// (async () => {
+//   const obj = new CodeTraverseBridge({ pythonPath: "/usr/local/bin/python3.10", codetraversePath: "/Users/jignyas.s/Desktop/Juspay/code/node_modules/codetraverse-bridge-jp" })
+//   console.log(await obj.findPath("/Users/jignyas.s/Desktop/Juspay/codegen2/codegen/xyne_tmp/graph/repo_function_calls.graphml", "App.Routes::formatGatewayDoc", "Database.GptResponse::findOneGptResponseByCategoryDBE"))
+// })();

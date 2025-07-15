@@ -67,12 +67,11 @@ export class PythonRunner {
     source?: string
   ): Promise<{ stdout: string; stderr: string }> {
     await this.validatePath(graphPath);
-
-    const pathModule = path.join(this.codetraversePath, "codetraverse", 'path.py');
-    const args = [pathModule, '--GRAPH_PATH', graphPath, '--COMPONENT', component];
-
+    let args: string[];
     if (source) {
-      args.push('--SOURCE', source);
+      args = ["python", "-c", `import codetraverse.path as codepath;codepath.find_path(\"${graphPath}\", \"${component}\", \"${source}\")`]
+    } else {
+      args = ["python", "-c", `import codetraverse.path as codepath;codepath.find_path(\"${graphPath}\", \"${component}\")`]
     }
 
     return this.executeCommand(args);
