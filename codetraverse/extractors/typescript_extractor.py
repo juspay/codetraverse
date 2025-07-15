@@ -577,7 +577,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                                 absolute_callee_id = absolute_callee_id[len(root_dir):].lstrip(os.sep)
 
                         else:
-                            print(f"No tsconfig.json found up to {root_dir!r}")
+                            print(f"typescript issue No tsconfig.json found up to {root_dir!r}")
                         calls.append({
                             "name": callee_text,
                             "base_name": base_name,
