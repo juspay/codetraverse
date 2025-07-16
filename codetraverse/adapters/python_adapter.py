@@ -1,4 +1,3 @@
-from tqdm import tqdm
 def adapt_python_components(raw_components, quiet=True):
     nodes = []
     edges = []
@@ -14,7 +13,7 @@ def adapt_python_components(raw_components, quiet=True):
 
     seen_nodes = {}
 
-    for comp in tqdm(raw_components, total=len(raw_components), desc="Processing Python Components"):
+    for comp in raw_components:
         if comp["kind"] == "function":
             fn_node = add_node(comp["name"], "function", {
                 "signature": comp.get("parameters", []),

@@ -1,0 +1,63 @@
+name: Run Component Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - name: go
+            dir: golang
+          - name: typescript
+            dir: typescript
+          - name: haskell
+            dir: haskell
+          - name: python
+            dir: python
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r codetraverse/requirements.txt
+          pip install pytest
+
+      - name: Clean old outputs
+        run: rm -rf output/fdep output/graph
+
+      - name: Generate FDEP & Graph for ${{ matrix.name }}
+        run: |
+          export PYTHONPATH=.
+          python scripts/generate_tests_fdep_graph.py \
+            --root-dir sample_code_repo_test/${{ matrix.dir }} \
+            --out-fdep output/fdep/${{ matrix.dir }} \
+            --out-graph output/graph/${{ matrix.dir }}
+
+      # Option A: export in the same shell
+      - name: Run ${{ matrix.name }} tests
+        run: |
+          export PYTHONPATH=.
+          pytest -q \
+            tests/adapters/test_${{ matrix.name }}_adapter.py \
+            tests/extractors/test_${{ matrix.name }}_extractor.py
+
+      # Option B: set it via env
+      # - name: Run ${{ matrix.name }} tests
+      #   env:
+      #     PYTHONPATH: .
+      #   run: |
+      #     pytest -q \
+      #       tests/adapters/test_${{ matrix.name }}_adapter.py \
+<<<<<<< HEAD
+      #       tests/extractors/test_${{ matrix.name }}_extractor.py
+=======
+      #       tests/extractors/test_${{ matrix.name }}_extractor.py
+>>>>>>> 440d816 (github yaml env run options)

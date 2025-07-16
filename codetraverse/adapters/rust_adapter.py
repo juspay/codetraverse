@@ -1,6 +1,4 @@
-import re
 from collections import defaultdict
-from tqdm import tqdm
 
 def extract_rust_id(comp):
     name_part = comp.get("name") or "<unnamed>"
@@ -54,7 +52,7 @@ def adapt_rust_components(raw_components: list, quiet=True) -> dict:
             comp['fq_id'] = fq_id
             if name:
                 name_to_fq_ids[name].append(fq_id)
-    for comp in tqdm(all_components, total=len(all_components), desc="Adapting Rust components"):
+    for comp in all_components:
         comp_type = comp.get('type')
         if comp_type in {'function_item', 'struct_item', 'enum_item', 'trait_item', 'impl_item', 'mod_item'}:
             fq_id = comp.get('fq_id')

@@ -1,138 +1,103 @@
-from tqdm import tqdm
 from collections import defaultdict
+import re
 
-def adapt_haskell_components(raw_components, quiet: bool = True):
+def adapt_haskell_components(raw_components):
     nodes = []
     edges = []
-    
-    current_module_info = next((comp for comp in raw_components if comp.get("kind") == "module_header"), None)
-    if not current_module_info:
-        print("Warning: No module_header found. Output may be incomplete.")
-        return {"nodes": [], "edges": []}
-    
-    current_module = current_module_info.get("name")
-
-    # --- 1. Node Creation Pass ---
-    # Create nodes for all relevant components.
     node_ids = set()
+
+    all_comps_by_module = defaultdict(list)
+    main_modules_by_file = {
+        comp['file_path']: comp['name']
+        for comp in raw_components if comp.get("kind") == "module_header"
+    }
+
     for comp in raw_components:
-        # Skip components that do not become nodes themselves.
-        if comp.get("kind") in ["import", "pragma"]:
-            continue
-
         name = comp.get("name")
-        if not name:
-            continue
+        file_path = comp.get("file_path")
+        if not (name and file_path): continue
+        
+        comp_module = comp.get("module", main_modules_by_file.get(file_path))
+        if not comp_module: continue
+            
+        comp["module"] = comp_module
+        all_comps_by_module[comp_module].append(comp)
 
-        comp_module = comp.get("module", current_module)
-        node_id = f"{comp_module}::{name}"
+    comps_by_file = defaultdict(list)
+    for comp in raw_components:
+        if comp.get("file_path"):
+            comps_by_file[comp.get("file_path")].append(comp)
 
-        if node_id in node_ids:
-            continue
-
-        node = {
-            "id": node_id,
-            "category": comp.get("kind"),
-            "name": name,
-            "file_path": comp.get("file_path", ""),
-            "location": {
-                "start": comp.get("start_line"),
-                "end": comp.get("end_line"),
-            }
+    for file_path, file_comps in comps_by_file.items():
+        import_alias_map = {
+            imp['alias']: imp['module']
+            for imp in file_comps if imp.get("kind") == "import" and imp.get("alias")
         }
         
-        if comp.get("kind") == "function":
-            node["signature"] = comp.get("type_signature")
-        
-        nodes.append(node)
-        node_ids.add(node_id)
-
-    # --- 2. Edge Creation Pass ---
-    # Create edges based on dependencies.
-    for comp in tqdm(raw_components, total=len(raw_components), desc="Adapting Haskell components"):
-        # **FIX**: Only process components that can be a source of edges
-        # and are guaranteed to have a "name" key.
-        kind = comp.get("kind")
-        if kind not in ["module_header", "function", "data_type", "instance"]:
-            continue
-
-        comp_module = comp.get("module", current_module)
-        source_id = f"{comp_module}::{comp['name']}"
-
-        if kind == "module_header":
-            for export_name in comp.get("exports", []):
-                target_id = f"{comp['name']}::{export_name}"
-                edges.append({"from": source_id, "to": target_id, "relation": "exports"})
-
-        elif kind == "function":
-            for call in comp.get("function_calls", []):
-                call_base = call.get("base", call.get("name"))
-                if not call_base: continue
-
-                target_id = None
-                if call.get("type") == "qualified" and call.get("modules"):
-                    target_id = f"{call['modules'][0]}::{call_base}"
-                else:
-                    target_id = f"{comp_module}::{call_base}"
-                edges.append({"from": source_id, "to": target_id, "relation": "calls"})
-
-            for dep in comp.get("type_dependencies", []):
-                target_id = f"{comp_module}::{dep}"
-                if "." in dep:
-                    parts = dep.rsplit(".", 1)
-                    target_id = f"{parts[0]}::{parts[1]}"
-                edges.append({"from": source_id, "to": target_id, "relation": "uses_type"})
-
-        elif kind == "data_type":
-            for constructor in comp.get("constructors", []):
-                for field in constructor.get("fields", []):
-                    type_info = field.get("type_info", {})
-                    base_name = type_info.get("base")
-                    if not base_name: continue
-
-                    target_id = f"{comp_module}::{base_name}"
-                    if type_info.get("modules"):
-                        target_id = f"{type_info['modules'][0]}::{base_name}"
-                    
-                    edges.append({"from": source_id, "to": target_id, "relation": "contains"})
-
-        elif kind == "instance":
-             for pattern in comp.get("type_patterns", []):
-                 base_name = pattern.get("base", pattern.get("name"))
-                 if not base_name: continue
-                 
-                 target_id = f"{comp_module}::{base_name}"
-                 if pattern.get("type") == "qualified" and pattern.get("modules"):
-                     target_id = f"{pattern['modules'][0]}::{base_name}"
-                 edges.append({"from": source_id, "to": target_id, "relation": "instance_for"})
-             
-             class_name = comp["name"].split()[0]
-             # This assumes the class is in the same module if not qualified, which may need refinement.
-             class_id = f"{comp_module}::{class_name}" 
-             edges.append({"from": source_id, "to": class_id, "relation": "implements"})
-
-    # --- 3. External Node Creation Pass ---
-    # Create placeholder nodes for any dependencies that were not found in the source.
-    for edge in edges:
-        for endpoint in ("from", "to"):
-            endpoint_id = edge[endpoint]
-            if endpoint_id not in node_ids:
-                if not endpoint_id or "::" not in endpoint_id: continue
-                
-                name_part = endpoint_id.split("::", 1)[1]
-                category = "external_function"
-                if name_part and name_part[0].isupper():
-                    category = "external_type"
+        for comp in file_comps:
+            kind, name, comp_module = comp.get("kind"), comp.get("name"), comp.get("module")
+            if not (kind and name and comp_module): continue
+            
+            source_id = f"{comp_module}::{name}"
+            if source_id not in node_ids:
+                node_category = kind
+                if kind == "module_header": node_category = "module"
+                if kind == "class": node_category = "typeclass"
                 
                 nodes.append({
-                    "id": endpoint_id,
-                    "category": category,
-                    "name": name_part,
-                    "file_path": "external",
+                    "id": source_id, "category": node_category, "name": name,
+                    "file_path": comp.get("file_path", ""),
+                    "location": {"start": comp.get("start_line"),"end": comp.get("end_line")}
                 })
-                node_ids.add(endpoint_id)
+                node_ids.add(source_id)
 
-    # Remove duplicate edges before returning
-    unique_edges = [dict(t) for t in {tuple(sorted(e.items())) for e in edges}]
+            if kind == "module_header":
+                for export in comp.get("exports", []):
+                    if export in import_alias_map:
+                        alias = export
+                        actual_module_names = [imp['module'] for imp in file_comps if imp.get("alias") == alias]
 
-    return {"nodes": nodes, "edges": unique_edges}
+                        for actual_module_name in actual_module_names:
+                            for target_comp in all_comps_by_module.get(actual_module_name, []):
+                                target_name = target_comp.get("name")
+                                if not target_name: continue
+                                
+                                proxy_id = f"{comp_module}::{target_name}"
+                                if proxy_id not in node_ids:
+                                    nodes.append({
+                                        "id": proxy_id, "category": "reexport", "name": target_name,
+                                        "file_path": comp.get("file_path", ""), "location": {}
+                                    })
+                                    node_ids.add(proxy_id)
+                                
+                                edges.append({"from": source_id, "to": proxy_id, "relation": "exports"})
+                                actual_id = f"{target_comp['module']}::{target_name}"
+                                edges.append({"from": proxy_id, "to": actual_id, "relation": "reexport_of"})
+                    else:
+                        edges.append({"from": source_id, "to": f"{comp_module}::{export}", "relation": "exports"})
+
+            elif kind == "function":
+                for call in comp.get("function_calls", []):
+                    call_base = call.get("base", call.get("name"))
+                    if not call_base: continue
+                    target_module = call.get('modules', [comp_module])[0]
+                    edges.append({"from": source_id, "to": f"{target_module}::{call_base}", "relation": "calls"})
+
+                for dep in comp.get("type_dependencies", []):
+                    dep_mod, _, dep_name = dep.rpartition('.')
+                    edges.append({"from": source_id, "to": f"{dep_mod or comp_module}::{dep_name}", "relation": "uses_type"})
+            
+            elif kind == "instance":
+                class_name = comp["name"].split()[0]
+                class_id = f"{comp_module}::{class_name}"
+                edges.append({"from": source_id, "to": class_id, "relation": "implements"})
+
+    all_node_ids_final = {n['id'] for n in nodes}
+    for edge in edges:
+        for endpoint in ("from", "to"):
+            if edge[endpoint] not in all_node_ids_final:
+                nodes.append({"id": edge[endpoint], "category": "external", "name": edge[endpoint].split("::")[-1], "file_path": "external"})
+                all_node_ids_final.add(edge[endpoint])
+    
+    print(f"Adapted {len(nodes)} nodes and {len(edges)} edges")
+    return {"nodes": nodes, "edges": edges}

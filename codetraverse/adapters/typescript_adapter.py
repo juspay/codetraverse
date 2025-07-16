@@ -10,22 +10,26 @@ def infer_project_root(components):
 def make_node_id(comp):
     ROOT_DIR = os.environ.get("ROOT_DIR", "")
     module = comp.get("file_path")
-    last_dir = os.path.basename(ROOT_DIR)
-    index = module.find(last_dir)
-    if index != -1:
-        module = module[index:]
+    # print("siraj module:", module)
+    # remove the root directory from the module path
+    # if module and ROOT_DIR:
+    #     module = os.path.relpath(module, ROOT_DIR).replace("\\", "/")
+    # last_dir = os.path.basename(ROOT_DIR)
+    # index = module.find(last_dir)
+    # if index != -1:
+    #     module = module[index:]
 
     if not module:
         module = os.environ.get("CURRENT_FILE", "unknown")
 
     if comp.get("kind") in ("method", "field") and comp.get("class") and comp.get("name"):
-        return f"{module}::{comp['class']}::{comp['name']}"
+        return f"{module}::{comp['class']}::{comp['name']}"     # +"siraj_node101"
     if comp.get("kind") == "namespace" and comp.get("name"):
-        return f"{module}::{comp['name']}"
+        return f"{module}::{comp['name']}" # only one node for namespace in xyne repo (i.e Google)
     if comp.get("name"):
-        return f"{module}::{comp['name']}"
+        return f"{module}::{comp['name']}"    #+"siraj_node303"
     if comp.get("id"):
-        return comp["id"]
+        return comp["id"]  # +"siraj_node404"
     return None
 
 def adapt_typescript_components(raw_components):
@@ -44,7 +48,7 @@ def adapt_typescript_components(raw_components):
     for comp in raw_components:
         if comp.get("kind") == "import":
             module = comp["module"]
-            stmt = comp["statement"]
+            stmt = comp["code"]
             module_dir = os.path.dirname(module)
 
             if module not in import_map:
@@ -207,54 +211,69 @@ def adapt_typescript_components(raw_components):
 
     for comp in raw_components:
         kind = comp.get("kind")
+        if kind not in {"function", "method", "variable", "function_call", "arrow_function", "generator_function", "generator_function_declaration"}:
+            continue
+
         from_id = make_node_id(comp)
+        if not from_id or not comp.get("function_calls"):
+            continue
 
-        # if kind in {"function", "method", "variable", "function_call","arrow_function"} and comp.get("function_calls"):
-        #     for call in comp["function_calls"]:
-        #         target_id = call.get("resolved_callee")
-        #         if target_id and from_id != target_id:
-        #             edges.append({
-        #                 "from": from_id,
-        #                 "to": target_id,
-        #                 "relation": "calls"
-        #             })
+        # derive caller path from from_id
+        caller_module = from_id.split("::", 1)[0]
+        caller_dir    = os.path.dirname(caller_module)
 
-        # import os
+        for call in comp.get("function_calls", []):
+            target_id = call.get("resolved_callee")
+            if not target_id:
+                continue
 
-        if kind in {"function", "method", "variable", "function_call", "arrow_function"} and comp.get("function_calls"):
-            from_id = make_node_id(comp)
+            # # ——— handle TS "@/…" alias imports ———
+            # if target_id.startswith("@"):
+            #     # strip leading "@/" to get the suffix
+            #     alias_suffix = target_id[1:].lstrip("/")
+            #     # find all existing nodes ending with that suffix
+            #     candidates = [
+            #         nid for nid in existing_nodes
+            #         if not nid.startswith("@") and nid.endswith(alias_suffix)
+            #     ]
+            #     if candidates:
+            #         # score each by shared path segments with caller_dir
+            #         scored = []
+            #         for nid in candidates:
+            #             cand_module = nid.split("::", 1)[0]
+            #             common = os.path.commonpath([caller_dir, cand_module])
+            #             segments = common.split(os.sep) if common else []
+            #             scored.append((len(segments), nid))
+            #         max_score = max(score for score, _ in scored)
+            #         best = [nid for score, nid in scored if score == max_score]
+            #         for nid in best:
+            #             if from_id != nid:
+            #                 edges.append({
+            #                     "from":     from_id,
+            #                     "to":       nid,
+            #                     "relation": "calls"
+            #                 })
+            #     continue  # skip the rest and go to next call
 
-            for call in comp["function_calls"]:
-                target_id = call.get("resolved_callee")
+            # ——— handle "./" or "../" relative imports ———
+            if target_id.startswith("."):
+                parts = target_id.split("::")
+                if len(parts) == 2:
+                    target_file, target_symbol = parts
+                    from_file = caller_module
+                    from_dir  = os.path.dirname(from_file)
+                    combined = os.path.normpath(
+                        os.path.join(from_dir, target_file)
+                    ).replace("\\", "/")
+                    target_id = f"{combined}::{target_symbol}"
 
-                if not from_id or not target_id:
-                    continue
-
-                # Fix relative target paths like "./x.ts::func" or "../x/y.ts::func"
-                if target_id.startswith("."):
-                    target_file_and_symbol = target_id.split("::")
-                    if len(target_file_and_symbol) != 2:
-                        continue
-
-                    target_file = target_file_and_symbol[0]     # e.g. ../folder2/func2.ts
-                    target_symbol = target_file_and_symbol[1]   # e.g. function2
-
-                    # Extract the folder part of from_id (like mini-repo/folder1/func1.ts)
-                    from_file_path = from_id.split("::")[0]
-                    from_dir = os.path.dirname(from_file_path)
-
-                    # Resolve correct full path of the target file
-                    combined_path = os.path.normpath(os.path.join(from_dir, target_file)).replace("\\", "/")
-
-                    target_id = f"{combined_path}::{target_symbol}"
-
-                # Final check before appending edge
-                if from_id != target_id:
-                    edges.append({
-                        "from": from_id,
-                        "to": target_id,
-                        "relation": "calls"
-                    })
+            # ——— emit the edge for non-alias or resolved-relative cases ———
+            if from_id != target_id:
+                edges.append({
+                    "from":     from_id,
+                    "to":       target_id,
+                    "relation": "calls"
+                })
 
 
 
