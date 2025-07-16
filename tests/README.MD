@@ -28,7 +28,7 @@ output/graph/<lang>/*.graphml
 
 ---
 
-### 2. Run Tests Locally
+### 2. Run Tests Locally    
 
 To execute tests for adapters and extractors, ensure your project is added to your `PYTHONPATH` and then run `pytest`:
 
