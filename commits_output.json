@@ -1,0 +1,252 @@
+{
+    "621b42ecad27a8c7d7776f16098d9ac2e050def3": {
+        "author": "Nikhitha Gururaj <nikhitha.gururaj@juspay.in>",
+        "date": "2025-07-07T17:12:14Z",
+        "commit_message": "Pull request #6171: EUL-17684: Txns changes for Open Finance integration\nMerge in JBIZ/euler-api-txns from open-finance-br/pisp to staging"
+    },
+    "4c11c9d487fe949ba7c5399b8a63f408366f16ce": {
+        "author": "Gopika B <gopika.b@juspay.in>",
+        "date": "2025-07-08T05:05:06Z",
+        "commit_message": "Pull request #6039: EUL-17701 added update_mandate_status in executeMandateCommand\nMerge in JBIZ/euler-api-txns from EUL-17701-create-admin-api-to-update-mandate-status to staging"
+    },
+    "3a9cc2c34e79ea97e84f45b032c1afaddf5d401e": {
+        "author": "Sailaja Battagiri <sailaja.b@juspay.in>",
+        "date": "2025-07-08T10:18:02Z",
+        "commit_message": "Pull request #6161: EUL-17973 Changed upstreamGatewayError error code\nMerge in JBIZ/euler-api-txns from upstreamGatewayError-504 to staging"
+    },
+    "bfe678719f2ea18670169a49a3add7ebe7a0c316": {
+        "author": "Mohd Umar <mohd.umar@juspay.in>",
+        "date": "2025-07-08T10:22:36Z",
+        "commit_message": "Pull request #6182: EUL-17972 check refundType for Instant refund for Sync Frequency\nMerge in JBIZ/euler-api-txns from EUL-17972-Check_refundtype-for-refund-sync-frequency to staging"
+    },
+    "29e1c499113c17ef440ff508986fe16b288cc698": {
+        "author": "Bhoomika U <bhoomika.u@juspay.in>",
+        "date": "2025-07-08T10:23:29Z",
+        "commit_message": "Pull request #6168: EUL-18087 External Webhook AuthN for CIELO\nMerge in JBIZ/euler-api-txns from external/auth_cielo to staging"
+    },
+    "712b9c54153d5a1ee2a3e8cc9be907aaccbac538": {
+        "author": "Krishna Prasad Guntupalli <krishna.gprasad@juspay.in>",
+        "date": "2025-07-08T10:23:58Z",
+        "commit_message": "Pull request #5563: EUL-16808 price lock addon amount rules change\nMerge in JBIZ/euler-api-txns from EUL-16808-Fixed-addon-amount-rules-for-price-lock to staging"
+    },
+    "5228af939eee1d9fdce93212d0b0e2343d519faa": {
+        "author": "Abhinav Gupta <abhinav.gupta@juspay.in>",
+        "date": "2025-07-08T10:24:52Z",
+        "commit_message": "Pull request #5767: EUL-17251 upd txn status for debit_enach\nMerge in JBIZ/euler-api-txns from EUL-17251_debit_enach_rzp_fix to staging"
+    },
+    "9dbce852a8a09af33edc2ca4b2d9d1b3a8a21225": {
+        "author": "Vishwas Jain <vishwas.jain@juspay.in>",
+        "date": "2025-07-08T13:06:49Z",
+        "commit_message": "Pull request #6070: EUL-17801 added new types and added onlinePaymentCryptogram\nMerge in JBIZ/euler-api-txns from EUL-17801-added-onlinePaymentCryptogram to staging"
+    },
+    "b3d91ccf1d7c298d3f27ea2f680ed588cad0b5fb": {
+        "author": "Chintan Jethi <chintan.jethi@juspay.in>",
+        "date": "2025-07-08T13:07:26Z",
+        "commit_message": "Pull request #6028: EUL-17679 AmazonPay Sr fix\nMerge in JBIZ/euler-api-txns from EUL-17679-amazonpay-delink-fix to staging"
+    },
+    "10abdb042c2d9ecad1f085d1ff9c8610c2e1d6f6": {
+        "author": "Abhinav Gupta <abhinav.gupta@juspay.in>",
+        "date": "2025-07-08T14:31:14Z",
+        "commit_message": "Pull request #6228: EUL-18123 remove mandate_recurring_amount\nMerge in JBIZ/euler-api-txns from EUL-18123_bugfix_staging_build to staging"
+    },
+    "f456c6bf3cc470abf3102f44c04bfbbab93c490b": {
+        "author": "Alastair Dsouza <alastair.dsouza@juspay.in>",
+        "date": "2025-07-09T11:01:24Z",
+        "commit_message": "Pull request #6209: EUL-18078 Webhook fixes in hotfix\nMerge in JBIZ/euler-api-txns from EUL-18076-webhook-hotfixes to staging"
+    },
+    "5c058499e463594356880e9125a1cc216f412d36": {
+        "author": "simran.shaik <simran.shaik@juspay.in>",
+        "date": "2025-07-09T11:25:18Z",
+        "commit_message": "Pull request #4221: EUL-14007/EaseBuzzSplitSettlementRefundIntegration\nMerge in JBIZ/euler-api-txns from EUL-14007/EaseBuzzSplitSettlementRefundIntegration to staging"
+    },
+    "8b4ea7b3af354fdabfdd04af427d99fdf9ae347e": {
+        "author": "Nagendra P <nagendra.p@juspay.in>",
+        "date": "2025-07-10T05:59:22Z",
+        "commit_message": "Pull request #6202: EUL-18062 updated the compact pgr and added refundId based webhook\nMerge in JBIZ/euler-api-txns from EUL-18062_webhookSetu to staging"
+    },
+    "1c2ff5495423e4a3bc9b8559d28abc99d56ca78d": {
+        "author": "Vishwas Jain <vishwas.jain@juspay.in>",
+        "date": "2025-07-10T07:36:11Z",
+        "commit_message": "Pull request #6233: EUL-18084 updating refund status with refund sync call\nMerge in JBIZ/euler-api-txns from EUL-18084-CCAVENUE-Refund-status-issue to staging"
+    },
+    "0b974b945b2842354573a554fd2661ce4d3ae07f": {
+        "author": "shreeshyam.hs <shreeshyam.hs@juspay.in>",
+        "date": "2025-07-10T12:19:54Z",
+        "commit_message": "Pull request #6189: EUL-18148 HSBCBIZ Gateway\nMerge in JBIZ/euler-api-txns from HSBCBIZ_Gateway to staging"
+    },
+    "feedaf9d58d002c64e1d6e5de64afc87966b0b44": {
+        "author": "Nagesh S <nagesh.s@juspay.in>",
+        "date": "2025-07-10T15:56:06Z",
+        "commit_message": "Pull request #6203: EUL-18017 | added rec day and next recurrence date support for update mandate\nMerge in JBIZ/euler-api-txns from EUL-18017/enhancing-update-mandate-fields-flow to staging"
+    },
+    "288d548ec088f3827471b4aeca1839854c4d3d0b": {
+        "author": "Yashasvi Rana <yashasvi.rana@juspay.in>",
+        "date": "2025-07-10T15:58:29Z",
+        "commit_message": "Pull request #6219: EUL-18098 add decrypted request logs for atom\nMerge in JBIZ/euler-api-txns from EUL-18098-add-decrypted-logs-atom to staging"
+    },
+    "c5d0079c5a78456c192582ffc503ea05a336f3b7": {
+        "author": "imdad.gayaz <imdad.gayaz@juspay.in>",
+        "date": "2025-07-10T15:59:24Z",
+        "commit_message": "Pull request #6190: EUL-18030 sentToGateway true\nMerge in JBIZ/euler-api-txns from EUL-18030-sentToGateway-true to staging"
+    },
+    "dcc6c3c89dacf93b5c7eb119104aa86ff3be281d": {
+        "author": "keerthan.b <keerthan.b@juspay.in>",
+        "date": "2025-07-10T16:00:02Z",
+        "commit_message": "Pull request #6212: EUL-18083 added ref id suuport for migration\nMerge in JBIZ/euler-api-txns from EUL-18083-added-ref-id-suuport-for-migration to staging"
+    },
+    "7402935e5a73275b21d80fd9e4fd8526ee8b7ddc": {
+        "author": "Rohit Jumnani <rohit.jumani@juspay.in>",
+        "date": "2025-07-11T04:37:09Z",
+        "commit_message": "Pull request #6237: EUL-18132\nMerge in JBIZ/euler-api-txns from EUL-18132 to staging"
+    },
+    "bc7ca3332a325ebbd83b5344e27dcc856163a15b": {
+        "author": "Abhinav Gupta <abhinav.gupta@juspay.in>",
+        "date": "2025-07-11T06:04:53Z",
+        "commit_message": "Pull request #6236: EUL-18130 removed old success revoke response\nMerge in JBIZ/euler-api-txns from EUL-18130_revoke_mandate_old_success_response_removed to staging"
+    },
+    "ac1b8c0ca3dd3eae7a44e2d97f10453c7b68ef91": {
+        "author": "Nikhitha Gururaj <nikhitha.gururaj@juspay.in>",
+        "date": "2025-07-11T06:05:33Z",
+        "commit_message": "Pull request #6253: EUL-18174: add order_return_url support\nMerge in JBIZ/euler-api-txns from obr-return-fix to staging"
+    },
+    "718b362ca804a6c23b9f3d9254512cf9e5996d06": {
+        "author": "Bhavya Mithal <bhavya.mithal@juspay.in>",
+        "date": "2025-07-11T06:06:45Z",
+        "commit_message": "Pull request #6251: EUL-18173 fix retry pfs\nMerge in JBIZ/euler-api-txns from EUL-18173-retry-pf-fix to staging"
+    },
+    "b89681354e880219a19b0fc0126f292f437a14f6": {
+        "author": "Sailaja <sailaja.b@juspay.in>",
+        "date": "2025-07-10T18:01:28+05:30",
+        "commit_message": "EUL-18176 hotfix for merchant_idx_id"
+    },
+    "f1130037d7468fe23d6b277ab084c203fcb5d48c": {
+        "author": "Sailaja <sailaja.b@juspay.in>",
+        "date": "2025-07-11T12:00:36+05:30",
+        "commit_message": "EUL-18176 hotfix for merchant_idx_id4"
+    },
+    "03661460c061109dd1a7ca50c9d6bcecb6265aa1": {
+        "author": "Sailaja Battagiri <sailaja.b@juspay.in>",
+        "date": "2025-07-11T09:48:44Z",
+        "commit_message": "Pull request #6259: Merchant idx id4\nMerge in JBIZ/euler-api-txns from merchant_idx_id4 to staging"
+    },
+    "a269e3bb9b2f979f7938d1319acca11ca3d0bfa5": {
+        "author": "Gopika B <gopika.b@juspay.in>",
+        "date": "2025-07-11T10:35:10Z",
+        "commit_message": "Pull request #6213: EUL-18027 easebuzz handling first debit at our end for upi autopay\nMerge in JBIZ/euler-api-txns from EUL-18027-easebuzz-handling-first-debit-at-our-end-for-upi-autopay to staging"
+    },
+    "e817ee1f4d096c53bd712d95885ee40508fec0cf": {
+        "author": "Vishwas Jain <vishwas.jain@juspay.in>",
+        "date": "2025-07-11T10:49:00Z",
+        "commit_message": "Pull request #6125: EUL-17897: Added support to log txn integrity payload\nMerge in JBIZ/euler-api-txns from EUL-17897-logging-txn-integrity-payload to staging"
+    },
+    "f6a82ba0c5fc1025615f6c59c519e8d93bea5390": {
+        "author": "Aashna Puri <aashna.puri@juspay.in>",
+        "date": "2025-07-12T02:04:07Z",
+        "commit_message": "Pull request #6115: EUL-17879 : click to pay support for indigo and lastMinute\nMerge in JBIZ/euler-api-txns from feature/click-to-pay-support to staging"
+    },
+    "3f11095a631adbbe19694dac0c9bf10579684081": {
+        "author": "Prashant Prakash <prashant.prakash@juspay.in>",
+        "date": "2025-07-14T05:27:18Z",
+        "commit_message": "Pull request #5751: EUL-17178 DeutscheBiz Txns Changes\nMerge in JBIZ/euler-api-txns from deutsche-biz-intg-txn-changes to staging"
+    },
+    "c10e6e03788f2966360f9b5e0b73597b584c7b4e": {
+        "author": "Rohit Jumnani <rohit.jumani@juspay.in>",
+        "date": "2025-07-14T05:56:34Z",
+        "commit_message": "Pull request #6268: EUL-18132 cart details fix\nMerge in JBIZ/euler-api-txns from EUL-18132-cart-details-fix to staging"
+    },
+    "60fb8bdeb8dd5cd67715b9dbe4111880dcce6345": {
+        "author": "Krishna Prasad Guntupalli <krishna.gprasad@juspay.in>",
+        "date": "2025-07-14T06:14:17Z",
+        "commit_message": "Pull request #6249: EUL-18185 Changed the priority of addon amount\nMerge in JBIZ/euler-api-txns from EUL-16808-Price-lock-order-fix to staging"
+    },
+    "5e0e494d4369bdb58a378f3852a64a945276ca02": {
+        "author": "Bhoomika U <bhoomika.u@juspay.in>",
+        "date": "2025-07-14T06:15:10Z",
+        "commit_message": "Pull request #6242: EUL-18144 Bug fix for external Auth addition in webhook payments.\nMerge in JBIZ/euler-api-txns from fix/external_auth to staging"
+    },
+    "43b0b90bc7ec9468e1dd9d36984215cb66bcd058": {
+        "author": "Chintan Jethi <chintan.jethi@juspay.in>",
+        "date": "2025-07-14T06:24:58Z",
+        "commit_message": "Pull request #6216: EUL-17997 Cashfree bank id mandate support for tpv\nMerge in JBIZ/euler-api-txns from EUL-17997-Cashfree-bank-id-mandate to staging"
+    },
+    "d539e902401aeced12fb77a22715924c0721f011": {
+        "author": "ayush.chaturvedi <ayush.chaturvedi@juspay.in>",
+        "date": "2025-07-14T15:13:01+05:30",
+        "commit_message": "EUL-18145 Lazypay emi integration"
+    },
+    "76947cacea5e9f678f704f66fa3f5f65917aa0e2": {
+        "author": "Nikhil Masigari <nikhil.masigari@juspay.in>",
+        "date": "2025-07-14T10:41:44Z",
+        "commit_message": "Pull request #6113: EUL-17722 implemented a kill switch for routing via hyperswitch\nMerge in JBIZ/euler-api-txns from razorpay-cutover_kill_switch to staging"
+    },
+    "0c33c03ae079fb599773ad8811afe017916e210b": {
+        "author": "Bhavya Mithal <bhavya.mithal@juspay.in>",
+        "date": "2025-07-14T10:51:02Z",
+        "commit_message": "Pull request #6180: EUL-18009 added onus retry\nMerge in JBIZ/euler-api-txns from EUL-18009-onus to staging"
+    },
+    "78474a7d48a56746a88a1acc339d7dde92e1196c": {
+        "author": "Gopika B <gopika.b@juspay.in>",
+        "date": "2025-07-14T15:19:27Z",
+        "commit_message": "Pull request #6281: EUL-18212 fixed the OTM mapping issue by adding mandate frequency check for isPaymentSuccessful and getEaseBuzzGatewayParams\nMerge in JBIZ/euler-api-txns from EUL-18212-incorrect-mapping-of-mandate-registration-response-from-pg-for-otm-txns to staging"
+    },
+    "51690e9c653474acff2dbd89b2e0b64c5747b5d5": {
+        "author": "shreeshyam.hs <shreeshyam.hs@juspay.in>",
+        "date": "2025-07-15T04:46:18Z",
+        "commit_message": "Pull request #5920: EUL-18229 Static Webhook UPI Stack\nMerge in JBIZ/euler-api-txns from Static-Webhook-UPI-Stack to staging"
+    },
+    "b01e1d8f35bc56ba41080ea1d42803974b043369": {
+        "author": "Krishna Prasad Guntupalli <krishna.gprasad@juspay.in>",
+        "date": "2025-07-15T06:20:47Z",
+        "commit_message": "Pull request #6262: EUL-18191 Add on amount in split refunds\nMerge in JBIZ/euler-api-txns from EUL-18191-Add-on-amount-in-refunds to staging"
+    },
+    "a70104fcf358eadc1ae5e9bf5d7be8c70f5ff2e3": {
+        "author": "Yogesh sai Dondapati <yogesh.sai@juspay.in>",
+        "date": "2025-07-15T08:18:14Z",
+        "commit_message": "Pull request #5945: EUL-17392-MPGSchangesForApplePay\nMerge in JBIZ/euler-api-txns from EUL-17392-ApplepayForMPGSgw to staging"
+    },
+    "2dc7d142f2fdac1f49b758c9d462512c6c9f648f": {
+        "author": "ayush.chaturvedi <ayush.chaturvedi@juspay.in>",
+        "date": "2025-07-15T09:21:52Z",
+        "commit_message": "Pull request #6243: EUL-18145 Lazypay emi integration\nMerge in JBIZ/euler-api-txns from lazypay-emi-integration to staging"
+    },
+    "7c42dc70a7d69d7d57b5794f941cb796460feea6": {
+        "author": "Shaik Suhel <shaik.suhel@juspay.in>",
+        "date": "2025-07-15T09:23:30Z",
+        "commit_message": "Pull request #6248: EUL-18160 skip subvention flow for payu\nMerge in JBIZ/euler-api-txns from payu-skip-subvention-flow to staging"
+    },
+    "e63d9cd1bd7a34f155d9b4cf376bcf8a0d00832e": {
+        "author": "Abhishek Singh <abhishek.singh.002@juspay.in>",
+        "date": "2025-07-15T09:37:07Z",
+        "commit_message": "Pull request #6208: EUL-18073_adding new paymentFlow DEBIT and CREDIT\nMerge in JBIZ/euler-api-txns from EUL-18073_new_paymentFlow_based_on_CardType to staging"
+    },
+    "a0f099c2a7349a1f27231362f5d6dbb4ad9418df": {
+        "author": "Aashna Puri <aashna.puri@juspay.in>",
+        "date": "2025-07-15T10:27:37Z",
+        "commit_message": "Pull request #6288: EUL-17879 adding debug log and pushing a hot fix\nMerge in JBIZ/euler-api-txns from feature/changes-in-ctp to staging"
+    },
+    "bbb0832773bce65d3f1a8899168783db7d090814": {
+        "author": "simran.shaik <simran.shaik@juspay.in>",
+        "date": "2025-07-15T10:28:32Z",
+        "commit_message": "Pull request #6275: EUL-18141/PAYUsplitPlusSurcharge\nMerge in JBIZ/euler-api-txns from EUL-18141/PAYUsplitPlusSurcharge to staging"
+    },
+    "4bfcd99c9c01ec2c1a9a7589245174c20593220d": {
+        "author": "imdad.gayaz <imdad.gayaz@juspay.in>",
+        "date": "2025-07-15T11:27:37Z",
+        "commit_message": "Pull request #6235: EUL-18131 cybr cature fix\nMerge in JBIZ/euler-api-txns from EUL-18131-cybr-cature-fix to staging"
+    },
+    "ea65474817eef494f59c9c98e25d843f8a971dc7": {
+        "author": "Shubham Singh <shubham.singh@juspay.in>",
+        "date": "2025-07-15T11:28:38Z",
+        "commit_message": "Pull request #6264: EUL-18193\nMerge in JBIZ/euler-api-txns from adapter/returnurl/update to staging"
+    },
+    "6cc197116f28c575fa89eb0aa550abc0c330ad81": {
+        "author": "Ananya Gupta <ananya.gupta@juspay.in>",
+        "date": "2025-07-15T11:29:09Z",
+        "commit_message": "Pull request #6095: EUL-17832 Added Surcharge after fallback\nMerge in JBIZ/euler-api-txns from EUL-17832-Surcharge_Fallback to staging"
+    },
+    "eb02d77d5916c5e0107406479dab15035d281d3e": {
+        "author": "Nikhitha Gururaj <nikhitha.gururaj@juspay.in>",
+        "date": "2025-07-15T12:20:59Z",
+        "commit_message": "Pull request #6284: EUL-18224: changes to accept JWT response\nMerge in JBIZ/euler-api-txns from redirection-fix to staging"
+    }
+}

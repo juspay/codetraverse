@@ -86,6 +86,7 @@ def generate_ast_diff(
     to_branch: str = None,
     from_commit: str = None,
     to_commit: str = None,
+    save_as_json:bool = True
 ):
     orchestrator = AstDiffOrchestrator()
     try:
@@ -105,13 +106,13 @@ def generate_ast_diff(
             else:
                 raise TypeError("Unsupported git_provider object.")
 
-        print(f"Comparing commits: {from_commit[:7]} (old) -> {to_commit[:7]} (new)")
+        # print(f"Comparing commits: {from_commit[:7]} (old) -> {to_commit[:7]} (new)")
 
         # --- 2. Get Changed Files ---
         changed_files = git_provider.get_changed_files_from_commits(to_commit, from_commit)
         all_changes = []
 
-        print(changed_files)
+        # print(changed_files)
         # --- 3. Process Files ---
         for category in ["modified", "added", "deleted"]:
             for file_path in changed_files.get(category, []):
@@ -136,20 +137,24 @@ def generate_ast_diff(
                 
                 if changes:
                     all_changes.append(changes.to_dict())
-                if not quiet: print(f"PROCESSED {category.upper()} FILE ({file_path})")
+                if not quiet:
+                    print(f"PROCESSED {category.upper()} FILE ({file_path})")
 
         # --- 4. Write Output File ---
         os.makedirs(output_dir, exist_ok=True)
         final_output_path = os.path.join(output_dir, "detailed_changes.json")
-        with open(final_output_path, "w") as f: json.dump(all_changes, f, indent=2)
-        print(f"Changes written to - {final_output_path}")
+        if save_as_json:
+            with open(final_output_path, "w") as f:
+                json.dump(all_changes, f, indent=2)
+        # print(f"Changes written to - {final_output_path}")
+        return all_changes
 
     except Exception as e:
         print(f"ERROR - {e}")
         traceback.print_exc()
 
 def run_ast_diff_from_config(config: Dict[str, Any]):
-    print("--- Starting AST Diff Generation from Config ---")
+    # print("--- Starting AST Diff Generation from Config ---")
     provider_type = config.get("provider_type")
     git_provider = None
 
@@ -169,7 +174,7 @@ def run_ast_diff_from_config(config: Dict[str, Any]):
         else:
             raise ValueError(f"Unsupported provider_type: '{provider_type}'. Must be 'bitbucket' or 'local'.")
 
-        generate_ast_diff(
+        res = generate_ast_diff(
             git_provider=git_provider,
             output_dir=config.get("output_dir", "./ast_diff_output"),
             quiet=config.get("quiet", False),
@@ -178,9 +183,10 @@ def run_ast_diff_from_config(config: Dict[str, Any]):
             to_branch=config.get("to_branch"),
             from_commit=config.get("from_commit"),
             to_commit=config.get("to_commit"),
+            save_as_json=config.get("save_as_json", True)
         )
-        print("--- AST Diff Generation Finished ---")
-
+        # print("--- AST Diff Generation Finished ---")   
+        return res
     except Exception as e:
         print(f"FATAL ERROR in configuration or execution: {e}", file=sys.stderr)
         traceback.print_exc()
