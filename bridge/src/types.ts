@@ -57,6 +57,7 @@ export interface BaseComponent {
   end_line: number;
   full_component_path: string;
   jsdoc?: string | null;
+  code?: string | null;
 }
 
 /**
