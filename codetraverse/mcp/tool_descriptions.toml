@@ -82,6 +82,7 @@ Some use cases are,
 fdep_folder = "Path to the fdep folder"
 module_name = "It should be the module name of the file in which the component is present. Follow the rules for moduleName specified above."
 
+
 [get_surrounding_components]
 description = """
 This tool will give a list of all related components.
@@ -94,3 +95,10 @@ module_name = "It should be the module name of the file in which the component i
 component_name = "The component for which you want to extract the parent and child calls for."
 parent_depth = "Depth of traversal to get parent calls."
 child_depth = "Depth of traversal to get children calls."
+
+
+[list_all_modules]
+description = """
+This tool will give you a list of all the valid module names for the directory
+"""
+graph_path = "Path to the graphml file"

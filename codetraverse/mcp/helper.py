@@ -3,6 +3,7 @@ from typing import Annotated
 from pydantic import Field
 from fastmcp import FastMCP
 from functools import wraps
+import traceback
 
 
 parsed_data = None
@@ -35,6 +36,7 @@ def safe_error(func):
         try:
             return func(*args, **kwargs)
         except Exception as e:
+            print(traceback.format_exc())
             return {"status": "failure", "message": str(e)}
 
     return wrapper

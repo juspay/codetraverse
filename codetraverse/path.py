@@ -51,12 +51,16 @@ def find_path(graph_path, component, source=None, return_obj = False):
     else:
         preds = list(G.predecessors(target))
         succs = list(G.successors(target))
-
+        relations = []
         if preds:
             print(f"\nNodes with edges INTO '{target}' ({len(preds)}):")
             for p in preds:
                 rel = G.get_edge_data(p, target).get("relation", "")
-                print(f"  {p} --[{rel}]--> {target}")
+                rln = f"  {p} --[{rel}]--> {target}"
+                if return_obj:
+                    relations.append(rln)
+                else:
+                    print(rln)
         else:
             print(f"\nNo incoming edges to '{target}'.")
 
@@ -64,6 +68,13 @@ def find_path(graph_path, component, source=None, return_obj = False):
             print(f"\nNodes with edges OUT OF '{target}' ({len(succs)}):")
             for s in succs:
                 rel = G.get_edge_data(target, s).get("relation", "")
-                print(f"  {target} --[{rel}]--> {s}")
+                rln = f"  {target} --[{rel}]--> {s}"
+                if return_obj:
+                    relations.append(rln)
+                else:
+                    print(rln)
         else:
             print(f"\nNo outgoing edges from '{target}'.")
+        
+        if return_obj:
+            return relations

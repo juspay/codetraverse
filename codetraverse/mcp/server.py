@@ -31,18 +31,38 @@ def mcp_get_component_details(
     module_name: str,
     component_name: str,
 ):
-    return blackbox.getFunctionInfo(fdep_folder, module_name, component_name)
+    result = blackbox.getFunctionInfo(fdep_folder, module_name, component_name)
+    if len(result) > 0 and "function_calls" in result[0]:
+        result[0]["function_calls"] = list(
+            filter(
+                lambda x: ("name" in x and "modules" in x)
+                or ("type" in x and x["type"] == "lambda"),
+                result[0]["function_calls"],
+            )
+        )
+    return result
 
 
 @auto_mcp_tool(mcp, "get_component_children")
 @safe_error
 def mcp_get_component_children(
-    graph_path: str, module_name: str, component_name: str, depth: int = 1
+    graph_path: str,
+    module_name: str,
+    component_name: str,
+    depth: int = 1,
 ):
-    return blackbox.getFunctionChildren(graph_path, module_name, component_name, depth)
+    return list(
+        map(
+            lambda x: x[0],
+            blackbox.getFunctionChildren(
+                graph_path, module_name, component_name, depth
+            ),
+        )
+    )
 
 
 @auto_mcp_tool(mcp, "find_lca")
+@safe_error
 def mcp_find_lca(
     graph_path: str,
     module_name1: str,
@@ -56,6 +76,7 @@ def mcp_find_lca(
 
 
 @auto_mcp_tool(mcp, "get_common_children")
+@safe_error
 def mcp_get_common_children(
     graph_path: str,
     module_name1: str,
@@ -69,19 +90,38 @@ def mcp_get_common_children(
 
 
 @auto_mcp_tool(mcp, "find_dependency_path")
-def mcp_find_dependency_path(graph_path: str, from_component: str, to_component: str):
-    return find_path(graph_path, from_component, to_component, return_obj=True)
+@safe_error
+def mcp_find_dependency_path(
+    graph_path: str,
+    from_component: str,
+    to_component: str,
+):
+    result = find_path(graph_path, to_component, from_component, return_obj=True)
+    if result and len(result) > 0:
+        return {"path": " -> ".join(result)}
+    return {"output": result}
 
 
 @auto_mcp_tool(mcp, "list_components_in_module")
+@safe_error
 def mcp_list_components_in_modules(
     fdep_folder: str,
     module_name: str,
 ):
-    return blackbox.getModuleInfo(fdep_folder, module_name)
+    result = blackbox.getModuleInfo(fdep_folder, module_name)
+    return list(
+        map(
+            lambda x: {
+                "kind": x.get("kind", "NO TYPE OF COMPONENT"),
+                "name": x.get("name", "NO NAME AVAILABLE"),
+            },
+            result,
+        )
+    )
 
 
 @auto_mcp_tool(mcp, "get_surrounding_components")
+@safe_error
 def mcp_get_surrounding_components(
     graph_path: str,
     module_name: str,
@@ -89,9 +129,18 @@ def mcp_get_surrounding_components(
     parent_depth: int = 1,
     child_depth: int = 1,
 ):
-    return blackbox.getSubgraph(
+    result = blackbox.getSubgraph(
         graph_path, module_name, component_name, parent_depth, child_depth
     )
+    if result:
+        return {"nodes": list(result.nodes), "edges": [(u, v) for u, v in result.edges]}
+    return {"message": "Unable to get surrounding components"}
+
+
+@auto_mcp_tool(mcp, "list_all_modules")
+@safe_error
+def mcp_list_all_modules(graph_path: str):
+    return blackbox.getAllModules(graph_path)
 
 
 if __name__ == "__main__":
