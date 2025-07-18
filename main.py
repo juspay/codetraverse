@@ -1,3 +1,5 @@
+from codetraverse import create_fdep_data
+
 def main():
     print("Hello from codetraverse!")
 

@@ -1,19 +1,24 @@
 Metadata-Version: 2.4
 Name: codetraverse
 Version: 0.1.0
-Summary: Multi-language static code analyzer using Tree-sitter
+Summary: Add your description here
 Home-page: https://github.com/juspay/codetraverse
 Author: Juspay
 Author-email: opensource@juspay.in
-Classifier: Programming Language :: Python :: 3
-Classifier: License :: OSI Approved :: MIT License
-Classifier: Operating System :: OS Independent
 Requires-Python: >=3.8
 Description-Content-Type: text/markdown
+Requires-Dist: bs4>=0.0.2
+Requires-Dist: certifi==2025.7.9
+Requires-Dist: chardet>=5.2.0
+Requires-Dist: charset-normalizer==3.4.2
 Requires-Dist: contourpy==1.3.2
 Requires-Dist: cycler==0.12.1
+Requires-Dist: fastmcp>=2.10.5
 Requires-Dist: fonttools==4.58.0
+Requires-Dist: gitdb==4.0.12
+Requires-Dist: gitpython==3.1.44
 Requires-Dist: graphviz==0.20.3
+Requires-Dist: idna==3.10
 Requires-Dist: kiwisolver==1.4.8
 Requires-Dist: lxml==5.4.0
 Requires-Dist: matplotlib==3.10.3
@@ -25,28 +30,25 @@ Requires-Dist: pillow==11.2.1
 Requires-Dist: pyparsing==3.2.3
 Requires-Dist: python-dateutil==2.9.0.post0
 Requires-Dist: pytz==2025.2
+Requires-Dist: requests==2.32.4
 Requires-Dist: scipy==1.15.3
 Requires-Dist: six==1.17.0
+Requires-Dist: smmap==5.0.2
 Requires-Dist: tqdm==4.67.1
-Requires-Dist: tree-sitter@ git+https://github.com/tree-sitter/py-tree-sitter
+Requires-Dist: tree-sitter
+Requires-Dist: tree-sitter-go==0.23.4
 Requires-Dist: tree-sitter-haskell==0.23.1
 Requires-Dist: tree-sitter-python==0.23.6
-Requires-Dist: tree-sitter-rescript@ git+https://github.com/JignyasAnand/tree-sitter-rescript
+Requires-Dist: tree-sitter-rescript
 Requires-Dist: tree-sitter-rust==0.24.0
-Requires-Dist: tree-sitter-go==0.23.4
 Requires-Dist: tree-sitter-typescript==0.23.2
-Requires-Dist: unidiff
-Requires-Dist: GitPython
-Requires-Dist: requests
+Requires-Dist: unidiff==0.7.5
+Requires-Dist: urllib3==2.5.0
+Requires-Dist: uv==0.7.19
 Dynamic: author
 Dynamic: author-email
-Dynamic: classifier
-Dynamic: description
-Dynamic: description-content-type
 Dynamic: home-page
-Dynamic: requires-dist
 Dynamic: requires-python
-Dynamic: summary
 
 # CODETRAVERSE
 

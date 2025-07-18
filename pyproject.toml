@@ -5,11 +5,13 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "bs4>=0.0.2",
     "certifi==2025.7.9",
+    "chardet>=5.2.0",
     "charset-normalizer==3.4.2",
-    "codetraverse",
     "contourpy==1.3.2",
     "cycler==0.12.1",
+    "fastmcp>=2.10.5",
     "fonttools==4.58.0",
     "gitdb==4.0.12",
     "gitpython==3.1.44",
@@ -44,6 +46,5 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-codetraverse = { git = "https://github.com/juspay/codetraverse", rev = "0a92e2cf1c1f12fe0687ca5eef862feeab4324a7" }
 tree-sitter = { git = "https://github.com/tree-sitter/py-tree-sitter", rev = "c1bd563b330b2c2fe9894beb652bc58ae8613b0c" }
 tree-sitter-rescript = { git = "https://github.com/JignyasAnand/tree-sitter-rescript", rev = "215c56d2cc3ce4ce912dff3ea44fd4e22ac8913d" }

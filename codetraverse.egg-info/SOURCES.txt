@@ -1,14 +1,15 @@
 MANIFEST.in
 README.md
+pyproject.toml
 setup.py
 codetraverse/__init__.py
 codetraverse/main.py
 codetraverse/path.py
 codetraverse/requirements.txt
+codetraverse/server.py
 codetraverse.egg-info/PKG-INFO
 codetraverse.egg-info/SOURCES.txt
 codetraverse.egg-info/dependency_links.txt
-codetraverse.egg-info/entry_points.txt
 codetraverse.egg-info/requires.txt
 codetraverse.egg-info/top_level.txt
 codetraverse/adapters/__init__.py
@@ -18,7 +19,6 @@ codetraverse/adapters/python_adapter.py
 codetraverse/adapters/rescript_adapter.py
 codetraverse/adapters/rust_adapter.py
 codetraverse/adapters/typescript_adapter.py
-codetraverse/ast_diff/AstDifferOrchestrator.py
 codetraverse/ast_diff/Detailedchanges.py
 codetraverse/ast_diff/TSdiff.py
 codetraverse/ast_diff/__init__.py
@@ -40,5 +40,11 @@ codetraverse/extractors/rust_extractor.py
 codetraverse/extractors/typescript_extractor.py
 codetraverse/registry/__init__.py
 codetraverse/registry/extractor_registry.py
+codetraverse/utils/AstDifferOrchestrator.py
 codetraverse/utils/__init__.py
+codetraverse/utils/blackbox.py
+codetraverse/utils/graph_partitioner.py
 codetraverse/utils/networkx_graph.py
+tests/test_main.py
+tests/test_main_graph.py
+tests/test_path.py
