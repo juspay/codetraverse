@@ -6,7 +6,6 @@ codetraverse/__init__.py
 codetraverse/main.py
 codetraverse/path.py
 codetraverse/requirements.txt
-codetraverse/server.py
 codetraverse.egg-info/PKG-INFO
 codetraverse.egg-info/SOURCES.txt
 codetraverse.egg-info/dependency_links.txt
