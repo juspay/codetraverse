@@ -24,7 +24,8 @@
     "python",
     "rust",
     "go",
-    "haskell"
+    "haskell",
+    "purescript"
   ],
   "author": "Juspay",
   "license": "MIT",

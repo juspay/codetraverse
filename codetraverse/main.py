@@ -9,6 +9,8 @@ from codetraverse.adapters.rescript_adapter import adapt_rescript_components
 from codetraverse.adapters.rust_adapter import adapt_rust_components
 from codetraverse.adapters.go_adapter import adapt_go_components
 from codetraverse.adapters.typescript_adapter import adapt_typescript_components
+from codetraverse.adapters.purescript_adapter import adapt_purescript_components
+
 from functools import reduce
 import shutil
 import traceback
@@ -26,7 +28,8 @@ adapter_map = {
     "rescript": adapt_rescript_components,
     "rust": adapt_rust_components,
     "golang": adapt_go_components,
-    "typescript": adapt_typescript_components
+    "typescript": adapt_typescript_components,
+    "purescript": adapt_purescript_components
 }
 
 EXT_MAP = {
@@ -35,7 +38,8 @@ EXT_MAP = {
     "rescript": [".res"],
     "golang": [".go"],
     "rust": [".rs"],
-    "typescript": [".ts"]
+    "typescript": [".ts"],
+    "purescript": [".purs"]
 }
 
 INVERSE_EXTS = {ext: lang for lang, exts in EXT_MAP.items() for ext in exts}
@@ -92,7 +96,7 @@ def create_fdep_data(root_dir, output_base: str = "./output/fdep", graph_dir: st
     print(f"Done! All outputs in: {output_base}")
     if skip_adaptor:
         return
-    
+
     raw_funcs = load_components_without_hash(output_base)
 
     lang_comp_dict = defaultdict(list)
@@ -109,7 +113,7 @@ def create_fdep_data(root_dir, output_base: str = "./output/fdep", graph_dir: st
     unsupported_languages = [lang for lang in lang_comp_dict if lang not in adapter_map]
     if unsupported_languages:
         print(f"Skipping unsupported languages: {unsupported_languages}")
-        
+
     lang_comp_dict = {lang: comps for lang, comps in lang_comp_dict.items() if lang in adapter_map}
 
     schemas = [
@@ -132,40 +136,40 @@ def create_fdep_data(root_dir, output_base: str = "./output/fdep", graph_dir: st
 def main():
     parser = argparse.ArgumentParser(description='Create FDEP Data Tool')
     subparsers = parser.add_subparsers(dest='function', help='Available functions')
-    
+
     # create_fdep_data
     parser_create = subparsers.add_parser('create_fdep_data', help='Create FDEP data from source code')
     parser_create.add_argument('root_dir', help='Root directory to scan for source files')
-    parser_create.add_argument('--output_base', default='./output/fdep', 
+    parser_create.add_argument('--output_base', default='./output/fdep',
                               help='Output base directory (default: ./output/fdep)')
     parser_create.add_argument('--graph_dir', default='./output/graph',
                               help='Graph output directory (default: ./output/graph)')
-    parser_create.add_argument('--no_clear', action='store_true', 
+    parser_create.add_argument('--no_clear', action='store_true',
                               help='Do not clear existing output directories')
-    
+
     args = parser.parse_args()
-    
+
     if not args.function:
         parser.print_help()
         return
-    
+
     try:
         if args.function == 'create_fdep_data':
             # Convert --no_clear to clear_existing boolean
             clear_existing = not args.no_clear
-            
+
             print(f"Creating FDEP data from: {args.root_dir}")
             print(f"Output base: {args.output_base}")
             print(f"Graph directory: {args.graph_dir}")
             print(f"Clear existing: {clear_existing}")
-            
+
             create_fdep_data(
                 root_dir=args.root_dir,
                 output_base=args.output_base,
                 graph_dir=args.graph_dir,
                 clear_existing=clear_existing
             )
-            
+
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)

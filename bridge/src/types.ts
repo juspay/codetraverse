@@ -1,20 +1,20 @@
 /**
  * Supported programming languages for analysis
  */
-export type Language = 'haskell' | 'python' | 'rescript' | 'typescript' | 'rust' | 'golang';
+export type Language = 'haskell' | 'python' | 'rescript' | 'typescript' | 'rust' | 'golang' | 'purescript';
 
 /**
  * Component kinds that can be extracted from source code
  */
-export type ComponentKind = 
-  | 'function' 
-  | 'class' 
-  | 'method' 
-  | 'field' 
-  | 'variable' 
-  | 'type_alias' 
-  | 'interface' 
-  | 'enum' 
+export type ComponentKind =
+  | 'function'
+  | 'class'
+  | 'method'
+  | 'field'
+  | 'variable'
+  | 'type_alias'
+  | 'interface'
+  | 'enum'
   | 'namespace'
   | 'import';
 
@@ -151,15 +151,15 @@ export interface ImportComponent extends BaseComponent {
 /**
  * Union type of all component types
  */
-export type Component = 
-  | FunctionComponent 
-  | ClassComponent 
-  | MethodComponent 
-  | FieldComponent 
-  | VariableComponent 
-  | TypeAliasComponent 
-  | InterfaceComponent 
-  | EnumComponent 
+export type Component =
+  | FunctionComponent
+  | ClassComponent
+  | MethodComponent
+  | FieldComponent
+  | VariableComponent
+  | TypeAliasComponent
+  | InterfaceComponent
+  | EnumComponent
   | NamespaceComponent
   | ImportComponent;
 
@@ -239,17 +239,17 @@ export interface BridgeConfig {
    * Path to Python executable (default: 'python')
    */
   pythonPath?: string;
-  
+
   /**
    * Path to codetraverse module (default: 'codetraverse')
    */
   codetraversePath?: string;
-  
+
   /**
    * Timeout for Python processes in milliseconds (default: 60000)
    */
   timeout?: number;
-  
+
   /**
    * Working directory for analysis (default: process.cwd())
    */
@@ -264,17 +264,17 @@ export interface AnalysisOptions {
    * Programming language to analyze
    */
   language: Language;
-  
+
   /**
    * Output directory for component files (default: 'fdep')
    */
   outputBase?: string;
-  
+
   /**
    * Output directory for graph files (default: 'graph')
    */
   graphDir?: string;
-  
+
   /**
    * Force reanalysis even if output exists
    */

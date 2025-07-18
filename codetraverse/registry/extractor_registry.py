@@ -4,6 +4,7 @@ from codetraverse.extractors.rescript_extractor import RescriptComponentExtracto
 from codetraverse.extractors.rust_extractor import RustComponentExtractor
 from codetraverse.extractors.go_extractor import GoComponentExtractor
 from codetraverse.extractors.typescript_extractor import TypeScriptComponentExtractor
+from codetraverse.extractors.purescript_extractor import PureScriptComponentExtractor
 
 def get_extractor(language: str):
     lang = language.lower()
@@ -19,4 +20,6 @@ def get_extractor(language: str):
         return GoComponentExtractor()
     if lang == "typescript":
         return TypeScriptComponentExtractor()
+    if lang == "purescript":
+        return PureScriptComponentExtractor()
     raise ValueError(f"No extractor for language: {language}")

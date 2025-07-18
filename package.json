@@ -35,7 +35,8 @@
     "rust",
     "go",
     "haskell",
-    "rescript"
+    "rescript",
+    "purescript"
   ],
   "author": "Juspay",
   "license": "MIT",

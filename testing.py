@@ -9,9 +9,12 @@ if __name__ == "__main__":
         # root_dir="/Users/siraj.shaik/juspay/euler/euler-api-gateway",
         # root_dir="/Users/siraj.shaik/Desktop/AI_FRAMEWORKS/for_typescript/type_script_files/dense-app/mini-repo",
         # root_dir="/Users/siraj.shaik/Desktop/folder_for_xyne_code/code",
-        root_dir="/Users/siraj.shaik/Desktop/temp/hyperswitch-control-center",
+        # root_dir="/Users/siraj.shaik/Desktop/temp/hyperswitch-control-center",
+        root_dir="/Users/siraj.shaik/Desktop/purescript_integration/euler-ps",
 
-        
+
+        # output_base="fdep_typescript",
+        # graph_dir="graph_typescript",
         output_base="fdep",
         graph_dir="graph",
         clear_existing=True,

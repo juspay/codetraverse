@@ -41,6 +41,10 @@ dependencies = [
     "unidiff==0.7.5",
     "urllib3==2.5.0",
     "uv==0.7.19",
+    bs4==0.0.2,
+    chardet==5.2.0,
+    pytest==8.4.1,
+    tree_sitter_language_pack==0.9.0,
 ]
 
 [tool.uv.sources]

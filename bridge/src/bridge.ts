@@ -24,7 +24,7 @@ import { PythonRunner } from './python-runner';
 export class CodeTraverseBridge {
   private readonly runner: PythonRunner;
   private readonly supportedLanguages: Language[] = [
-    'haskell', 'python', 'rescript', 'typescript', 'rust', 'golang'
+    'haskell', 'python', 'rescript', 'typescript', 'rust', 'golang', 'purescript'
   ];
 
   constructor(config: BridgeConfig = {}) {

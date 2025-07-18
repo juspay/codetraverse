@@ -13,11 +13,11 @@ describe('CodeTraverseBridge', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    
+
     // Create a mock instance
     mockRunner = {
       runSingleFileAnalysis: jest.fn(),
-      runSchemaExtraction: jest.fn(), 
+      runSchemaExtraction: jest.fn(),
       runAnalysis: jest.fn(),
       runPathQuery: jest.fn(),
       validateSetup: jest.fn(),
@@ -26,7 +26,7 @@ describe('CodeTraverseBridge', () => {
     } as any;
 
     MockPythonRunner.mockImplementation(() => mockRunner);
-    
+
     bridge = new CodeTraverseBridge();
   });
 
@@ -138,7 +138,7 @@ describe('CodeTraverseBridge', () => {
   describe('findPath', () => {
     it('should find path between components', async () => {
       const mockOutput = 'Shortest path from \'A\' → \'B\':\n  A → B';
-      
+
       mockRunner.runPathQuery.mockResolvedValue({
         stdout: mockOutput,
         stderr: ''
@@ -168,7 +168,7 @@ describe('CodeTraverseBridge', () => {
     it('should get component neighbors', async () => {
       const mockOutput = `Nodes with edges INTO 'component' (1):
   A --[calls]--> component
-  
+
 Nodes with edges OUT OF 'component' (1):
   component --[uses]--> B`;
 
@@ -203,7 +203,7 @@ Nodes with edges OUT OF 'component' (1):
   describe('language support', () => {
     it('should return supported languages', () => {
       const languages = bridge.getSupportedLanguages();
-      expect(languages).toEqual(['haskell', 'python', 'rescript', 'typescript', 'rust', 'golang']);
+      expect(languages).toEqual(['haskell', 'python', 'rescript', 'typescript', 'rust', 'golang', 'purescript']);
     });
 
     it('should check if language is supported', () => {

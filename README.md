@@ -1,6 +1,6 @@
 # CODETRAVERSE
 
-**CODETRAVERSE** is a cross-language static code analysis tool that extracts structural components and dependencies from code repositories in Haskell, Rescript, Typescript, Rust, golang, python.
+**CODETRAVERSE** is a cross-language static code analysis tool that extracts structural components and dependencies from code repositories in Haskell, Rescript, Typescript, Rust, golang, python, purescript.
 
 Given any supported codebase, CODETRAVERSE outputs:
 - Per-file JSON summaries (`fdep/`)
@@ -12,7 +12,7 @@ This enables rich code visualization, impact analysis, dependency inspection, an
 
 ## 🚀 Features
 
-- **Multi-language Support:** Haskell, Rescript, Typescript, Rust, golang, python (easily extensible!)
+- **Multi-language Support:** Haskell, Rescript, Typescript, Rust, golang, python, purescript (easily extensible!)
 - **Scalable:** Handles arbitrarily nested folder structures
 - **Rich Outputs:**
   - JSON component files for every source file
@@ -53,7 +53,7 @@ python main.py --ROOT_DIR=/path/to/your/repo --LANGUAGE=golang
 ```
 
 - Replace `/path/to/your/repo` with the root directory of your code repository
-- Set `--LANGUAGE` to one of: `haskell`, `rescript`, `typescript`, `rust`, `golang`, `python`
+- Set `--LANGUAGE` to one of: `haskell`, `rescript`, `typescript`, `rust`, `golang`, `python`, `purescript`
 
 Outputs will be saved in:
 - `fdep/` (JSON component summaries)
@@ -65,7 +65,7 @@ Outputs will be saved in:
 | Argument | Type | Description |
 |----------|------|-------------|
 | `--ROOT_DIR` | str | Path to the root of the source code repository (required) |
-| `--LANGUAGE` | str | One of `haskell`, `rescript`, `typescript`, `rust`, `golang`, `python` (required) |
+| `--LANGUAGE` | str | One of `haskell`, `rescript`, `typescript`, `rust`, `golang`, `python`,`purescript` (required) |
 | `--OUTPUT_BASE` (opt) | str | Output directory for per-file JSONs (default: `fdep`) |
 | `--GRAPH_DIR`  (opt) | str | Output directory for the graphs (default: `graph`) |
 
@@ -171,16 +171,16 @@ NetworkX-serialized Python object for fast downstream analysis.
 
 ## ❓ FAQ
 
-**Q: Does this overwrite my source code?**  
+**Q: Does this overwrite my source code?**
 A: No. All outputs are written to `fdep/` and `graph/`.
 
-**Q: Can I use this for closed-source or private code?**  
+**Q: Can I use this for closed-source or private code?**
 A: Yes! All code runs locally.
 
-**Q: What if I want to re-run and overwrite outputs?**  
+**Q: What if I want to re-run and overwrite outputs?**
 A: Just `rm -rf fdep graph` before running again.
 
-**Q: What if I want to visualize the graph?**  
+**Q: What if I want to visualize the graph?**
 A: Use Gephi, yEd, or any tool that supports GraphML.
 
 

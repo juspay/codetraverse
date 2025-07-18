@@ -47,7 +47,7 @@ new CodeTraverseBridge(config?: BridgeConfig)
 ```typescript
 interface BridgeConfig {
   pythonPath?: string;        // Path to Python executable (default: 'python')
-  codetraversePath?: string;  // Path to CodeTraverse module (default: 'codetraverse') 
+  codetraversePath?: string;  // Path to CodeTraverse module (default: 'codetraverse')
   timeout?: number;           // Process timeout in ms (default: 60000)
   workingDirectory?: string;  // Working directory (default: process.cwd())
 }
@@ -61,7 +61,7 @@ Analyze a single source code file and return extracted components.
 
 **Parameters:**
 - `filePath`: Absolute path to the source file
-- `language`: Programming language (`'typescript'`, `'python'`, `'rust'`, `'golang'`, `'haskell'`, `'rescript'`)
+- `language`: Programming language (`'typescript'`, `'python'`, `'rust'`, `'golang'`, `'haskell'`, `'rescript'`,`'purescript'`)
 
 **Returns:** Array of extracted components (functions, classes, types, etc.)
 
@@ -231,17 +231,17 @@ import { CodeTraverseBridge } from '@codetraverse/bridge';
 
 export function activate(context: vscode.ExtensionContext) {
   const bridge = new CodeTraverseBridge();
-  
+
   // Register command to analyze current file
   const analyzeCommand = vscode.commands.registerCommand(
     'extension.analyzeCurrentFile',
     async () => {
       const editor = vscode.window.activeTextEditor;
       if (!editor) return;
-      
+
       const filePath = editor.document.fileName;
       const language = getLanguageFromExtension(filePath);
-      
+
       try {
         const components = await bridge.analyzeFile(filePath, language);
         // Display results in UI
@@ -251,7 +251,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }
   );
-  
+
   context.subscriptions.push(analyzeCommand);
 }
 ```
@@ -266,11 +266,12 @@ See the [examples directory](./examples/) for complete usage examples:
 ## Supported Languages
 
 - TypeScript (`.ts`)
-- Python (`.py`)  
+- Python (`.py`)
 - Rust (`.rs`)
 - Go (`.go`)
 - Haskell (`.hs`)
 - ReScript (`.res`)
+- Purescript (`.purs`)
 
 ## Performance Notes
 
