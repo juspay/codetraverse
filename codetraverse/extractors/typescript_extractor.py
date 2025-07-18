@@ -517,8 +517,12 @@ class TypeScriptComponentExtractor(ComponentExtractor):
         calls = []
 
         def visit(n):
-            if n.type == 'call_expression':
-                fn = n.child_by_field_name('function')
+            if n.type == 'call_expression' or n.type == 'new_expression':
+                if n.type == 'call_expression':
+                    fn = n.child_by_field_name('function')
+                else:
+                    fn = n.child_by_field_name('constructor')
+                
                 if fn is None:
                     return
 
@@ -568,9 +572,11 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                         callee_id = f"{source_file}::{base_name}"
                     else:
                         callee_id = f"{file_path}::{base_name}"
+
+                    call_name = f"new {callee_text}" if n.type == 'new_expression' else callee_text
                     if "./" in callee_id:
                         calls.append({
-                            "name": callee_text,
+                            "name": call_name,
                             "base_name": base_name,
                             "resolved_callee": callee_id,
                         })
@@ -589,7 +595,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                         else:
                             print(f"typescript issue No tsconfig.json found up to {root_dir!r}")
                         calls.append({
-                            "name": callee_text,
+                            "name": call_name,
                             "base_name": base_name,
                             "resolved_callee": absolute_callee_id if 'absolute_callee_id' in locals() else callee_id,
                         })
