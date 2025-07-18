@@ -28,7 +28,7 @@ def format_path(G, node_list):
 def find_from_single_source(G, source, target):
     return nx.shortest_path(G, source=source, target=target)
 
-def find_path(graph_path, component, source=None):
+def find_path(graph_path, component, source=None, return_obj = False):
     G = load_graph(graph_path)
     target = component
     source = source
@@ -43,18 +43,24 @@ def find_path(graph_path, component, source=None):
             return
         try:
             path = find_from_single_source(G, source, target)
+            if return_obj:
+                return path
             print("  " + format_path(G, path))
         except nx.NetworkXNoPath:
             print(f"No path found from '{source}' to '{target}'.")
     else:
         preds = list(G.predecessors(target))
         succs = list(G.successors(target))
-
+        relations = []
         if preds:
             print(f"\nNodes with edges INTO '{target}' ({len(preds)}):")
             for p in preds:
                 rel = G.get_edge_data(p, target).get("relation", "")
-                print(f"  {p} --[{rel}]--> {target}")
+                rln = f"  {p} --[{rel}]--> {target}"
+                if return_obj:
+                    relations.append(rln)
+                else:
+                    print(rln)
         else:
             print(f"\nNo incoming edges to '{target}'.")
 
@@ -62,6 +68,13 @@ def find_path(graph_path, component, source=None):
             print(f"\nNodes with edges OUT OF '{target}' ({len(succs)}):")
             for s in succs:
                 rel = G.get_edge_data(target, s).get("relation", "")
-                print(f"  {target} --[{rel}]--> {s}")
+                rln = f"  {target} --[{rel}]--> {s}"
+                if return_obj:
+                    relations.append(rln)
+                else:
+                    print(rln)
         else:
             print(f"\nNo outgoing edges from '{target}'.")
+        
+        if return_obj:
+            return relations

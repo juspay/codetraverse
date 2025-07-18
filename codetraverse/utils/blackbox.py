@@ -9,70 +9,79 @@ import sys
 import argparse 
 import traceback
 
-def getModuleInfo(fdep_folder: str, module_name: str) -> List[Dict[str, Any]]:
-    
-    def normalize_path(path: str) -> str:
-        if not path:
-            return ""
-        path = os.path.splitext(path)[0]
-        return path.replace('\\', '/').strip('/')
-    
-    def generate_patterns(module_name: str) -> List[str]:
-        """Generate patterns for the exact module path."""
-        norm = normalize_path(module_name)
-        return [norm]
+def getAllModules(graph_path: str) -> List[str]:
+    root = "/".join(graph_path.split("/")[:2])
+    G = load_graph(graph_path)
+    res = set()
+    for node in G.nodes:
+        if "file_path" in G.nodes[node] and root in G.nodes[node]["file_path"]:
+            res.add(node.split("::")[0])
+    return list(res)
 
-    def matches_pattern(module_path: str, patterns: List[str]) -> bool:
-        norm_path = normalize_path(module_path)
-        
-        for pattern in patterns:
-            norm_pattern = normalize_path(pattern)
-            if norm_path == norm_pattern:
-                return True
-        return False
-    
-    def extract_components(data, patterns: List[str]) -> List[Dict[str, Any]]:
-        components = []
-        
-        def traverse(obj):
-            if isinstance(obj, dict):
-                if 'module' in obj and matches_pattern(obj['module'], patterns):
-                    components.append(obj)
-                for value in obj.values():
-                    traverse(value)
-            elif isinstance(obj, list):
-                for item in obj:
-                    traverse(item)
-        
-        traverse(data)
-        return components
-    
-    if not os.path.exists(fdep_folder):
-        return []
-    
-    patterns = generate_patterns(module_name)
-    all_components = []
-    
+def getModuleInfo(fdep_folder: str, module_name: str) -> List[Dict[str, Any]]:
+    if not os.path.isdir(fdep_folder):
+        return {
+            "error": True,
+            "message": f"Folder doesn't exist: {fdep_folder}",
+            "components": [],
+        }
+
+    json_files = []
     for root, _, files in os.walk(fdep_folder):
         for file in files:
-            if file.endswith('.json'):
-                try:
-                    with open(os.path.join(root, file), 'r', encoding='utf-8') as f:
-                        data = json.load(f)
-                    all_components.extend(extract_components(data, patterns))
-                except (json.JSONDecodeError, FileNotFoundError, IOError):
-                    continue
-    
-    seen = set()
-    unique_components = []
-    for comp in all_components:
-        key = (comp.get('kind'), comp.get('name'), comp.get('full_component_path'), 
-               comp.get('start_line'), comp.get('end_line'), comp.get('file_path'))
-        if key not in seen:
-            seen.add(key)
-            unique_components.append(comp)
-    
-    return unique_components
+            if file.endswith(".json"):
+                json_files.append(os.path.join(root, file))
+
+    exact_matches = []
+    for file_path in json_files:
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    for item in data:
+                        if isinstance(item, dict) and item.get("module") == module_name:
+                            if "name" in item:
+                                exact_matches.append(item)
+        except (json.JSONDecodeError, IOError) as e:
+            print(f"Warning: Could not read or parse {file_path}: {e}")
+            continue
+
+    if exact_matches:
+        unique_matches = []
+        seen = set()
+        for match in exact_matches:
+            representation = json.dumps(match, sort_keys=True)
+            if representation not in seen:
+                seen.add(representation)
+                unique_matches.append(match)
+        return sorted(unique_matches, key=lambda x: x.get("name", ""))
+
+    lazy_matches = []
+    for file_path in json_files:
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    for item in data:
+                        if isinstance(item, dict) and module_name in item.get(
+                            "module", ""
+                        ):
+                            if "name" in item:
+                                lazy_matches.append(item)
+        except (json.JSONDecodeError, IOError):
+            continue
+
+    if lazy_matches:
+        unique_matches = []
+        seen = set()
+        for match in lazy_matches:
+            representation = json.dumps(match, sort_keys=True)
+            if representation not in seen:
+                seen.add(representation)
+                unique_matches.append(match)
+        return sorted(unique_matches, key=lambda x: x.get("name", ""))
+
+    return []
 
 def debug_getModuleInfo(fdep_folder: str, module_name: str) -> List[Dict[str, Any]]:
     print(f"🔍 Searching for: '{module_name}' in {fdep_folder}")
