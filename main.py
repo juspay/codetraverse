@@ -1,7 +1,8 @@
-from codetraverse import create_fdep_data
+from codetraverse.mcp.server import mcp
 
 def main():
-    print("Hello from codetraverse!")
+    # defaults to http://localhost:8000/sse
+    mcp.run(transport="sse")
 
 
 if __name__ == "__main__":

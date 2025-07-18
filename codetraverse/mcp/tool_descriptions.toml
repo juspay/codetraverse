@@ -1,0 +1,96 @@
+[tool_description]
+instructions = """
+This server provides code extraction and code analysis tools
+"""
+
+[create_fdep_data]
+description = """This tool created fdep data for the desired directory"""
+root_dir = "The directory for which fdep data should be created. This should always be the absolute path"
+fdep_output_path = "The output path in which fdep data should be stored. This always be the absolute path."
+graph_output_path = "The output path in which graphs should be stored. This should always be the absolute path"
+
+
+[get_component_details]
+description = """
+This tool will give you only the code that is relavant to the requried component.
+Some use cases are,
+    - When you want to get the code of a component without fully reading the file.
+    - When you want to iteratively get only the code of the required components without reading multiple files.
+"""
+fdep_folder = "Path to the fdep folder"
+module_name = "It should be the module name of the file in which the component is present. Follow the rules for moduleName specified above."
+component_name = "Name of the component for which you want to extract the details."
+
+
+[get_component_children]
+description = """
+This tool lists the children calls of a component. i.e., It will list all the functions the given component will call.
+Some use cases are,
+    - When you want to know what all functions a given component is dependant on.
+"""
+graph_path = "Path to the graphml file"
+module_name = "It should be the module name of the file in which the component is present. Follow the rules for moduleName specified above."
+component_name = "The component for which you want to extract the children functions."
+depth = "The depth of traversal."
+
+
+[find_lca]
+description = """
+This tool will find shared callers (ancestors) of two components.
+Some use cases are,
+    - When you want to find the common parent between two components.   
+"""
+graph_path = "Path to the graphml file"
+module_name1 = "It should be the module name of the file in which the component is present. Follow the rules for moduleName specified above."
+component_name1 = "Name of the component in Module1."
+module_name2 = "It should be the module name of the file in which the component is present. Follow the rules for moduleName specified above."
+component_name2 = "Name of the component in Module2."
+
+
+[get_common_children]
+description = """
+Find shared callees (descendants) of two components.
+Some use cases are,
+    - When you want to find the common children calls between two components.
+"""
+graph_path = "Path to the graphml file"
+module_name1 = "It should be the module name of the file in which the component is present. Follow the rules for moduleName specified above."
+component_name1 = "Name of the component in Module1."
+module_name2 = "It should be the module name of the file in which the component is present. Follow the rules for moduleName specified above."
+component_name2 = "Name of the component in Module2."
+
+
+[find_dependency_path]
+description = """
+This tool will give you a list of possible paths from one component to another component.
+Some use cases are,
+    - When you want to know all the possible paths from one component to another.
+"""
+graph_path = "Path to the graphml file"
+from_component = "The source component path. It should be in the format - module_name::component_name. For example, `App.Routes::source`"
+to_component = "The destination component path. It should be in the format - module_name::component_name. For example, `App.Routes::destination`"
+
+
+[list_components_in_module]
+description = """
+This tool will give you all the parent calls of a component.
+The default depth is 1, so if a component A calls B, and you run this tool on component B, the output will be component A.
+i.e., List direct incoming calls (“parents”) of a component.  
+Some use cases are,
+    - When you want to know which component calls the current component.
+"""
+fdep_folder = "Path to the fdep folder"
+module_name = "It should be the module name of the file in which the component is present. Follow the rules for moduleName specified above."
+
+[get_surrounding_components]
+description = """
+This tool will give a list of all related components.
+Its output will contain a list of all parent and child components up until a certain depth.
+Some use cases are,
+    - When you want to know all the related components.
+"""
+graph_path = "Path to the graphml file"
+module_name = "It should be the module name of the file in which the component is present. Follow the rules for moduleName specified above."
+component_name = "The component for which you want to extract the parent and child calls for."
+parent_depth = "Depth of traversal to get parent calls."
+child_depth = "Depth of traversal to get children calls."

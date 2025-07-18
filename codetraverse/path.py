@@ -28,7 +28,7 @@ def format_path(G, node_list):
 def find_from_single_source(G, source, target):
     return nx.shortest_path(G, source=source, target=target)
 
-def find_path(graph_path, component, source=None):
+def find_path(graph_path, component, source=None, return_obj = False):
     G = load_graph(graph_path)
     target = component
     source = source
@@ -43,6 +43,8 @@ def find_path(graph_path, component, source=None):
             return
         try:
             path = find_from_single_source(G, source, target)
+            if return_obj:
+                return path
             print("  " + format_path(G, path))
         except nx.NetworkXNoPath:
             print(f"No path found from '{source}' to '{target}'.")
