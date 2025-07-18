@@ -53,7 +53,8 @@ def adapt_rescript_components(raw_components):
             "start": comp.get("start_line", 0),
             "end": comp.get("end_line", 0),
             "code": comp.get("code", ""),
-            "function_calls": comp.get("function_calls", [])
+            "function_calls": comp.get("function_calls", []),
+            "file_path": comp.get("file_path", "")
         })
 
         # 3b) For each bare function‐call, attempt to fan-out to any FQ whose module matches

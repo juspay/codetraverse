@@ -14,6 +14,7 @@ class RescriptComponentExtractor(ComponentExtractor):
         self.all_components = []
         self.source_bytes = b""
         self.file_module_name = None
+        self.file_path = None
 
     def _get_node_text(self, node: Node) -> str:
         return self.source_bytes[node.start_byte:node.end_byte].decode(errors="ignore")
@@ -35,6 +36,7 @@ class RescriptComponentExtractor(ComponentExtractor):
 
     def process_file(self, file_path: str):
         self.file_module_name = os.path.splitext(os.path.basename(file_path))[0]
+        self.file_path = file_path
 
         with open(file_path, 'r', encoding='utf-8') as f:
             source_code = f.read()
@@ -55,9 +57,11 @@ class RescriptComponentExtractor(ComponentExtractor):
                         for c in comp_or_list:
                             if c:
                                 c["file_name"] = self.file_module_name
+                                c["file_path"] = self.file_path
                                 self.all_components.append(c)
                     else:
                         comp_or_list["file_name"] = self.file_module_name
+                        comp_or_list["file_path"] = self.file_path
                         self.all_components.append(comp_or_list)
 
             for child in node.named_children:
