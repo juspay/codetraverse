@@ -401,6 +401,16 @@ class TypeScriptComponentExtractor(ComponentExtractor):
 
             if "module" not in comp or not comp["module"] or 2 == len(comp["file_path"].split(".")):
                 comp["module"] = comp["file_path"]
+            for i in comp.get("function_calls", []): 
+                # print(f"[Log] Got the i component as {i}") 
+                resolve_callee_id = i.get("resolved_callee", "")
+                if not resolve_callee_id:
+                    continue
+                callee_module = resolve_callee_id.split("::")[0].split("/")[-1]
+                if callee_module == comp["module"].split("/")[-1]:
+                    # print(f"[Log] Updating resolved_callee for {i['resolved_callee']} with module {comp['module']}::{i.get('name', '')}")
+                    i["resolved_callee"] = f"{comp['module']}::{i.get('name', '')}"
+                        
 
 
 
