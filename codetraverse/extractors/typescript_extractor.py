@@ -520,11 +520,29 @@ class TypeScriptComponentExtractor(ComponentExtractor):
             if n.type == 'call_expression' or n.type == 'new_expression':
                 if n.type == 'call_expression':
                     fn = n.child_by_field_name('function')
-                else:
+                else: # new_expression
                     fn = n.child_by_field_name('constructor')
                 
                 if fn is None:
                     return
+
+                args_node = n.child_by_field_name('arguments')
+                arguments = []
+                if args_node:
+                    for arg in args_node.children:
+                        if arg.type not in (',', '(', ')'):
+                            arg_details = {
+                                "name": self.get_text(arg, code),
+                                "kind": arg.type,
+                            }
+                            if arg.type == 'member_expression':
+                                object_node = arg.child_by_field_name("object")
+                                property_node = arg.child_by_field_name("property")
+                                if object_node:
+                                    arg_details['object'] = self.get_text(object_node, code)
+                                if property_node:
+                                    arg_details['property'] = self.get_text(property_node, code)
+                            arguments.append(arg_details)
 
                 if fn.type == "member_expression":
                     object_node = fn.child_by_field_name("object")
@@ -541,7 +559,8 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                             calls.append({
                                 "name": f"super.{method_name}",
                                 "base_name": method_name,
-                                "resolved_callee": callee_id, # there is no such intance in the codebase
+                                "resolved_callee": callee_id,
+                                "arguments": arguments
                             })
                         elif object_node.type == "this":
                             if class_name:
@@ -552,6 +571,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                                 "name": f"this.{method_name}",
                                 "base_name": method_name,
                                 "resolved_callee": callee_id,
+                                "arguments": arguments
                             })
                         elif object_node.type == "identifier":
                             obj_name = self.get_text(object_node, code)
@@ -560,6 +580,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                                 "name": f"{obj_name}.{method_name}",
                                 "base_name": method_name,
                                 "resolved_callee": callee_id,
+                                "arguments": arguments
                             })
 
                 elif fn.type == "identifier":
@@ -579,6 +600,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                             "name": call_name,
                             "base_name": base_name,
                             "resolved_callee": callee_id,
+                            "arguments": arguments
                         })
                     else: 
                         root_dir = os.environ.get("ROOT_DIR", "") 
@@ -598,6 +620,7 @@ class TypeScriptComponentExtractor(ComponentExtractor):
                             "name": call_name,
                             "base_name": base_name,
                             "resolved_callee": absolute_callee_id if 'absolute_callee_id' in locals() else callee_id,
+                            "arguments": arguments
                         })
 
 
