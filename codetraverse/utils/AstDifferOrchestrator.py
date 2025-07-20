@@ -86,8 +86,10 @@ def generate_ast_diff(
     to_branch: str = None,
     from_commit: str = None,
     to_commit: str = None,
-):
+    write_to_file: bool = True,
+) -> List[Dict[str, Any]]:
     orchestrator = AstDiffOrchestrator()
+    all_changes = []
     try:
         # --- 1. Determine Commits ---
         if not from_commit or not to_commit:
@@ -109,8 +111,7 @@ def generate_ast_diff(
 
         # --- 2. Get Changed Files ---
         changed_files = git_provider.get_changed_files_from_commits(to_commit, from_commit)
-        all_changes = []
-
+        
         print(changed_files)
         # --- 3. Process Files ---
         for category in ["modified", "added", "deleted"]:
@@ -138,15 +139,72 @@ def generate_ast_diff(
                     all_changes.append(changes.to_dict())
                 if not quiet: print(f"PROCESSED {category.upper()} FILE ({file_path})")
 
-        # --- 4. Write Output File ---
-        os.makedirs(output_dir, exist_ok=True)
-        final_output_path = os.path.join(output_dir, "detailed_changes.json")
-        with open(final_output_path, "w") as f: json.dump(all_changes, f, indent=2)
-        print(f"Changes written to - {final_output_path}")
+        # --- 4. Write Output File (Optional) ---
+        if write_to_file:
+            os.makedirs(output_dir, exist_ok=True)
+            final_output_path = os.path.join(output_dir, "detailed_changes.json")
+            with open(final_output_path, "w") as f: json.dump(all_changes, f, indent=2)
+            print(f"Changes written to - {final_output_path}")
+        
+        return all_changes
 
     except Exception as e:
         print(f"ERROR - {e}")
         traceback.print_exc()
+        return [] # Return empty list on error
+
+
+def generate_ast_diff_for_commits(
+    from_commit: str,
+    to_commit: str,
+    repo_path: str,
+    output_dir: str = "./ast_diff_output",
+    quiet: bool = False,
+    write_to_file: bool = True,
+) -> List[Dict[str, Any]]:
+    """
+    A simplified wrapper to generate an AST diff between two specific commits in a local repository.
+
+    Args:
+        from_commit (str): The older commit hash.
+        to_commit (str): The newer commit hash.
+        repo_path (str): The file path to the local Git repository.
+        output_dir (str, optional): Directory to save the output. Defaults to "./ast_diff_output".
+        quiet (bool, optional): Suppress status messages. Defaults to False.
+        write_to_file (bool, optional): Whether to write the results to a JSON file. Defaults to True.
+    
+    Returns:
+        List[Dict[str, Any]]: A list of dictionaries, where each dictionary represents the changes for a file.
+    """
+    print(f"--- Starting AST Diff for Commits in Repo: {repo_path} ---")
+    try:
+        # Initialize the GitWrapper for the local repository
+        git_provider = GitWrapper(repo_path=repo_path)
+
+        # Call the main diff generation function and capture the returned changes
+        all_changes = generate_ast_diff(
+            git_provider=git_provider,
+            from_commit=from_commit,
+            to_commit=to_commit,
+            output_dir=output_dir,
+            quiet=quiet,
+            write_to_file=write_to_file
+        )
+        print("--- AST Diff Generation Finished ---")
+        if write_to_file:
+            final_output_path = os.path.join(output_dir, "detailed_changes.json")
+            print(f"INFO: The detailed AST diff has been saved to '{final_output_path}'")
+        
+        print("INFO: The function is returning the following summary:")
+        print(json.dumps(all_changes, indent=2))
+        
+        return all_changes
+
+    except Exception as e:
+        print(f"FATAL ERROR during AST diff generation: {e}", file=sys.stderr)
+        traceback.print_exc()
+        return []
+
 
 def run_ast_diff_from_config(config: Dict[str, Any]):
     print("--- Starting AST Diff Generation from Config ---")
@@ -273,6 +331,34 @@ def main():
         sys.exit(1)
 
 if __name__ == "__main__":
+    # main() # We keep the original main function for CLI usage
+
+    # --- EXAMPLE: How to use the new simplified function ---
+    #
+    # To run this, you would uncomment the following lines and
+    # replace the placeholder values with your actual repository
+    # path and commit hashes.
+    
+    # import os
+    #
+    # print("\n--- RUNNING EXAMPLE: Simplified Diff for Two Commits ---")
+    #
+    # # 1. Define your repository path and commit hashes
+    # my_repo_path = os.getcwd() # Or provide a specific path like "/path/to/your/repo"
+    # older_commit = "PASTE_OLDER_COMMIT_HASH"
+    # newer_commit = "PASTE_NEWER_COMMIT_HASH"
+    #
+    # # 2. Call the function
+    # if "PASTE" not in older_commit and "PASTE" not in newer_commit:
+    #      generate_ast_diff_for_commits(
+    #          from_commit=older_commit,
+    #          to_commit=newer_commit,
+    #          repo_path=my_repo_path
+    #      )
+    # else:
+    #      print("Please update the placeholder commit hashes in the script to run the example.")
+
+    # The original main function is called to preserve command-line functionality
     main()
         
 # if __name__ == "__main__":
