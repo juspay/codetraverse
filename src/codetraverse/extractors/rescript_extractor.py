@@ -224,7 +224,7 @@ class RescriptComponentExtractor(ComponentExtractor):
             "start_line": start_line,
             "end_line": end_line,
             "code": code,
-            "import_map": self.import_map, 
+            # "import_map": self.import_map, 
             "elements": children, 
             "function_calls": func_calls,
             # "literals": lits,
@@ -463,7 +463,7 @@ class RescriptComponentExtractor(ComponentExtractor):
             "function_calls": final_unique_calls, 
             "local_variables": local_vars, 
             "jsx_elements": jsx_elems, 
-            "import_map": self.import_map 
+            # "import_map": self.import_map 
         }
         
         if kind == "function":
