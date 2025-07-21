@@ -7,10 +7,14 @@ def extract_id(comp):
     If comp["module_name"] is present, use it; otherwise fall back to comp["file_name"].
     The raw “name” may sometimes be missing (e.g. for JSX), so we also fall back to comp["tag_name"].
     """
+
     module_part = comp.get("module_name") or comp.get("file_name") or "<anonymous>"
     name_part = comp.get("name") or comp.get("tag_name") or "<unknown>"
-    return f"{module_part}::{name_part}"
-
+    if comp.get("kind") == "module":
+        file_name = comp.get("file_name")
+        return f"{file_name}.{module_part}::{name_part}"
+    else:
+        return f"{module_part}::{name_part}"
 
 def adapt_rescript_components(raw_components):
     """
@@ -42,10 +46,10 @@ def adapt_rescript_components(raw_components):
     for comp in tqdm(raw_components, desc="Adapting ReScript components"):
         kind = comp.get("kind")
         # Only register top‐level functions, variables, modules
-        if kind not in ("function", "variable", "module"):
+        if kind not in ("function", "module"):
             continue
-
-        fq = extract_id(comp)
+        
+        fq = extract_id(comp)       
         # 3a) Emit a single node‐entry
         nodes.append({
             "id": fq,
