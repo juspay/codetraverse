@@ -224,10 +224,10 @@ class RescriptComponentExtractor(ComponentExtractor):
             "start_line": start_line,
             "end_line": end_line,
             "code": code,
-            "import_map": self.import_map, 
+            # "import_map": self.import_map, 
             "elements": children, 
             "function_calls": func_calls,
-            "literals": lits,
+            # "literals": lits,
         }
         comp["module_name"] = mod_name 
         comp["file_name"] = self.file_module_name
@@ -290,7 +290,7 @@ class RescriptComponentExtractor(ComponentExtractor):
             "fields": fields,
             "variants": variants,
             "function_calls": func_calls,
-            "literals": lits
+            # "literals": lits
         }
         comp["module_name"] = self._find_enclosing_module_name(node)
         comp["file_name"] = self.file_module_name
@@ -321,7 +321,7 @@ class RescriptComponentExtractor(ComponentExtractor):
             "type": type_str,
             "code": code,
             "function_calls": func_calls,
-            "literals": lits
+            # "literals": lits
         }
         comp["module_name"] = self._find_enclosing_module_name(node)
         comp["file_name"] = self.file_module_name
@@ -459,11 +459,11 @@ class RescriptComponentExtractor(ComponentExtractor):
             "start_line": start,
             "end_line": end,
             "code": code,
-            "literals": lits, 
+            # "literals": lits, 
             "function_calls": final_unique_calls, 
             "local_variables": local_vars, 
             "jsx_elements": jsx_elems, 
-            "import_map": self.import_map 
+            # "import_map": self.import_map 
         }
         
         if kind == "function":
@@ -551,7 +551,7 @@ class RescriptComponentExtractor(ComponentExtractor):
             "code": code,
             "attributes": attributes,
             "function_calls": func_calls_within_jsx, 
-            "literals": lits_within_jsx
+            # "literals": lits_within_jsx
         }
         comp["module_name"] = self._find_enclosing_module_name(node)
         comp["file_name"] = self.file_module_name
