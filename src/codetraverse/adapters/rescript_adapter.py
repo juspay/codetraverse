@@ -62,13 +62,13 @@ def adapt_rescript_components(raw_components):
                 target_bare = raw_call.get("name") or raw_call.get("tag_name") or ""
             else:
                 target_bare = str(raw_call)
-                
             target_bare = target_bare.strip()
             if not target_bare:
                 continue 
 
             fq = extract_id(comp)    
             
+            #components that was not inside the curr file
             if target_bare + "::make" in created_node: 
                 edges.append({
                     "from":     fq,
@@ -76,10 +76,19 @@ def adapt_rescript_components(raw_components):
                     "relation": "calls"
                 })
             
+            #functions that was inside the curr file 
             if comp["file_name"] + "::" + target_bare in created_node:
                 edges.append({
                     "from":     fq,
-                    "to":      comp["file_name"] + "::" + target_bare,
+                    "to":       comp["file_name"] + "::" + target_bare,
+                    "relation": "calls"
+                })
+            
+            #components that was inside the curr file 
+            if comp["file_name"] + "." + target_bare + "::make" in created_node:
+                edges.append({
+                    "from":     fq,
+                    "to":       comp["file_name"] + "." + target_bare + "::make",
                     "relation": "calls"
                 })
 
