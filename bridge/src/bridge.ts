@@ -200,6 +200,17 @@ export class CodeTraverseBridge {
   }
 
   /**
+   * Get all valid modules from graph
+   */
+
+  async getAllModules(
+    graphPath: string,
+  ): Promise<string[]> {
+    const { stdout } = await this.runner.runBlackbox("getAllModules", [graphPath]);
+    return JSON.parse(stdout) as string[];
+  }
+
+  /**
    * get the parents of a component based on the dept provided
    */
   async getFunctionParents(
@@ -448,7 +459,11 @@ export class CodeTraverseBridge {
   }
 }
 
-// (async () => {
-//   const obj = new CodeTraverseBridge({ pythonPath: "/usr/local/bin/python3.10", codetraversePath: "/Users/jignyas.s/Desktop/Juspay/code/node_modules/codetraverse-bridge-jp" })
-//   console.log(await obj.findPath("/Users/jignyas.s/Desktop/Juspay/codegen2/codegen/xyne_tmp/graph/repo_function_calls.graphml", "App.Routes::formatGatewayDoc", "Database.GptResponse::findOneGptResponseByCategoryDBE"))
-// })();
+(async () => {
+  // const obj = new CodeTraverseBridge({ pythonPath: "/usr/local/bin/python3.10", codetraversePath: "/Users/jignyas.s/Desktop/Juspay/code/node_modules/codetraverse-bridge-jp" })
+  // const obj = new CodeTraverseBridge({ pythonPath: "/usr/local/bin/python3.10", codetraversePath: "/Users/jignyas.s/Desktop/Juspay/codetraverse/" })
+  // console.log(await obj.findPath("/Users/jignyas.s/Desktop/Juspay/codegen2/codegen/xyne_tmp/graph/repo_function_calls.graphml", "App.Routes::formatGatewayDoc", "Database.GptResponse::findOneGptResponseByCategoryDBE"))
+  // console.log(await obj.getAllModules())
+  // await obj.createFdepData("/Users/jignyas.s/Desktop/Juspay/jaf/jaf", "/Users/jignyas.s/Desktop/Juspay/codetraverse/output/fdep", "/Users/jignyas.s/Desktop/Juspay/codetraverse/output/graph");
+  // console.log(await obj.getAllModules("/Users/jignyas.s/Desktop/Juspay/codetraverse/output/graph/repo_function_calls.graphml"));
+})();
