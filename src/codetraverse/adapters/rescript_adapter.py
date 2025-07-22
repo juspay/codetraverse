@@ -22,21 +22,12 @@ def adapt_rescript_components(raw_components):
     """
     nodes = []
     edges = []
-    # module_to_fq_map = {}
-    # for comp in raw_components:
-    #     if comp.get("kind") == "function": 
-    #         funprefix = comp["file_name"] + "." + comp["module_name"] if comp.get("module_name") else comp["file_name"] 
-    #         modprefix = comp["module_name"] if comp.get("module_name") else comp["file_name"]
-    #         if modprefix + "::make" not in module_to_fq_map:
-    #             module_to_fq_map[modprefix + "::make"] =[]
-    #         module_to_fq_map[modprefix + "::make"].append(funprefix + "::" + comp["name"])
-
-    # 3) Now iterate once over raw_components (with a progress bar)
     created_node = set()
-    for comp in tqdm(raw_components, desc="Adapting ReScript components"):
+    for comp in tqdm(raw_components, desc="Creating Nodes in a Graph"):
         kind = comp.get("kind")
-        # Only register top‐level functions, variables, modules
-        if kind not in ("function", "module"):
+        file_path = comp.get("file_path")
+
+        if kind not in ("function", "module") or "/node_modules/" in file_path:
             continue 
         
         if comp.get("name") == "make" and kind == "module":
@@ -44,7 +35,7 @@ def adapt_rescript_components(raw_components):
         
         fq = extract_id(comp) 
         created_node.add(fq)   
-        # 3a) Emit a single node‐entry
+
         nodes.append({
             "id": fq,
             "category": kind,
@@ -55,24 +46,23 @@ def adapt_rescript_components(raw_components):
             "file_path": comp.get("file_path", "")
         })
 
-    for comp in tqdm(raw_components, desc="Connecting components"):
+    for comp in tqdm(raw_components, desc="Connecting Nodes in a Graph"):
 
         kind = comp.get("kind")
-        # Only register top‐level functions, variables, modules
-        if kind not in ("function", "module"):
+        file_path = comp.get("file_path")
+        if kind not in ("function", "module")  or "/node_modules/" in file_path:
             continue 
         
         if comp.get("name") == "make" and  kind == "module":
             continue
 
-        # 3b) For each bare function‐call, attempt to fan-out to any FQ whose module matches
         for raw_call in comp.get("function_calls", []):
-            # raw_call may be a dict or string; extract a bare name
             if isinstance(raw_call, dict):
                 print("i saw a dict:.......",comp["name"], comp["kind"], comp["file_path"])
                 target_bare = raw_call.get("name") or raw_call.get("tag_name") or ""
             else:
                 target_bare = str(raw_call)
+                
             target_bare = target_bare.strip()
             if not target_bare:
                 continue 
@@ -93,7 +83,5 @@ def adapt_rescript_components(raw_components):
                     "relation": "calls"
                 })
 
-    print(f"Created {len(created_node)} nodes and {len(edges)} edges (functions/variables/modules only)")
-    fn_edges = [e for e in edges if e["relation"] == "calls"]
-    print(f"Function‐call edges: {len(fn_edges)}")
+    print(f"Created {len(created_node)} nodes and {len(edges)} edges (functions/modules only)")
     return {"nodes": nodes, "edges": edges}
