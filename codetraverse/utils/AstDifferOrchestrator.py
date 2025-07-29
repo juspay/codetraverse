@@ -4,15 +4,14 @@ import traceback
 from typing import Dict, List, Optional, Union, Any
 from tree_sitter import Language, Parser, Node
 import tree_sitter_rescript
-import tree_sitter_haskell
-import tree_sitter_typescript
-import tree_sitter_go
-import tree_sitter_rust
+from tree_sitter_language_pack import get_language
 from codetraverse.ast_diff.haskelldiff import HaskellFileDiff
 from codetraverse.ast_diff.resdiffer import RescriptFileDiff
 from codetraverse.ast_diff.TSdiff import TypeScriptFileDiff
 from codetraverse.ast_diff.godiff import GoFileDiff
 from codetraverse.ast_diff.rustdiff import RustFileDiff
+from codetraverse.ast_diff.purescriptdiff import PureScriptFileDiff
+from codetraverse.ast_diff.pythondiff import PythonFileDiff
 from codetraverse.ast_diff.gitwrapper import GitWrapper
 from codetraverse.ast_diff.bitbucket import BitBucket
 from git import Repo
@@ -28,6 +27,8 @@ class AstDiffOrchestrator:
         "typescript": ['.ts', '.tsx'],
         "go":         ['.go'],
         "rust":       ['.rs'],
+        "python":     ['.py'],
+        "purescript": ['.purs']
     }
 
     INVERSE_EXTS = {ext: lang for lang, exts in EXT_MAP.items() for ext in exts}
@@ -36,17 +37,18 @@ class AstDiffOrchestrator:
         # Maps the language name to its specific tools
         self.language_handlers = {
             "rescript":   {'lang_obj': Language(tree_sitter_rescript.language()), 'differ_class': RescriptFileDiff},
-            "haskell":    {'lang_obj': Language(tree_sitter_haskell.language()), 'differ_class': HaskellFileDiff},
-            "typescript": {'lang_obj': Language(tree_sitter_typescript.language_typescript()), 'differ_class': TypeScriptFileDiff},
-            "go":         {'lang_obj': Language(tree_sitter_go.language()), 'differ_class': GoFileDiff},
-            "rust":       {'lang_obj': Language(tree_sitter_rust.language()), 'differ_class': RustFileDiff},
+            "haskell":    {'lang_obj':  get_language('haskell'), 'differ_class': HaskellFileDiff},
+            "typescript": {'lang_obj':  get_language('typescript'), 'differ_class': TypeScriptFileDiff},
+            "go":         {'lang_obj': get_language('go'), 'differ_class': GoFileDiff},
+            "rust":       {'lang_obj': get_language('rust'), 'differ_class': RustFileDiff},
+            "python":     {'lang_obj':  get_language('python'), 'differ_class': PythonFileDiff},
         }
         
         # Pre-initialize a parser for each language handler
         self.parsers = {lang: Parser(handler['lang_obj']) for lang, handler in self.language_handlers.items()}
         
         # Special handling for TSX which uses a different language object but the same differ
-        self.parsers['.tsx'] = Parser(Language(tree_sitter_typescript.language_tsx()))
+        self.parsers['.tsx'] = Parser(get_language('tsx'))
 
 
     def _get_extension(self, filename: str) -> str:
@@ -112,23 +114,84 @@ def generate_ast_diff(
         # --- 2. Get Changed Files ---
         changed_files = git_provider.get_changed_files_from_commits(to_commit, from_commit)
         
-        print(changed_files)
+        # --- 2.5 Get Structured Diff for fallback ---
+        structured_diff_added, structured_diff_removed = git_provider.get_structured_diff(from_commit, to_commit)
+
+        print("files",changed_files)
         # --- 3. Process Files ---
         for category in ["modified", "added", "deleted"]:
             for file_path in changed_files.get(category, []):
-                if not orchestrator.is_supported(file_path): continue
-
+                if file_path.endswith(".lock"):
+                    continue
                 parser = orchestrator.get_parser(file_path)
                 differ = orchestrator.get_differ(file_path)
+                
+                print(parser)
+                if not parser or not differ:
+                    if category == "modified":
+                        added_lines = structured_diff_added.get(file_path, [])
+                        removed_lines = structured_diff_removed.get(file_path, [])
+
+                        if added_lines or removed_lines:
+                            removed_str = "\n".join([line for _, line in removed_lines])
+                            added_str = "\n".join([line for _, line in added_lines])
+
+                            change_dict = {
+                                "moduleName": file_path,
+                                "modifiedFunctions": [
+                                    [
+                                        file_path,
+                                        removed_str,
+                                        added_str,
+                                        {}
+                                    ]
+                                ]
+                            }
+                            all_changes.append(change_dict)
+                    else: # added or deleted
+                        content = git_provider.get_file_content(file_path, to_commit if category == "added" else from_commit)
+                        if content is None: continue
+                        
+                        change_dict = {
+                            "moduleName": file_path,
+                            "addedFunctions" if category == "added" else "deletedFunctions": [
+                                [
+                                    file_path,
+                                    content,
+                                    {}
+                                ]
+                            ]
+                        }
+                        all_changes.append(change_dict)
+
+                    if not quiet: print(f"PROCESSED UNSUPPORTED {category.upper()} FILE ({file_path}) using text diff")
+                    continue
 
                 if category == "modified":
-                    old_content = git_provider.get_file_content(file_path, from_commit)
-                    new_content = git_provider.get_file_content(file_path, to_commit)
-                    if old_content is None or new_content is None: continue
-                    old_ast = parser.parse(old_content.encode())
-                    new_ast = parser.parse(new_content.encode())
-                    changes = differ.compare_two_files(old_ast, new_ast)
-                else:
+                    old_content = None
+                    new_content = None
+                    try:
+                        old_content = git_provider.get_file_content(file_path, from_commit)
+                    except FileNotFoundError:
+                        pass
+                    try:
+                        new_content = git_provider.get_file_content(file_path, to_commit)
+                    except FileNotFoundError:
+                        pass
+
+                    if old_content and new_content:
+                        old_ast = parser.parse(old_content.encode())
+                        new_ast = parser.parse(new_content.encode())
+                        changes = differ.compare_two_files(old_ast, new_ast)
+                    elif new_content: # old_content is None
+                        ast = parser.parse(new_content.encode())
+                        changes = differ.process_single_file(ast, mode='added')
+                    elif old_content: # new_content is None
+                        ast = parser.parse(old_content.encode())
+                        changes = differ.process_single_file(ast, mode='deleted')
+                    else:
+                        continue
+                else: # added or deleted
                     commit = to_commit if category == "added" else from_commit
                     content = git_provider.get_file_content(file_path, commit)
                     if content is None: continue
