@@ -117,7 +117,7 @@ def generate_ast_diff(
         # --- 2.5 Get Structured Diff for fallback ---
         structured_diff_added, structured_diff_removed = git_provider.get_structured_diff(from_commit, to_commit)
 
-        print("files",changed_files)
+        # print("files",changed_files)
         # --- 3. Process Files ---
         for category in ["modified", "added", "deleted"]:
             for file_path in changed_files.get(category, []):
@@ -201,13 +201,6 @@ def generate_ast_diff(
                 if changes:
                     all_changes.append(changes.to_dict())
                 if not quiet: print(f"PROCESSED {category.upper()} FILE ({file_path})")
-
-        # --- 4. Write Output File (Optional) ---
-        if write_to_file:
-            os.makedirs(output_dir, exist_ok=True)
-            final_output_path = os.path.join(output_dir, "detailed_changes.json")
-            with open(final_output_path, "w") as f: json.dump(all_changes, f, indent=2)
-            print(f"Changes written to - {final_output_path}")
         
         return all_changes
 
@@ -223,7 +216,7 @@ def generate_ast_diff_for_commits(
     repo_path: str,
     output_dir: str = "./ast_diff_output",
     quiet: bool = False,
-    write_to_file: bool = True,
+    write_to_file: bool = False,
 ) -> List[Dict[str, Any]]:
     """
     A simplified wrapper to generate an AST diff between two specific commits in a local repository.
@@ -290,7 +283,7 @@ def run_ast_diff_from_config(config: Dict[str, Any]):
         else:
             raise ValueError(f"Unsupported provider_type: '{provider_type}'. Must be 'bitbucket' or 'local'.")
 
-        generate_ast_diff(
+        all_changes = generate_ast_diff(
             git_provider=git_provider,
             output_dir=config.get("output_dir", "./ast_diff_output"),
             quiet=config.get("quiet", False),
@@ -301,6 +294,9 @@ def run_ast_diff_from_config(config: Dict[str, Any]):
             to_commit=config.get("to_commit"),
         )
         print("--- AST Diff Generation Finished ---")
+        
+        print(f"\n\n\n {all_changes}")
+        return all_changes
 
     except Exception as e:
         print(f"FATAL ERROR in configuration or execution: {e}", file=sys.stderr)
