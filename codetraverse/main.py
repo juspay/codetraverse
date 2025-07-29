@@ -64,6 +64,9 @@ def _process_single_file_worker(args):
         print(traceback.format_exc())
         print(f"Unable to process - {code_path}. Skipping it.")
 
+def ignore_file_path(file_path: str) -> bool:
+    ignore_paths = ["/.venv/", "/node_modules/"]
+    return any([i in file_path for i in ignore_paths])
 
 def create_fdep_data(root_dir, output_base: str = "./output/fdep", graph_dir: str = "./output/graph", clear_existing: bool = True, skip_adaptor:bool = False):
 
@@ -71,6 +74,8 @@ def create_fdep_data(root_dir, output_base: str = "./output/fdep", graph_dir: st
     os.environ["ROOT_DIR"] = root_dir
 
     for dirpath, _, filenames in os.walk(root_dir):
+        if ignore_file_path(dirpath):
+            continue
         for file_name in filenames:
             extension = Path(file_name).suffix
             language = INVERSE_EXTS.get(extension, None)
