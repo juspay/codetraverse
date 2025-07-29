@@ -5,10 +5,20 @@ from codetraverse.path import load_graph
 from collections import deque
 from codetraverse.utils.networkx_graph import build_clean_graph
 from codetraverse.utils.graph_partitioner import compute_node_metrics
+from codetraverse.main import create_fdep_data
 import sys
 import argparse
-import traceback
 
+def getAllModules(graph_path: str) -> List[str]:
+    root = "/".join(graph_path.split("/")[:2])
+    G = load_graph(graph_path)
+    res = set()
+    for node in G.nodes:
+        if "file_path" in G.nodes[node] and root in G.nodes[node]["file_path"]:
+            res.add(node.split("::")[0])
+        elif "location" in G.nodes[node]:
+            res.add(node.split("::")[0])
+    return list(res)
 
 def getModuleInfo(fdep_folder: str, module_name: str) -> List[Dict[str, Any]]:
     if not os.path.isdir(fdep_folder):
@@ -373,6 +383,17 @@ def main():
     parser_common_children.add_argument("module_name2", help="Second module name")
     parser_common_children.add_argument("component_name2", help="Second component name")
 
+    parser_create_fdep = subparsers.add_parser("createFdepData", help="Create Fdep Data")
+    parser_create_fdep.add_argument("root_dir", help="The directory for which fdep should be created")
+    parser_create_fdep.add_argument("--output_base", help="Path for fdep output", default="./output/fdep")
+    parser_create_fdep.add_argument("--graph_dir", help="path for graph output", default="./output/graph")
+    parser_create_fdep.add_argument("--clear_existing", help="Clear existing output", default=True)
+
+
+    parser_get_all_modules = subparsers.add_parser("getAllModules", help="Get all valid modules in a graph")
+    parser_get_all_modules.add_argument("graph_path", help="Location to the graphml file")
+
+
     parser_get_important_nodes = subparsers.add_parser(
         "getImportantNodes",
         help="Get important nodes in the repository using a custom metric and epsilon greedy algorithm",
@@ -476,6 +497,19 @@ def main():
                 epsilon=args.epsilon,
                 percentage=args.percentage,
             )
+            print(json.dumps(result, indent=2))
+        
+        elif args.function == "createFdepData":
+            result = create_fdep_data(
+                args.root_dir,
+                args.output_base,
+                args.graph_dir,
+                clear_existing=args.clear_existing
+            )
+            print(json.dumps({"status": "success",}, indent=2))
+        
+        elif args.function == "getAllModules":
+            result = getAllModules(args.graph_path)
             print(json.dumps(result, indent=2))
 
     except Exception as e:
