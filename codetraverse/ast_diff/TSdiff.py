@@ -35,9 +35,39 @@ class TypeScriptFileDiff(BaseFileDiff):
 
         return None
 
+    def extract_class_methods(self, class_node: Node, class_name: str, functions_dict: dict, fields_dict: dict):
+        """Extract methods and fields from a class declaration."""
+        # Find the class body
+        class_body = None
+        for child in class_node.children:
+            if child.type == 'class_body':
+                class_body = child
+                break
+        
+        if not class_body:
+            return
+        
+        # Look for method definitions and field definitions in the class body
+        for child in class_body.children:
+            if child.type == 'method_definition':
+                # This is a method (including constructor)
+                method_name_node = child.child_by_field_name('name')
+                if method_name_node:
+                    method_name = method_name_node.text.decode('utf8')
+                    qualified_name = f"{class_name}.{method_name}"
+                    functions_dict[qualified_name] = (child, child.text.decode(errors="ignore"), child.start_point, child.end_point)
+            
+            elif child.type == 'public_field_definition':
+                # This is a class field/property
+                field_name_node = child.child_by_field_name('name')
+                if field_name_node:
+                    field_name = field_name_node.text.decode('utf8')
+                    qualified_name = f"{class_name}.{field_name}"
+                    fields_dict[qualified_name] = (child, child.text.decode(errors="ignore"), child.start_point, child.end_point)
+
     def extract_components(self, root: Node):
         """Extracts all top-level declarations from a TypeScript AST, including functions inside objects."""
-        functions, classes, interfaces, types, enums, constants = {}, {}, {}, {}, {}, {}
+        functions, classes, interfaces, types, enums, constants, fields = {}, {}, {}, {}, {}, {}, {}
         
         node_type_map = {
             'function_declaration': functions,
@@ -105,8 +135,12 @@ class TypeScriptFileDiff(BaseFileDiff):
                 if name:
                     target_dict = node_type_map[node_type]
                     target_dict[name] = (child, child.text.decode(errors="ignore"), child.start_point, child.end_point)
+                    
+                    # If this is a class, also extract its methods and fields
+                    if node_type == 'class_declaration':
+                        self.extract_class_methods(node_to_process, name, functions, fields)
 
-        return functions, classes, interfaces, types, enums, constants
+        return functions, classes, interfaces, types, enums, constants, fields
 
     def diff_components(self, before_map: dict, after_map: dict):
         """Compares two dictionaries of components and returns the diff."""
@@ -128,8 +162,8 @@ class TypeScriptFileDiff(BaseFileDiff):
 
     def compare_two_files(self, old_file_ast: Node, new_file_ast: Node) -> DetailedChanges:
         """The main method to compare two TypeScript files."""
-        old_funcs, old_classes, old_ifaces, old_types, old_enums, old_consts = self.extract_components(old_file_ast.root_node)
-        new_funcs, new_classes, new_ifaces, new_types, new_enums, new_consts = self.extract_components(new_file_ast.root_node)
+        old_funcs, old_classes, old_ifaces, old_types, old_enums, old_consts, old_fields = self.extract_components(old_file_ast.root_node)
+        new_funcs, new_classes, new_ifaces, new_types, new_enums, new_consts, new_fields = self.extract_components(new_file_ast.root_node)
 
         # Define what we're comparing
         category_map = {
@@ -139,6 +173,7 @@ class TypeScriptFileDiff(BaseFileDiff):
             "types": (old_types, new_types),
             "enums": (old_enums, new_enums),
             "constants": (old_consts, new_consts),
+            "fields": (old_fields, new_fields),
         }
 
         # Run diff and record changes
@@ -152,7 +187,7 @@ class TypeScriptFileDiff(BaseFileDiff):
         
     def process_single_file(self, file_ast: Node, mode="deleted") -> DetailedChanges:
         """Processes a single file that was either entirely added or deleted."""
-        funcs, classes, interfaces, types, enums, consts = self.extract_components(file_ast.root_node)
+        funcs, classes, interfaces, types, enums, consts, fields = self.extract_components(file_ast.root_node)
 
         category_map = {
             "functions": funcs,
@@ -161,6 +196,7 @@ class TypeScriptFileDiff(BaseFileDiff):
             "types": types,
             "enums": enums,
             "constants": consts,
+            "fields": fields,
         }
 
         for category, component_map in category_map.items():
