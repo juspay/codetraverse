@@ -295,6 +295,36 @@ export class CodeTraverseBridge {
   }
 
   /**
+   * Extract top-level components from a single file
+   */
+  async extractComponentsFromFile(filePath: string): Promise<any> {
+    try {
+      const { stdout, stderr } = await this.runner.runComponentExtraction(filePath);
+      if (stderr) {
+        console.warn(`Component extraction process stderr: ${stderr}`);
+      }
+      return JSON.parse(stdout);
+    } catch (error) {
+      throw this.wrapError(error, 'extractComponentsFromFile');
+    }
+  }
+
+  /**
+   * Extract top-level components from multiple files
+   */
+  async extractComponentsFromFiles(filePaths: string[]): Promise<any[]> {
+    try {
+      const { stdout, stderr } = await this.runner.runMultipleComponentExtraction(filePaths);
+      if (stderr) {
+        console.warn(`Component extraction process stderr: ${stderr}`);
+      }
+      return JSON.parse(stdout);
+    } catch (error) {
+      throw this.wrapError(error, 'extractComponentsFromFiles');
+    }
+  }
+
+  /**
    * Get list of supported languages
    */
   getSupportedLanguages(): Language[] {
@@ -460,9 +490,10 @@ export class CodeTraverseBridge {
 
 (async () => {
   // const obj = new CodeTraverseBridge({ pythonPath: "/usr/local/bin/python3.10", codetraversePath: "/Users/jignyas.s/Desktop/Juspay/code/node_modules/codetraverse-bridge-jp" })
-  // const obj = new CodeTraverseBridge({ pythonPath: "/usr/local/bin/python3.10", codetraversePath: "/Users/jignyas.s/Desktop/Juspay/codetraverse/" })
+  // const obj = new CodeTraverseBridge({ pythonPath: "/opt/homebrew/bin/python3", codetraversePath: "/Users/pramod.p/codetraverse" })
   // console.log(await obj.findPath("/Users/jignyas.s/Desktop/Juspay/codegen2/codegen/xyne_tmp/graph/repo_function_calls.graphml", "App.Routes::formatGatewayDoc", "Database.GptResponse::findOneGptResponseByCategoryDBE"))
   // console.log(await obj.getAllModules())
   // await obj.createFdepData("/Users/jignyas.s/Desktop/Juspay/jaf/jaf", "/Users/jignyas.s/Desktop/Juspay/codetraverse/output/fdep", "/Users/jignyas.s/Desktop/Juspay/codetraverse/output/graph");
   // console.log(await obj.getAllModules("/Users/jignyas.s/Desktop/Juspay/codetraverse/output/graph/repo_function_calls.graphml"));
+  // console.log(await obj.extractComponentsFromFile("/Users/pramod.p/euler-api-gateway/src/Euler/API/Gateway/Gateway/Checkout/Flows/Mandate.hs"))
 })();

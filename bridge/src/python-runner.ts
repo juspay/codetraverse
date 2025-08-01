@@ -171,6 +171,38 @@ export class PythonRunner {
   }
 
   /**
+   * Extract components from a single file
+   */
+  async runComponentExtraction(
+    filePath: string
+  ): Promise<{ stdout: string; stderr: string }> {
+    await this.validatePath(filePath);
+    const args = [
+      '-m', 'codetraverse.utils.AstDifferOrchestrator',
+      '--extract-components',
+      '--file', filePath
+    ];
+    return this.executeCommand(args);
+  }
+
+  /**
+   * Extract components from multiple files
+   */
+  async runMultipleComponentExtraction(
+    filePaths: string[]
+  ): Promise<{ stdout: string; stderr: string }> {
+    for (const filePath of filePaths) {
+      await this.validatePath(filePath);
+    }
+    const args = [
+      '-m', 'codetraverse.utils.AstDifferOrchestrator',
+      '--extract-components',
+      '--files', ...filePaths
+    ];
+    return this.executeCommand(args);
+  }
+
+  /**
    * Check if Python and codetraverse are available
    */
   async validateSetup(): Promise<void> {

@@ -78,7 +78,132 @@ class AstDiffOrchestrator:
         if handler:
             return handler['differ_class'](filename)
         return None
+
+
+def extract_components_from_file(file_path: str) -> Dict[str, Any]:
+    """
+    Extract top-level components (classes, functions, etc.) from a single file.
     
+    Args:
+        file_path (str): Path to the source code file
+        
+    Returns:
+        dict: Dictionary containing extracted components organized by type
+    """
+    
+    if not os.path.exists(file_path):
+        return {"error": f"File not found: {file_path}"}
+    
+    # Initialize the orchestrator
+    orchestrator = AstDiffOrchestrator()
+    
+    # Check if the file type is supported
+    if not orchestrator.is_supported(file_path):
+        return {"error": f"Unsupported file type: {file_path}"}
+    
+    # Get the appropriate parser and differ for this file type
+    parser = orchestrator.get_parser(file_path)
+    differ = orchestrator.get_differ(file_path)
+    
+    if not parser or not differ:
+        return {"error": f"Could not get parser/differ for: {file_path}"}
+    
+    try:
+        # Read file content
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Parse the file into an AST
+        ast = parser.parse(content.encode('utf-8'))
+        
+        # Extract components using the language-specific differ
+        components = differ.extract_components(ast.root_node)
+        
+        # Convert to a more readable format
+        result = {
+            "file_path": file_path,
+            "language": orchestrator.INVERSE_EXTS.get(orchestrator._get_extension(file_path), "unknown"),
+            "components": {}
+        }
+        
+        # Handle different return formats from different languages
+        if isinstance(components, dict):
+            # Some languages return a dict of component types
+            for component_type, items in components.items():
+                if items:  # Only include non-empty categories
+                    result["components"][component_type] = []
+                    for name, data in items.items():
+                        # data is typically (node, text, start_point, end_point)
+                        if isinstance(data, tuple) and len(data) >= 4:
+                            result["components"][component_type].append({
+                                "name": name,
+                                "start_line": data[2][0] + 1,  # Convert 0-based to 1-based
+                                "end_line": data[3][0] + 1,
+                                "content": data[1],  # Full content instead of preview
+                                "start_byte": data[2][1] if len(data[2]) > 1 else 0,
+                                "end_byte": data[3][1] if len(data[3]) > 1 else 0
+                            })
+        elif isinstance(components, tuple):
+            # Handle different language-specific tuple formats
+            language = result["language"]
+            
+            if language == "haskell":
+                # For Haskell: functions, data_types, type_classes, instances, imports, template_haskell
+                component_names = ["functions", "dataTypes", "typeClasses", "instances", "imports", "templateHaskell"]
+            elif language == "typescript":
+                # For TypeScript: functions, classes, interfaces, types, enums, constants, fields
+                component_names = ["functions", "classes", "interfaces", "types", "enums", "constants", "fields"]
+            else:
+                # Default mapping for other languages
+                component_names = ["functions", "classes", "types", "variables", "imports", "constants"]
+            
+            for i, component_dict in enumerate(components):
+                if i < len(component_names) and component_dict:
+                    component_type = component_names[i]
+                    result["components"][component_type] = []
+                    for name, data in component_dict.items():
+                        if isinstance(data, tuple) and len(data) >= 4:
+                            result["components"][component_type].append({
+                                "name": name,
+                                "start_line": data[2][0] + 1,
+                                "end_line": data[3][0] + 1,
+                                "content": data[1],  # Full content instead of preview
+                                "start_byte": data[2][1] if len(data[2]) > 1 else 0,
+                                "end_byte": data[3][1] if len(data[3]) > 1 else 0
+                            })
+        
+        return result
+        
+    except Exception as e:
+        return {"error": f"Error processing file {file_path}: {str(e)}"}
+
+
+def extract_components_from_files(file_paths: List[str]) -> List[Dict[str, Any]]:
+    """
+    Extract top-level components from multiple files.
+    
+    Args:
+        file_paths (List[str]): List of file paths to process
+        
+    Returns:
+        List[Dict[str, Any]]: List of extraction results for each file
+    """
+    results = []
+    
+    for file_path in file_paths:
+        try:
+            result = extract_components_from_file(file_path)
+            results.append(result)
+        except Exception as e:
+            error_result = {
+                "file_path": file_path,
+                "error": f"Error processing file {file_path}: {str(e)}"
+            }
+            results.append(error_result)
+    
+    return results
+
+
 def generate_ast_diff(
     git_provider: Union[BitBucket, GitWrapper],
     output_dir: str = "./",
@@ -304,10 +429,16 @@ def run_ast_diff_from_config(config: Dict[str, Any]):
         sys.exit(1)
 
 def main():
-    parser = argparse.ArgumentParser(description="Generate an Abstract Syntax Tree (AST) diff for code changes.")
+    parser = argparse.ArgumentParser(description="Generate an Abstract Syntax Tree (AST) diff for code changes or extract components.")
     
     # Add a single argument to accept a JSON configuration string
     parser.add_argument("--config-json", help="A JSON string containing the configuration.")
+    
+    # Add arguments for component extraction
+    parser.add_argument("--extract-components", action="store_true", help="Extract components from files instead of generating diff.")
+    parser.add_argument("--file", help="Single file to extract components from.")
+    parser.add_argument("--files", nargs='+', help="Multiple files to extract components from.")
+    parser.add_argument("--output-file", help="Output file to save component extraction results.")
 
     # Keep the existing subparsers for backward compatibility and direct CLI use
     subparsers = parser.add_subparsers(dest="provider_type", help="Specify the Git provider.")
@@ -348,13 +479,31 @@ def main():
                 config = json.loads(config)
 
             if not isinstance(config, dict):
-                raise ValueError("Config is not a valid odfvsdbbject.")
+                raise ValueError("Config is not a valid object.")
 
             run_ast_diff_from_config(config)
 
         except Exception as e:
             print(f"FATAL ERROR: Invalid JSON in --config-json argument: {e}", file=sys.stderr)
             traceback.print_exc()
+            sys.exit(1)
+
+    elif args.extract_components:
+        # Handle component extraction
+        if args.file:
+            # Process single file
+            result = extract_components_from_file(args.file)
+            print(json.dumps(result, indent=2))
+            return result
+        
+        elif args.files:
+            # Process multiple files
+            results = extract_components_from_files(args.files)
+            print(json.dumps(results, indent=2))
+            return results
+        
+        else:
+            print("Error: --extract-components requires either --file or --files argument")
             sys.exit(1)
 
     elif args.provider_type:
