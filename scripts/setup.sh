@@ -34,10 +34,10 @@ setup_env_helper() {
             fi
             cd "$env_root"
             if [ ! -f "$env_root/pyproject.toml" ]; then
-                "$env_root/tmp_env/bin/uv" init
+                "$env_root/tmp_env/bin/uv" init --python=3.12
             fi
             if [ ! -d "$env_root/.venv" ]; then
-                "$env_root/tmp_env/bin/uv" venv "$env_root/.venv"
+                "$env_root/tmp_env/bin/uv" venv "$env_root/.venv" --python=3.12
             fi
             "$env_root/tmp_env/bin/uv" add -r "$codetraverse_dir/codetraverse/requirements.txt"
             echo "SETUP FINISHED"

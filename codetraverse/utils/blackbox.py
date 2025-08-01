@@ -56,7 +56,7 @@ def getModuleInfo(fdep_folder: str, module_name: str) -> List[Dict[str, Any]]:
             if representation not in seen:
                 seen.add(representation)
                 unique_matches.append(match)
-        return sorted(unique_matches, key=lambda x: x.get("name", ""))
+        return sorted(unique_matches, key=lambda x: x.get("name") or "")
 
     lazy_matches = []
     for file_path in json_files:
@@ -81,13 +81,13 @@ def getModuleInfo(fdep_folder: str, module_name: str) -> List[Dict[str, Any]]:
             if representation not in seen:
                 seen.add(representation)
                 unique_matches.append(match)
-        return sorted(unique_matches, key=lambda x: x.get("name", ""))
+        return sorted(unique_matches, key=lambda x: x.get("name") or "")
 
     return []
 
 
 def getFunctionInfo(
-    fdep_folder: str, module_name: str, component_name: str, component_type="function"
+    fdep_folder: str, module_name: str, component_name: str
 ) -> List[Dict[str, Any]]:
     if not os.path.exists(fdep_folder):
         return {
@@ -104,7 +104,7 @@ def getFunctionInfo(
             return [comp]
     return {
         "error": True,
-        "message": f"Function '{component_name}' not found in module '{module_name}'",
+        "message": f"'{component_name}' not found in module '{module_name}'",
         "component": None,
     }
 
@@ -436,7 +436,6 @@ def main():
                 args.fdep_folder,
                 args.module_name,
                 args.component_name,
-                args.component_type,
             )
             print(json.dumps(result, indent=2))
 
