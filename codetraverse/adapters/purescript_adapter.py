@@ -28,7 +28,7 @@ def make_node_id(comp):
 
     name = comp.get("name")
     if name:
-        return f"{base}.purs::{name}"
+        return f"{base}::{name}"
     if comp.get("id"):
         return comp["id"]
     return None
@@ -135,8 +135,8 @@ def adapt_purescript_components(raw_components):
             if mod != tgt_mod:
                 edges.append({"from": mod,      "to": tgt_mod,   "relation": "imports"})
             # symbol → symbol
-            from_sym = f"{mod}.purs::{alias}"
-            to_sym   = f"{tgt_mod}.purs::{alias}"
+            from_sym = f"{mod}::{alias}"
+            to_sym   = f"{tgt_mod}::{alias}"
             if from_sym != to_sym:
                 edges.append({"from": from_sym, "to": to_sym,   "relation": "imports"})
 
@@ -153,7 +153,7 @@ def adapt_purescript_components(raw_components):
         # type dependencies
         for dep in comp.get("type_dependencies", []):
             mod = comp.get("module","")
-            tgt = f"{mod}.purs::{dep}"
+            tgt = f"{mod}::{dep}"
             if src != tgt:
                 edges.append({"from": src, "to": tgt, "relation": "type_dependency"})
 
@@ -164,7 +164,7 @@ def adapt_purescript_components(raw_components):
             for base in comp["bases"]:
                 edges.append({
                     "from": src,
-                    "to":   f"{comp['module']}.purs::{base}",
+                    "to":   f"{comp['module']}::{base}",
                     "relation": "extends"
                 })
         if comp.get("kind") == "class_instance":
@@ -173,7 +173,7 @@ def adapt_purescript_components(raw_components):
             if cls:
                 edges.append({
                     "from": src,
-                    "to":   f"{comp['module']}.purs::{cls}",
+                    "to":   f"{comp['module']}::{cls}",
                     "relation": "implements"
                 })
 
@@ -182,7 +182,7 @@ def adapt_purescript_components(raw_components):
         if comp.get("operator") in {"typeof","keyof"} and comp.get("deps"):
             src = comp.get("id")
             for d in comp["deps"]:
-                tgt = f"{comp['module']}.purs::{d}" if "::" not in d else d
+                tgt = f"{comp['module']}::{d}" if "::" not in d else d
                 if src and src != tgt:
                     edges.append({"from": src, "to": tgt, "relation": "fdeps"})
 

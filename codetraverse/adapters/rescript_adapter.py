@@ -4,10 +4,13 @@ def extract_id(comp):
     If comp["module_name"] is present, use it; otherwise fall back to comp["file_name"].
     The raw “name” may sometimes be missing (e.g. for JSX), so we also fall back to comp["tag_name"].
     """
-    module_part = comp.get("module_name") or comp.get("file_name") or "<anonymous>"
-    name_part = comp.get("name") or comp.get("tag_name") or "<unknown>"
-    return f"{module_part}::{name_part}"
 
+    file_name = comp.get("file_name") 
+    module_part = comp.get("module_name")
+    name_part = comp.get("name") or comp.get("tag_name") or "<unknown>"
+    name_part = name_part if module_part != name_part else "make"
+
+    return f"{file_name}.{module_part}::{name_part}" if module_part else f"{file_name}::{name_part}"
 
 def adapt_rescript_components(raw_components):
     """
@@ -16,37 +19,39 @@ def adapt_rescript_components(raw_components):
     """
     nodes = []
     edges = []
-
-    # 1) Precompute all fully‐qualified IDs
-    fq_ids = []
-    comp_by_fq = {}
-    for comp in raw_components:
-        fq = extract_id(comp)
-        fq_ids.append(fq)
-        comp_by_fq[fq] = comp
-
-    # 2) Build a set of module‐names and a map from module_name to its FQ IDs
-    all_module_names = set()
-    module_to_fq_map = {}
-    for fq_id_val in fq_ids:
-        module_name_part = fq_id_val.split("::", 1)[0]
-        all_module_names.add(module_name_part)
-        if module_name_part not in module_to_fq_map:
-            module_to_fq_map[module_name_part] = []
-        module_to_fq_map[module_name_part].append(fq_id_val)
-    
+    created_node = set()
     for comp in raw_components:
         kind = comp.get("kind")
-        if kind not in ("function", "variable", "module"):
-            continue
+        file_path = comp.get("file_path")
 
-        fq = extract_id(comp)
+        if kind not in ("function", "module") or "/node_modules/" in file_path:
+            continue 
+        
+        if comp.get("name") == "make" and kind == "module":
+            continue
+        
+        fq = extract_id(comp) 
+        created_node.add(fq)   
+
         nodes.append({
-            "id":       fq,
+            "id": fq,
             "category": kind,
-            "start":    comp.get("start_line", 0),
-            "end":      comp.get("end_line", 0)
+            "start": comp.get("start_line", 0),
+            "end": comp.get("end_line", 0),
+            "code": comp.get("code", ""),
+            "function_calls": comp.get("function_calls", []),
+            "file_path": comp.get("file_path", "")
         })
+
+    for comp in raw_components:
+
+        kind = comp.get("kind")
+        file_path = comp.get("file_path")
+        if kind not in ("function", "module")  or "/node_modules/" in file_path:
+            continue 
+        
+        if comp.get("name") == "make" and  kind == "module":
+            continue
 
         for raw_call in comp.get("function_calls", []):
             if isinstance(raw_call, dict):
@@ -55,49 +60,32 @@ def adapt_rescript_components(raw_components):
                 target_bare = str(raw_call)
             target_bare = target_bare.strip()
             if not target_bare:
-                continue
+                continue 
 
-            if target_bare in all_module_names:
-
-                for candidate_fq in module_to_fq_map.get(target_bare, []):
-                    edges.append({
-                        "from":     fq,
-                        "to":       candidate_fq,
-                        "relation": "calls"
-                    })
-            else:
+            fq = extract_id(comp)    
+            
+            #components that was not inside the curr file
+            if target_bare + "::make" in created_node: 
                 edges.append({
                     "from":     fq,
-                    "to":       target_bare,
+                    "to":       target_bare + "::make",
+                    "relation": "calls"
+                })
+            
+            #functions that was inside the curr file 
+            if comp["file_name"] + "::" + target_bare in created_node:
+                edges.append({
+                    "from":     fq,
+                    "to":       comp["file_name"] + "::" + target_bare,
+                    "relation": "calls"
+                })
+            
+            #components that was inside the curr file 
+            if comp["file_name"] + "." + target_bare + "::make" in created_node:
+                edges.append({
+                    "from":     fq,
+                    "to":       comp["file_name"] + "." + target_bare + "::make",
                     "relation": "calls"
                 })
 
-    seen = {n["id"] for n in nodes}
-    for e in edges:
-        for endpoint in (e["from"], e["to"]):
-            if endpoint not in seen:
-                # Decide a category for stubs
-                cat = "external_reference"
-                if "." in endpoint:
-                    cat = "module_function"
-                elif e["relation"] == "calls":
-                    cat = "external_function"
-                nodes.append({"id": endpoint, "category": cat})
-                seen.add(endpoint)
-
-    # 5) “imports_*” edges for every comp’s import_map
-    for comp in raw_components:
-        fq = extract_id(comp)
-        for mod_name, import_list in comp.get("import_map", {}).items():
-            for import_info in import_list:
-                import_type = import_info.get("type", "unknown")
-                edges.append({
-                    "from":     fq,
-                    "to":       mod_name,
-                    "relation": f"imports_{import_type}"
-                })
-
-    print(f"Created {len(nodes)} nodes and {len(edges)} edges (functions/variables/modules only)")
-    fn_edges = [e for e in edges if e["relation"] == "calls"]
-    print(f"Function‐call edges: {len(fn_edges)}")
     return {"nodes": nodes, "edges": edges}
