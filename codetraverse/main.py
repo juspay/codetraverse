@@ -179,5 +179,45 @@ def main():
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 
+
+def create_graph(fdep_dir, graph_dir):
+    raw_funcs = load_components_without_hash(fdep_dir)
+
+    lang_comp_dict = defaultdict(list)
+    count_unprocessable_fucntion =0
+
+    for func in raw_funcs:
+        try:
+            comp_language = INVERSE_EXTS.get(Path(func["file_path"]).suffix, None)
+            lang_comp_dict[comp_language].append(func)
+        except Exception as e:
+            count_unprocessable_fucntion += 1
+    print(f"Total unprocessable functions: {count_unprocessable_fucntion}")
+
+    unsupported_languages = [lang for lang in lang_comp_dict if lang not in adapter_map]
+    if unsupported_languages:
+        print(f"Skipping unsupported languages: {unsupported_languages}")
+
+    lang_comp_dict = {lang: comps for lang, comps in lang_comp_dict.items() if lang in adapter_map}
+
+    schemas = [
+        adapter_map[language](comps) for language, comps in lang_comp_dict.items()
+    ]
+
+    unified_schema = reduce(combine_schemas, schemas)
+
+    G = build_graph_from_schema(unified_schema)
+
+    graph_ml = os.path.join(graph_dir, "repo_function_calls.graphml")
+    graph_gp = os.path.join(graph_dir, "repo_function_calls.gpickle")
+
+    nx.write_graphml(G, graph_ml)
+    with open(graph_gp, "wb") as f:
+        pickle.dump(G, f)
+
+    print(f"Wrote {graph_ml} and {graph_gp}")
+
 if __name__ == "__main__":
-    main()
+    # main()
+    # create_graph("/Users/jignyas.s/.xyne/c3c4ce677bbb8d1b88dc36118729f830/fdep", "/Users/jignyas.s/Desktop/Juspay/codetraverse")
+    create_fdep_data("/Users/jignyas.s/Desktop/Juspay/namma-yatri-website", "/Users/jignyas.s/Desktop/Juspay/codetraverse/output/fdep", "/Users/jignyas.s/Desktop/Juspay/codetraverse/output/graph")
