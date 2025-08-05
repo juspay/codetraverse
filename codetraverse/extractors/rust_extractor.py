@@ -173,7 +173,7 @@ class RustComponentExtractor(ComponentExtractor):
             'type': node.type,
             'name': name,
             'file_path': file_path,
-            'module_path': full_module_path,
+            'module': full_module_path,
             'span': span,
             'code': src[node.start_byte:node.end_byte].decode('utf8', errors='ignore'),
             'visibility': self._extract_visibility(node, src),
