@@ -62,7 +62,6 @@ def adapt_rescript_components(raw_components):
                 continue 
 
             fq = extract_id(comp)    
-            
             #components that was not inside the curr file
             if target_bare + "::make" in created_node: 
                 edges.append({
@@ -72,7 +71,7 @@ def adapt_rescript_components(raw_components):
                 })
             
             #functions that was inside the curr file 
-            if comp["file_name"] + "::" + target_bare in created_node:
+            if comp["relative_path"] + "::" + target_bare in created_node:
                 edges.append({
                     "from":     fq,
                     "to":       comp["file_name"] + "::" + target_bare,
@@ -80,7 +79,7 @@ def adapt_rescript_components(raw_components):
                 })
             
             #components that was inside the curr file 
-            if comp["file_name"] + "." + target_bare + "::make" in created_node:
+            if comp["relative_path"] + "::" + target_bare + "::make" in created_node:
                 edges.append({
                     "from":     fq,
                     "to":       comp["file_name"] + "." + target_bare + "::make",
