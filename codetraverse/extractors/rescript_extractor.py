@@ -45,6 +45,8 @@ class RescriptComponentExtractor(ComponentExtractor):
 
         self.import_map = self._collect_imports(root_node)
         self.all_components = []
+        root_dir = os.environ.get("ROOT_DIR", "")
+        relative_file_path = file_path.replace(root_dir, "").lstrip("/").rstrip("/")
 
         def traverse_node(node: Node):
             extractor = self._get_extractor(node)
@@ -56,10 +58,12 @@ class RescriptComponentExtractor(ComponentExtractor):
                             if c:
                                 c["file_name"] = self.file_module_name
                                 c["file_path"] = file_path
+                                c["relative_path"] = relative_file_path
                                 self.all_components.append(c)
                     else:
                         comp_or_list["file_name"] = self.file_module_name
                         comp_or_list["file_path"] = file_path
+                        comp_or_list["relative_path"] = relative_file_path
                         self.all_components.append(comp_or_list)
 
             for child in node.named_children:

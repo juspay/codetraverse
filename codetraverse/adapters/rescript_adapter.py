@@ -4,13 +4,12 @@ def extract_id(comp):
     If comp["module_name"] is present, use it; otherwise fall back to comp["file_name"].
     The raw “name” may sometimes be missing (e.g. for JSX), so we also fall back to comp["tag_name"].
     """
-
-    file_name = comp.get("file_name") 
+    file_path = comp.get("relative_path", "")
     module_part = comp.get("module_name")
     name_part = comp.get("name") or comp.get("tag_name") or "<unknown>"
     name_part = name_part if module_part != name_part else "make"
 
-    return f"{file_name}.{module_part}::{name_part}" if module_part else f"{file_name}::{name_part}"
+    return f"{file_path}::{module_part}::{name_part}" if module_part else f"{file_path}::{name_part}"
 
 def adapt_rescript_components(raw_components):
     """
