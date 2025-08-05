@@ -74,7 +74,7 @@ def adapt_rescript_components(raw_components):
             if comp["relative_path"] + "::" + target_bare in created_node:
                 edges.append({
                     "from":     fq,
-                    "to":       comp["file_name"] + "::" + target_bare,
+                    "to":       comp["relative_path"] + "::" + target_bare,
                     "relation": "calls"
                 })
             
@@ -82,7 +82,7 @@ def adapt_rescript_components(raw_components):
             if comp["relative_path"] + "::" + target_bare + "::make" in created_node:
                 edges.append({
                     "from":     fq,
-                    "to":       comp["file_name"] + "." + target_bare + "::make",
+                    "to":       comp["relative_path"] + "::" + target_bare + "::make",
                     "relation": "calls"
                 })
 
