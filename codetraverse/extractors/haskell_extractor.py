@@ -136,7 +136,31 @@ class HaskellComponentExtractor(ComponentExtractor):
         reexported_modules = defaultdict(list)
 
         for child in root_node.children:
-            if child.type == "header":
+            if child.type == "type_synomym":
+                name = child.children[1].text.decode()
+                code = child.text.decode()
+                components.append({
+                    "kind": "type_synonym",
+                    "name": name,
+                    "code": code,
+                    "start_line" : child.start_point[0] + 1,
+                    "end_line": child.end_point[0] + 1,
+                    "module": self.current_module
+                })
+            elif child.type == "bind":
+                code = child.text.decode()
+                name = child.children[0].text.decode()
+                components.append({
+                    "kind": "file_global_variable" if "->" not in sigs.get(name, "") else "function",
+                    "name": name,
+                    "code": code,
+                    "start_line": child.start_point[0] + 1,
+                    "end_line": child.end_point[0] +1,
+                    "module": self.current_module,
+                    "type_signature": sigs.get(name, None),
+                    "function_calls": self.extract_function_calls_node(child, src_bytes, import_map, self.current_module)
+                })
+            elif child.type == "header":
                 print("Skipping header node in top-level extraction")
                 start, end = child.start_point[0], child.end_point[0]
                 header_code = b"\n".join(src_bytes.split(b"\n")[start : end + 1]).decode("utf8")
