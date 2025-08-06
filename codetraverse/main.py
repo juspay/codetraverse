@@ -218,6 +218,6 @@ def create_graph(fdep_dir, graph_dir):
     print(f"Wrote {graph_ml} and {graph_gp}")
 
 if __name__ == "__main__":
-    # main()
+    main()
     # create_graph("/Users/jignyas.s/.xyne/c3c4ce677bbb8d1b88dc36118729f830/fdep", "/Users/jignyas.s/Desktop/Juspay/codetraverse")
-    create_fdep_data("/Users/jignyas.s/Desktop/Juspay/namma-yatri-website", "/Users/jignyas.s/Desktop/Juspay/codetraverse/output/fdep", "/Users/jignyas.s/Desktop/Juspay/codetraverse/output/graph")
+    # create_fdep_data("/Users/jignyas.s/Desktop/Juspay/namma-yatri-website", "/Users/jignyas.s/Desktop/Juspay/codetraverse/output/fdep", "/Users/jignyas.s/Desktop/Juspay/codetraverse/output/graph")
