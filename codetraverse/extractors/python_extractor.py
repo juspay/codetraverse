@@ -98,7 +98,7 @@ class PythonComponentExtractor(ComponentExtractor):
     #         "end_line":   node.end_point[0] + 1,
     #     }
 
-    def extract_function_calls(self, node, plain, module_name):
+    def extract_function_calls(self, node, plain, module_name, rel_path):
         calls = []
 
         if node.type == "call":
@@ -136,7 +136,7 @@ class PythonComponentExtractor(ComponentExtractor):
 
                 # 3) fallback to local definition
                 if not resolved:
-                    resolved = f"{module_name}::{name}"
+                    resolved = f"{rel_path}::{name}"
 
                 calls.append({
                     "name": name,
@@ -146,12 +146,12 @@ class PythonComponentExtractor(ComponentExtractor):
 
         # recurse
         for c in node.children:
-            calls.extend(self.extract_function_calls(c, plain, module_name))
+            calls.extend(self.extract_function_calls(c, plain, module_name, rel_path))
         return calls
 
 
 
-    def walk_node(self, node, plain, file_path, root_folder):
+    def walk_node(self, node, plain, file_path, root_folder, rel_path):
         """
         Recursively walk the Tree-sitter AST and collect component dicts.
         Skips module-level extraction of any function_definition that lives inside a class.
@@ -246,7 +246,7 @@ class PythonComponentExtractor(ComponentExtractor):
 
             # decorators and calls
             decs = self.extract_decorators(node, plain)
-            calls = self.extract_function_calls(node, plain, module_name)
+            calls = self.extract_function_calls(node, plain, module_name, rel_path)
 
             comps.append({
                 "kind": "async_function" if node.type.startswith("async_") else "function",
@@ -297,7 +297,7 @@ class PythonComponentExtractor(ComponentExtractor):
                         mparams = self.extract_parameters(mpn, plain) if mpn else None
 
                         mdecs = self.extract_decorators(m, plain)
-                        mcalls = self.extract_function_calls(m, plain, module_name)
+                        mcalls = self.extract_function_calls(m, plain, module_name, rel_path)
 
                         comps.append({
                             "kind": "async_method" if m.type.startswith("async_") else "method",
@@ -331,22 +331,25 @@ class PythonComponentExtractor(ComponentExtractor):
 
         # recurse into children
         for c in node.children:
-            comps.extend(self.walk_node(c, plain, file_path, root_folder))
+            comps.extend(self.walk_node(c, plain, file_path, root_folder, rel_path))
 
         return comps
 
 
-    def extract_from_file(self, filepath, root_folder):
+    def extract_from_file(self, filepath, root_folder, rel_path):
         plain, tree = self.parse_file(filepath)
-        return self.walk_node(tree.root_node, plain, filepath, root_folder)
+        return self.walk_node(tree.root_node, plain, filepath, root_folder, rel_path)
 
     def extract_from_folder(self, folder):
         out = []
+        project_root = os.environ.get("ROOT_DIR", "")
         abs_folder = os.path.abspath(folder)
         for root, _, files in os.walk(abs_folder):
             for f in files:
                 if f.endswith('.py'):
-                    out.extend(self.extract_from_file(os.path.join(root, f), abs_folder))
+                    file_path = os.path.join(root, f)
+                    rel = os.path.relpath(file_path, project_root).replace(os.sep, "/")
+                    out.extend(self.extract_from_file(file_path, abs_folder))
         return out
 
     def process_file(self, file_path: str):
@@ -387,12 +390,12 @@ class PythonComponentExtractor(ComponentExtractor):
         project_root = os.environ.get("ROOT_DIR", "")
         self.project_root = project_root
 
+        rel = os.path.relpath(file_path, project_root).replace(os.sep, "/")
         # now extract everything
-        raw = self.extract_from_file(file_path, root_folder)
+        raw = self.extract_from_file(file_path, root_folder, rel)
 
         # *** NEW: stamp each comp with a file_path ***
         project_root = os.environ.get("ROOT_DIR", "")
-        rel = os.path.relpath(file_path, project_root).replace(os.sep, "/")
         for c in raw:
             c["file_path"] = rel
             c.setdefault("module", rel)

@@ -38,7 +38,7 @@ EXT_MAP = {
     "rescript": [".res"],
     "golang": [".go"],
     "rust": [".rs"],
-    "typescript": [".ts"],
+    "typescript": [".ts", ".tsx"],
     "purescript": [".purs"]
 }
 
