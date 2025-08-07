@@ -45,6 +45,8 @@ class RescriptComponentExtractor(ComponentExtractor):
 
         self.import_map = self._collect_imports(root_node)
         self.all_components = []
+        root_dir = os.environ.get("ROOT_DIR", "")
+        relative_file_path = file_path.replace(root_dir, "").lstrip("/").rstrip("/")
 
         def traverse_node(node: Node):
             extractor = self._get_extractor(node)
@@ -55,9 +57,13 @@ class RescriptComponentExtractor(ComponentExtractor):
                         for c in comp_or_list:
                             if c:
                                 c["file_name"] = self.file_module_name
+                                c["file_path"] = file_path
+                                c["relative_path"] = relative_file_path
                                 self.all_components.append(c)
                     else:
                         comp_or_list["file_name"] = self.file_module_name
+                        comp_or_list["file_path"] = file_path
+                        comp_or_list["relative_path"] = relative_file_path
                         self.all_components.append(comp_or_list)
 
             for child in node.named_children:
@@ -259,10 +265,10 @@ class RescriptComponentExtractor(ComponentExtractor):
             "start_line": start_line,
             "end_line": end_line,
             "code": code,
-            "import_map": self.import_map, 
+            # "import_map": self.import_map, 
             "elements": children, 
             "function_calls": func_calls,
-            "literals": lits,
+            # "literals": lits,
         }
         comp["module_name"] = mod_name 
         comp["file_name"] = self.file_module_name
@@ -325,7 +331,7 @@ class RescriptComponentExtractor(ComponentExtractor):
             "fields": fields,
             "variants": variants,
             "function_calls": func_calls,
-            "literals": lits
+            # "literals": lits
         }
         comp["module_name"] = self._find_enclosing_module_name(node)
         comp["file_name"] = self.file_module_name
@@ -356,7 +362,7 @@ class RescriptComponentExtractor(ComponentExtractor):
             "type": type_str,
             "code": code,
             "function_calls": func_calls,
-            "literals": lits
+            # "literals": lits
         }
         comp["module_name"] = self._find_enclosing_module_name(node)
         comp["file_name"] = self.file_module_name
@@ -494,11 +500,11 @@ class RescriptComponentExtractor(ComponentExtractor):
             "start_line": start,
             "end_line": end,
             "code": code,
-            "literals": lits, 
+            # "literals": lits, 
             "function_calls": final_unique_calls, 
             "local_variables": local_vars, 
             "jsx_elements": jsx_elems, 
-            "import_map": self.import_map 
+            # "import_map": self.import_map 
         }
         
         if kind == "function":
@@ -586,7 +592,7 @@ class RescriptComponentExtractor(ComponentExtractor):
             "code": code,
             "attributes": attributes,
             "function_calls": func_calls_within_jsx, 
-            "literals": lits_within_jsx
+            # "literals": lits_within_jsx
         }
         comp["module_name"] = self._find_enclosing_module_name(node)
         comp["file_name"] = self.file_module_name
