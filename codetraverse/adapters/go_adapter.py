@@ -60,6 +60,7 @@ def adapt_go_components(raw_components):
             "id": node_id,
             "category": kind,
             "signature": signature_for(comp),
+            "module": comp.get("module") or comp.get("file_path", ""),  # Add module field for getModuleInfo compatibility
             "location": {
                 "start": comp.get("start_line") or (comp.get("location") or {}).get("start"),
                 "end": comp.get("end_line") or (comp.get("location") or {}).get("end"),
@@ -69,6 +70,54 @@ def adapt_go_components(raw_components):
 
         if kind in ("function", "method"):
             func_lookup[(comp.get("name", ""), comp.get("file_path", ""))].append(node_id)
+
+    # --- 1.5. Create simplified alias nodes for compatibility ---
+    # Some tools expect nodes with format "package::function" instead of "package/path/file.go::function"
+    alias_nodes = []
+    alias_edges = []
+    for comp in raw_components:
+        kind = comp.get("kind")
+        if kind not in ("function", "method", "struct", "interface", "type_alias", "constant", "variable"):
+            continue
+            
+        original_id = comp.get("complete_function_path")
+        if not original_id or "::" not in original_id:
+            continue
+            
+        # Extract parts: "api/admin/account.go::RegisterAccount" -> ["api/admin/account.go", "RegisterAccount"] 
+        parts = original_id.split("::")
+        if len(parts) >= 2:
+            # Create simplified alias: "api::RegisterAccount" (extract package from file path)
+            file_path = parts[0]  # "api/admin/account.go"
+            function = parts[1]  # "RegisterAccount" 
+            
+            # Extract package name from file path: "api/admin/account.go" -> "api"
+            if '/' in file_path:
+                # Get the first directory component as package name
+                package = file_path.split('/')[0]
+            else:
+                # Single file, use filename without extension as package
+                package = file_path.replace('.go', '') if file_path.endswith('.go') else file_path
+            
+            alias_id = f"{package}::{function}"
+            
+            # Only create alias if it's different from original and doesn't already exist
+            if alias_id != original_id and alias_id not in {node["id"] for node in nodes}:
+                alias_node = {
+                    "id": alias_id,
+                    "category": kind,
+                    "signature": signature_for(comp),
+                    "module": package,
+                    "location": {
+                        "start": comp.get("start_line") or (comp.get("location") or {}).get("start"),
+                        "end": comp.get("end_line") or (comp.get("location") or {}).get("end"),
+                    }
+                }
+                alias_nodes.append(alias_node)
+                alias_edges.append({"from": alias_id, "to": original_id, "relation": "alias_of"})
+
+    # Add alias nodes to main nodes list
+    nodes.extend(alias_nodes)
 
     # --- 2. Build EDGES using full node IDs only ---
     for comp in raw_components:
@@ -132,7 +181,14 @@ def adapt_go_components(raw_components):
     for edge in edges:
         for end in (edge["from"], edge["to"]):
             if end and end not in id_set:
-                nodes.append({"id": end, "category": "unknown"})
+                nodes.append({
+                    "id": end, 
+                    "category": "unknown",
+                    "module": end.split("::")[0] if "::" in end else "unknown"  # Add module field for getModuleInfo compatibility
+                })
                 id_set.add(end)
+
+    # --- 4. Add alias edges ---
+    edges.extend(alias_edges)
 
     return {"nodes": nodes, "edges": edges}

@@ -30,9 +30,9 @@ def test_core_function_nodes(adapted):
         "models.go::Print",
         "models.go::ModelFunc",
         "types.go::TypeFunc",
-        # methods on Person
-        "models.go::Person::Greet",
-        "models.go::Person::SetName",
+        # methods on Person (using dot notation as per extractor output)
+        "models.go::Person.Greet",
+        "models.go::Person.SetName",
     }
     missing = expected - node_ids
     assert not missing, f"Missing nodes: {missing}"

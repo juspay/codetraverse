@@ -220,9 +220,10 @@ class GoComponentExtractor(ComponentExtractor):
 
     def _function_complete_path(self, name, receiver_type=None):
         file_path_rel = os.path.relpath(self.current_file_path, start=self.repo_root)
-        file_path_rel = file_path_rel.replace(os.sep, "::").replace("/", "::")
+        # Keep file path as-is, don't convert to :: format
         if receiver_type:
-            return f"{file_path_rel}::{receiver_type}::{name}"
+            # For methods, combine receiver and method name to maintain module::component format
+            return f"{file_path_rel}::{receiver_type}.{name}"
         else:
             return f"{file_path_rel}::{name}"
 
@@ -309,6 +310,7 @@ class GoComponentExtractor(ComponentExtractor):
         out = {
             "kind": kind,
             "name": name,
+            "module": os.path.relpath(self.current_file_path, start=self.repo_root),  # Add module field for getModuleInfo compatibility
             "complete_function_path": complete_function_path,
             "start_line": start_line,
             "end_line": end_line,
@@ -373,6 +375,7 @@ class GoComponentExtractor(ComponentExtractor):
                 types.append({
                     "kind": "struct",
                     "name": tname,
+                    "module": os.path.relpath(self.current_file_path, start=self.repo_root),  # Add module field for getModuleInfo compatibility
                     "start_line": start_line,
                     "end_line": end_line,
                     "doc_comment": doc,
@@ -413,6 +416,7 @@ class GoComponentExtractor(ComponentExtractor):
                 types.append({
                     "kind": "interface",
                     "name": tname,
+                    "module": os.path.relpath(self.current_file_path, start=self.repo_root),  # Add module field for getModuleInfo compatibility
                     "start_line": start_line,
                     "end_line": end_line,
                     "doc_comment": doc,
@@ -430,6 +434,7 @@ class GoComponentExtractor(ComponentExtractor):
                 types.append({
                     "kind": "type_alias",
                     "name": tname,
+                    "module": os.path.relpath(self.current_file_path, start=self.repo_root),  # Add module field for getModuleInfo compatibility
                     "aliased_type": aliased_type,
                     "start_line": start_line,
                     "end_line": end_line,
@@ -445,6 +450,7 @@ class GoComponentExtractor(ComponentExtractor):
                 types.append({
                     "kind": "type_alias",
                     "name": tname,
+                    "module": os.path.relpath(self.current_file_path, start=self.repo_root),  # Add module field for getModuleInfo compatibility
                     "aliased_type": aliased_type,
                     "start_line": start_line,
                     "end_line": end_line,
@@ -516,6 +522,7 @@ class GoComponentExtractor(ComponentExtractor):
                     vars_.append({
                         "kind": "variable",
                         "name": name,
+                        "module": os.path.relpath(self.current_file_path, start=self.repo_root),  # Add module field for getModuleInfo compatibility
                         "type": type_str,
                         "value": value,
                         "doc_comment": doc,
@@ -558,6 +565,7 @@ class GoComponentExtractor(ComponentExtractor):
                     consts_.append({
                         "kind": "constant",
                         "name": name,
+                        "module": os.path.relpath(self.current_file_path, start=self.repo_root),  # Add module field for getModuleInfo compatibility
                         "type": type_str,
                         "value": value,
                         "doc_comment": doc,
