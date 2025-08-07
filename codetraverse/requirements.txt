@@ -32,6 +32,6 @@ tree-sitter-rust==0.24.0
 tree-sitter-typescript==0.23.2
 unidiff==0.7.5
 urllib3==2.5.0
-uv==0.7.19
+uv==0.8.6
 bs4==0.0.2
 chardet==5.2.0
