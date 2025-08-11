@@ -274,11 +274,12 @@ class RustComponentExtractor(ComponentExtractor):
                     type_node = param.child_by_field_name('type')
                     param_info = {
                         'name': src[pattern.start_byte:pattern.end_byte].decode('utf8') if pattern else '',
-                        'type': self._extract_type_info(type_node, src) if type_node else None
+                        'type': self._extract_type_info(type_node, src) if type_node else None,
+                        'file_path': comp['file_path']
                     }
                     comp['parameters'].append(param_info)
                 elif param.type == 'self_parameter':
-                    comp['parameters'].append({'name': 'self', 'type': 'Self'})
+                    comp['parameters'].append({'name': 'self', 'type': 'Self', 'file_path': comp['file_path']})
         ret_node = node.child_by_field_name('return_type')
         if ret_node:
             comp['return_type'] = self._extract_type_info(ret_node, src)
@@ -304,7 +305,8 @@ class RustComponentExtractor(ComponentExtractor):
                         field_info = {
                             'name': src[name_node.start_byte:name_node.end_byte].decode('utf8') if name_node else '',
                             'type': self._extract_type_info(type_node, src) if type_node else '',
-                            'visibility': self._extract_visibility(field, src)
+                            'visibility': self._extract_visibility(field, src),
+                            'file_path': comp['file_path']
                         }
                         comp['fields'].append(field_info)
             elif body.type == 'ordered_field_declaration_list':
@@ -312,7 +314,8 @@ class RustComponentExtractor(ComponentExtractor):
                     field_info = {
                         'name': f"field_{i}",
                         'type': self._extract_type_info(field, src),
-                        'visibility': self._extract_visibility(field, src)
+                        'visibility': self._extract_visibility(field, src),
+                        'file_path': comp['file_path']
                     }
                     comp['fields'].append(field_info)
 
@@ -334,13 +337,15 @@ class RustComponentExtractor(ComponentExtractor):
                                 field_type = field.child_by_field_name('type')
                                 variant_info['fields'].append({
                                     'name': src[field_name.start_byte:field_name.end_byte].decode('utf8') if field_name else '',
-                                    'type': self._extract_type_info(field_type, src) if field_type else ''
+                                    'type': self._extract_type_info(field_type, src) if field_type else '',
+                                    'file_path': comp['file_path']
                                 })
                         elif value_node.type == 'ordered_field_declaration_list':
                             for i, field in enumerate(value_node.named_children):
                                 variant_info['fields'].append({
                                     'name': f"field_{i}",
-                                    'type': self._extract_type_info(field, src)
+                                    'type': self._extract_type_info(field, src),
+                                    'file_path': comp['file_path']
                                 })
                     comp['variants'].append(variant_info)
 
@@ -413,6 +418,7 @@ class RustComponentExtractor(ComponentExtractor):
                                 'resolved_receiver': resolved_receiver,
                                 'method': method_text,
                                 'full_path': f"{resolved_receiver}::{method_text}",
+                                'file_path': file_path,
                                 'span': {
                                     'start_line': n.start_point[0] + 1,
                                     'end_line': n.end_point[0] + 1
@@ -425,6 +431,7 @@ class RustComponentExtractor(ComponentExtractor):
                         call_info = {
                             'name': fn_text,
                             'resolved_name': resolved_fn,
+                            'file_path': file_path,
                             'span': {
                                 'start_line': n.start_point[0] + 1,
                                 'end_line': n.end_point[0] + 1
@@ -439,6 +446,7 @@ class RustComponentExtractor(ComponentExtractor):
                     macro_info = {
                         'name': macro_text,
                         'resolved_name': resolved_macro,
+                        'file_path': file_path,
                         'span': {
                             'start_line': n.start_point[0] + 1,
                             'end_line': n.end_point[0] + 1
@@ -450,6 +458,7 @@ class RustComponentExtractor(ComponentExtractor):
                 literal_info = {
                     'type': t,
                     'value': src[n.start_byte:n.end_byte].decode('utf8'),
+                    'file_path': file_path,
                     'span': {
                         'start_line': n.start_point[0] + 1,
                         'end_line': n.end_point[0] + 1
@@ -465,6 +474,7 @@ class RustComponentExtractor(ComponentExtractor):
                         'name': src[pat.start_byte:pat.end_byte].decode('utf8'),
                         'type': self._extract_type_info(type_node, src) if type_node else None,
                         'value': src[init.start_byte:init.end_byte].decode('utf8') if init else None,
+                        'file_path': file_path,
                         'span': {
                             'start_line': n.start_point[0] + 1,
                             'end_line': n.end_point[0] + 1

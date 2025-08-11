@@ -12,3 +12,4 @@ graph*/
 *.zip
 node_modules
 bridge/dist
+*.log

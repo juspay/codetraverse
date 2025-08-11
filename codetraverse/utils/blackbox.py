@@ -15,9 +15,9 @@ def getAllModules(graph_path: str) -> List[str]:
     res = set()
     for node in G.nodes:
         if "file_path" in G.nodes[node] and root in G.nodes[node]["file_path"]:
-            res.add(node.split("::")[0])
+            res.add("::".join(node.split("::")[:-1]))
         elif "location" in G.nodes[node]:
-            res.add(node.split("::")[0])
+            res.add("::".join(node.split("::")[:-1]))
     return list(res)
 
 def getModuleInfo(fdep_folder: str, module_name: str) -> List[Dict[str, Any]]:
@@ -41,7 +41,7 @@ def getModuleInfo(fdep_folder: str, module_name: str) -> List[Dict[str, Any]]:
                 data = json.load(f)
                 if isinstance(data, list):
                     for item in data:
-                        if isinstance(item, dict) and (item.get("module") == module_name or ("file_path" in item and item["file_path"] == module_name) or ("relative_path" in item and item["relative_path"] == module_name)):
+                        if isinstance(item, dict) and item.get("module") == module_name:
                             if "name" in item:
                                 exact_matches.append(item)
         except (json.JSONDecodeError, IOError) as e:
