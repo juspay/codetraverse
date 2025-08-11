@@ -12,6 +12,10 @@ import argparse
 def getAllModules(graph_path: str) -> List[str]:
     root = "/".join(graph_path.split("/")[:2])
     G = load_graph(graph_path)
+    if not G:
+        print(f"Error: Graph not found at {graph_path}", file=sys.stderr)
+        return []
+    
     res = set()
     for node in G.nodes:
         if "file_path" in G.nodes[node] and root in G.nodes[node]["file_path"]:
@@ -22,11 +26,8 @@ def getAllModules(graph_path: str) -> List[str]:
 
 def getModuleInfo(fdep_folder: str, module_name: str) -> List[Dict[str, Any]]:
     if not os.path.isdir(fdep_folder):
-        return {
-            "error": True,
-            "message": f"Folder doesn't exist: {fdep_folder}",
-            "components": [],
-        }
+        print(f"Error: Folder doesn't exist: {fdep_folder}", file=sys.stderr)
+        return []
 
     json_files = []
     for root, _, files in os.walk(fdep_folder):
@@ -45,7 +46,7 @@ def getModuleInfo(fdep_folder: str, module_name: str) -> List[Dict[str, Any]]:
                             if "name" in item:
                                 exact_matches.append(item)
         except (json.JSONDecodeError, IOError) as e:
-            print(f"Warning: Could not read or parse {file_path}: {e}")
+            print(f"Warning: Could not read or parse {file_path}: {e}", file=sys.stderr)
             continue
 
     if exact_matches:
@@ -90,23 +91,18 @@ def getFunctionInfo(
     fdep_folder: str, module_name: str, component_name: str
 ) -> List[Dict[str, Any]]:
     if not os.path.exists(fdep_folder):
-        return {
-            "error": True,
-            "message": f"Folder doesn't exist: {fdep_folder}",
-            "components": [],
-        }
+        print(f"Error: Folder doesn't exist: {fdep_folder}", file=sys.stderr)
+        return []
+    
     components = getModuleInfo(fdep_folder, module_name)
-    if isinstance(components, dict) and components.get("error"):
-        return components
+    # getModuleInfo now always returns a list, so no need to check for error dict
 
     for comp in components:
         if comp.get("name") == component_name:
             return [comp]
-    return {
-        "error": True,
-        "message": f"'{component_name}' not found in module '{module_name}'",
-        "component": None,
-    }
+    
+    print(f"Error: '{component_name}' not found in module '{module_name}'", file=sys.stderr)
+    return []
 
 
 def getFunctionChildren(
@@ -114,18 +110,13 @@ def getFunctionChildren(
 ) -> List[List[Any]]:
     G = load_graph(graph_path)
     if not G:
-        return {
-            "error": True,
-            "message": f"Graph not found at {graph_path}",
-            "children": [],
-        }
+        print(f"Error: Graph not found at {graph_path}", file=sys.stderr)
+        return []
+    
     target = f"{module_name}::{component_name}"
     if target not in G:
-        return {
-            "error": True,
-            "message": f"Target '{target}' not in graph",
-            "children": [],
-        }
+        print(f"Error: Target '{target}' not in graph", file=sys.stderr)
+        return []
 
     result = []
     visited = set()
@@ -155,19 +146,13 @@ def getFunctionParent(
 ) -> List[List[Any]]:
     G = load_graph(graph_path)
     if not G:
-        return {
-            "error": True,
-            "message": f"Graph not found at {graph_path}",
-            "children": [],
-        }
+        print(f"Error: Graph not found at {graph_path}", file=sys.stderr)
+        return []
 
     target = f"{module_name}::{component_name}"
     if target not in G:
-        return {
-            "error": True,
-            "message": f"Target '{target}' not in graph",
-            "children": [],
-        }
+        print(f"Error: Target '{target}' not in graph", file=sys.stderr)
+        return []
 
     result = []
     visited = set()
