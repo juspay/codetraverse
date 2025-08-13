@@ -16,6 +16,8 @@ jobs:
             dir: haskell
           - name: python
             dir: python
+          - name: javascript
+            dir: javascript
     steps:
       - uses: actions/checkout@v3
 
