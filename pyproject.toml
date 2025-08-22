@@ -37,7 +37,6 @@ dependencies = [
     "tree-sitter-haskell==0.23.1",
     "tree-sitter-language-pack>=0.9.0",
     "tree-sitter-python==0.23.6",
-    "tree-sitter-rescript",
     "tree-sitter-rust==0.24.0",
     "tree-sitter-typescript==0.23.2",
     "unidiff==0.7.5",
@@ -47,4 +46,3 @@ dependencies = [
 
 [tool.uv.sources]
 tree-sitter = { git = "https://github.com/tree-sitter/py-tree-sitter", rev = "c1bd563b330b2c2fe9894beb652bc58ae8613b0c" }
-tree-sitter-rescript = { git = "https://github.com/JignyasAnand/tree-sitter-rescript", rev = "215c56d2cc3ce4ce912dff3ea44fd4e22ac8913d" }

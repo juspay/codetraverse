@@ -3,7 +3,7 @@ import json
 import traceback
 from typing import Dict, List, Optional, Union, Any
 from tree_sitter import Language, Parser, Node
-import tree_sitter_rescript
+# import tree_sitter_rescript
 from tree_sitter_language_pack import get_language
 from codetraverse.ast_diff.haskelldiff import HaskellFileDiff
 from codetraverse.ast_diff.resdiffer import RescriptFileDiff
@@ -36,7 +36,7 @@ class AstDiffOrchestrator:
     def __init__(self):
         # Maps the language name to its specific tools
         self.language_handlers = {
-            "rescript":   {'lang_obj': Language(tree_sitter_rescript.language()), 'differ_class': RescriptFileDiff},
+            # "rescript":   {'lang_obj': Language(tree_sitter_rescript.language()), 'differ_class': RescriptFileDiff},
             "haskell":    {'lang_obj':  get_language('haskell'), 'differ_class': HaskellFileDiff},
             "typescript": {'lang_obj':  get_language('typescript'), 'differ_class': TypeScriptFileDiff},
             "go":         {'lang_obj': get_language('go'), 'differ_class': GoFileDiff},

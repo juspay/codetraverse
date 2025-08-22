@@ -3,7 +3,7 @@ import json
 import re
 from collections import defaultdict
 from tree_sitter import Language, Parser, Node
-import tree_sitter_rescript
+# import tree_sitter_rescript
 import hashlib
 import os
 from .Detailedchanges import DetailedChanges
