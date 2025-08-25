@@ -9,6 +9,13 @@ import {
   Language
 } from './types';
 
+interface CommandOptions {
+  args: string[];
+  uvCommand?: string;   // default "run"
+  timeoutMs?: number;
+  cwd?: string;
+}
+
 /**
  * Utility class for spawning and managing Python processes
  */
@@ -28,6 +35,14 @@ export class PythonRunner {
   async createEnv() {
     console.log(this.pythonPath, this.codetraversePath)
     await this.executeShell([path.join(this.codetraversePath, "scripts/setup.sh"), this.pythonPath, this.codetraversePath])
+  }
+
+  async installDeps() {
+    const requirementsPath = path.join(this.codetraversePath, "codetraverse", "requirements.txt");
+    if (fs.existsSync(requirementsPath)) {
+      const envPath = path.join(process.env.HOME || "./", "npm_codetraverse");
+      await this.executeCommand({ args: ["-r", requirementsPath], uvCommand: "add", cwd: envPath})
+    }
   }
 
   /**
@@ -55,7 +70,7 @@ export class PythonRunner {
       args.push('--GRAPH_DIR', graphDir);
     }
 
-    return this.executeCommand(args);
+    return this.executeCommand({ args });
   }
 
   /**
@@ -74,7 +89,7 @@ export class PythonRunner {
       args = ["python", "-c", `import codetraverse.path as codepath;codepath.find_path(\"${graphPath}\", \"${component}\")`]
     }
 
-    return this.executeCommand(args);
+    return this.executeCommand({ args });
   }
 
   /**
@@ -95,7 +110,7 @@ export class PythonRunner {
       '--QUIET'  // Suppress progress output for single files
     ];
 
-    return this.executeCommand(args);
+    return this.executeCommand({ args });
   }
 
   /**
@@ -125,7 +140,7 @@ export class PythonRunner {
       args.push('--GRAPH_DIR', graphDir);
     }
 
-    return this.executeCommand(args);
+    return this.executeCommand({ args });
   }
 
   async runBlackbox(
@@ -133,7 +148,7 @@ export class PythonRunner {
     args: string[]
   ): Promise<{ stdout: string; stderr: string }> {
     const cmd = ["-m", "codetraverse.utils.blackbox", fn, ...args];
-    return this.executeCommand(cmd);
+    return this.executeCommand({ args: cmd });
   }
 
   async runCreateFdepDataAndGraph(
@@ -153,7 +168,7 @@ export class PythonRunner {
     }
     // Use the main.py entrypoint instead of utils.blackbox
     const cmd = ['-m', "codetraverse.main", ...args];
-    return this.executeCommand(cmd, -1);
+    return this.executeCommand({ args: cmd, timeoutMs: -1 });
   }
 
   /**
@@ -167,7 +182,7 @@ export class PythonRunner {
       '-m', 'codetraverse.utils.AstDifferOrchestrator',
       '--config-json', configJson
     ];
-    return this.executeCommand(args);
+    return this.executeCommand({ args });
   }
 
   /**
@@ -182,7 +197,7 @@ export class PythonRunner {
       '--extract-components',
       '--file', filePath
     ];
-    return this.executeCommand(args);
+    return this.executeCommand({ args });
   }
 
   /**
@@ -199,7 +214,7 @@ export class PythonRunner {
       '--extract-components',
       '--files', ...filePaths
     ];
-    return this.executeCommand(args);
+    return this.executeCommand({ args });
   }
 
   /**
@@ -208,10 +223,10 @@ export class PythonRunner {
   async validateSetup(): Promise<void> {
     try {
       // Check Python
-      await this.executeCommand(['--version'], 5000);
+      await this.executeCommand({ args: ['--version'], timeoutMs: 5000 });
 
       // Check codetraverse module
-      await this.executeCommand(['-m', "codetraverse.utils.blackbox", '--help'], 10000);
+      await this.executeCommand({ args: ['-m', "codetraverse.utils.blackbox", '--help'], timeoutMs: 10000 });
     } catch (error) {
       if (error instanceof PythonProcessError) {
         throw new PythonProcessError(
@@ -288,17 +303,16 @@ export class PythonRunner {
   /**
    * Execute a Python command with proper error handling
    */
-  private async executeCommand(
-    args: string[],
-    timeoutMs?: number
-  ): Promise<{ stdout: string; stderr: string }> {
+  private async executeCommand({ args, uvCommand = "run", timeoutMs, cwd }: CommandOptions): Promise<{ stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
       const actualTimeout = timeoutMs || this.timeout;
       let stdout = '';
       let stderr = '';
       const uvPath = path.join(process.env.HOME || "./", "npm_codetraverse", "tmp_env", "bin", "uv")
-      const child: ChildProcess = spawn(uvPath, ["run", ...args], {
-        cwd: this.codetraversePath,
+      console.log(uvPath, uvCommand, args);
+      console.log(this.codetraversePath);
+      const child: ChildProcess = spawn(uvPath, [uvCommand, ...args], {
+        cwd: cwd || this.codetraversePath,
         stdio: ['pipe', 'pipe', 'pipe'],
         env: {
           ...process.env,

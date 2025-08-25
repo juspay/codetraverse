@@ -8,6 +8,7 @@ from codetraverse.utils.graph_partitioner import compute_node_metrics
 from codetraverse.main import create_fdep_data
 import sys
 import argparse
+from pathlib import Path
 
 def getAllModules(graph_path: str) -> List[str]:
     root = "/".join(graph_path.split("/")[:2])
@@ -270,10 +271,10 @@ def getCommonChildren(
 
 
 def getImportantNodes(
-    fdep_path: str, output_path: str = "", epsilon: float = 0.2, percentage: float = 5
+    fdep_path: str, output_dir: str = "", epsilon: float = 0.2, percentage: float = 5
 ):
-
-    os.makedirs(fdep_path + "/xyne_tmp", exist_ok=True)
+    output_dir = Path(output_dir)
+    os.makedirs(output_dir, exist_ok=True)
     if not os.path.exists(fdep_path):
         raise FileNotFoundError(f"The specified fdep path does not exist: {fdep_path}")
     if epsilon > 1 or epsilon < 0:
@@ -285,14 +286,14 @@ def getImportantNodes(
         folder_path=fdep_path,
         save_as_json=False,
         save_as_graphml=False,
-        output_path=output_path,
+        output_path=output_dir,
     )
     count = fdep_nx.number_of_nodes()
     num_selections = int(count * percentage / 100)
     heavy_nodes_by_metric = compute_node_metrics(
         graph=fdep_nx, epsilon=epsilon, num_selections=num_selections
     )
-    with open(f"{fdep_path}/xyne_tmp/ImportantNodes.json", "w") as f:
+    with open(output_dir / "ImportantNodes.json", "w") as f:
         json.dump(heavy_nodes_by_metric, f)
     return json.dumps({"status": "ok"})
 
@@ -477,7 +478,7 @@ def main():
         elif args.function == "getImportantNodes":
             result = getImportantNodes(
                 fdep_path=args.fdep_path,
-                output_path=args.output_path,
+                output_dir=args.output_path,
                 epsilon=args.epsilon,
                 percentage=args.percentage,
             )

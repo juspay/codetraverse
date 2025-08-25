@@ -3,6 +3,7 @@ import json
 import networkx as nx
 from codetraverse.adapters.rescript_adapter import extract_id
 from networkx import DiGraph
+from pathlib import Path
 
 def load_components(fdep_dir):
 
@@ -75,21 +76,21 @@ def preprocess_graph(G: nx.DiGraph) -> nx.DiGraph:
     return G
 
 
-def build_clean_graph(folder_path:str, save_as_json:bool = False, save_as_graphml:bool = False, output_path:str=""):
+def build_clean_graph(folder_path:str, save_as_json:bool = False, save_as_graphml:bool = False, output_path: Path = Path("")):
 
     json_folder = folder_path
     fdep_nx = build_graph_from_folder(json_folder, save_as_json=save_as_json, save_as_graphml=save_as_graphml, output_path=output_path)
-    num_nodes = fdep_nx.number_of_nodes()
+    # num_nodes = fdep_nx.number_of_nodes()
     # print(f"Total nodes in graph before preprocessing: {num_nodes}")
     
     # Preprocess the graph to remove nodes with empty code
     fdep_nx = preprocess_graph(fdep_nx)
-    num_nodes_after = fdep_nx.number_of_nodes()
+    # num_nodes_after = fdep_nx.number_of_nodes()
     # print(f"Total nodes in graph after preprocessing: {num_nodes_after}")
     
-    root_nodes = [n for n, deg in fdep_nx.in_degree() if deg == 0]
+    # root_nodes = [n for n, deg in fdep_nx.in_degree() if deg == 0]
     # print("Root nodes:", len(root_nodes))
-    top5 = top_roots_by_descendants(fdep_nx, top_n=5)
+    # top5 = top_roots_by_descendants(fdep_nx, top_n=5)
     # for node, cnt in top5:
         # print(f"{node!r} has {cnt} descendants")
     
@@ -114,7 +115,7 @@ def build_graph_from_folder(folder_path: str, save_as_json:bool = False, save_as
         graph_to_json(G, output_path)
     sanitize_for_graphml(G)
     if save_as_graphml:
-        nx.write_graphml(G, f"{output_path}/fdep.graphml")
+        nx.write_graphml(G, output_path / "fdep.graphml")
     return G
 
 def graph_to_json(G: DiGraph, output_path) -> dict:
@@ -135,7 +136,7 @@ def graph_to_json(G: DiGraph, output_path) -> dict:
                 "module": module or ""
             }
         }
-    with open(f"{output_path}/fdep.json", "w") as f:
+    with open(output_path / "fdep.json", "w") as f:
         json.dump(out, f)
     return out
 
