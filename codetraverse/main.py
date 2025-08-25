@@ -69,9 +69,9 @@ def _process_single_file_worker(args):
         print(f"Unable to process - {code_path}. Skipping it.")
 
 def create_fdep_data(root_dir, output_base: str = "./output/fdep", graph_dir: str = "./output/graph", clear_existing: bool = True, skip_adaptor:bool = False):
+    os.environ["ROOT_DIR"] = root_dir
     root_dir = Path(root_dir)
     language_file_map = defaultdict(list)
-    os.environ["ROOT_DIR"] = root_dir
     gitignore_pth = root_dir / ".gitignore"
     gitign_pattern = gitignore_pth.read_text().splitlines() if gitignore_pth.exists() else []
     spec = pathspec.PathSpec.from_lines("gitwildmatch", gitign_pattern)
@@ -220,4 +220,4 @@ def create_graph(fdep_dir, graph_dir):
 if __name__ == "__main__":
     main()
     # create_graph("/Users/jignyas.s/.xyne/c3c4ce677bbb8d1b88dc36118729f830/fdep", "/Users/jignyas.s/Desktop/Juspay/codetraverse")
-    # create_fdep_data("/Users/jignyas.s/Desktop/Juspay/namma-yatri-website", "/Users/jignyas.s/Desktop/Juspay/codetraverse/output/fdep", "/Users/jignyas.s/Desktop/Juspay/codetraverse/output/graph")
+    # create_fdep_data("/Users/jignyas.s/Desktop/Juspay/hyper-widget", "/Users/jignyas.s/Desktop/Juspay/codetraverse/output/fdep", "/Users/jignyas.s/Desktop/Juspay/codetraverse/output/graph")
