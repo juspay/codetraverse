@@ -35,6 +35,10 @@ export class CodeTraverseBridge {
     await this.runner.createEnv();
   }
 
+  async installDeps() {
+    await this.runner.installDeps();
+  }
+
   /**
    * Analyze a single file and return extracted components
    */
@@ -271,7 +275,7 @@ export class CodeTraverseBridge {
     percentage = 5
   ): Promise<any> {
     const { stdout } = await this.runner.runBlackbox('getImportantNodes', [fdep_path, "--output_path", output_path, "--epsilon", epsilon.toString(), "--percentage", percentage.toString()]);
-    return JSON.parse("{}") as any;
+    return JSON.stringify("{}") as any;
   }
 
   /**
@@ -490,10 +494,13 @@ export class CodeTraverseBridge {
 
 (async () => {
   // const obj = new CodeTraverseBridge({ pythonPath: "/usr/local/bin/python3.10", codetraversePath: "/Users/jignyas.s/Desktop/Juspay/code/node_modules/codetraverse-bridge-jp" })
+  // const obj = new CodeTraverseBridge({ pythonPath: "python3", codetraversePath: "/Users/jignyas.s/Desktop/Juspay/code/node_modules/codetraverse-bridge-jp" })
   // const obj = new CodeTraverseBridge({ pythonPath: "/opt/homebrew/bin/python3", codetraversePath: "/Users/pramod.p/codetraverse" })
   // console.log(await obj.findPath("/Users/jignyas.s/Desktop/Juspay/codegen2/codegen/xyne_tmp/graph/repo_function_calls.graphml", "App.Routes::formatGatewayDoc", "Database.GptResponse::findOneGptResponseByCategoryDBE"))
   // console.log(await obj.getAllModules())
   // await obj.createFdepData("/Users/jignyas.s/Desktop/Juspay/jaf/jaf", "/Users/jignyas.s/Desktop/Juspay/codetraverse/output/fdep", "/Users/jignyas.s/Desktop/Juspay/codetraverse/output/graph");
   // console.log(await obj.getAllModules("/Users/jignyas.s/Desktop/Juspay/codetraverse/output/graph/repo_function_calls.graphml"));
+  // await obj.installDeps()
+  // console.log(await obj.getImportantNodes("/Users/jignyas.s/.xyne/e9860aa954aaa7a91d6d5abb49e1658a/fdep", "/Users/jignyas.s/.xyne/e9860aa954aaa7a91d6d5abb49e1658a"))
   // console.log(await obj.extractComponentsFromFile("/Users/pramod.p/euler-api-gateway/src/Euler/API/Gateway/Gateway/Checkout/Flows/Mandate.hs"))
 })();
