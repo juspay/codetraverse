@@ -12,6 +12,7 @@ from codetraverse.adapters.typescript_adapter import adapt_typescript_components
 from codetraverse.adapters.purescript_adapter import adapt_purescript_components
 from codetraverse.adapters.javascript_adapter import adapt_javascript_components
 
+import pathspec
 from functools import reduce
 import shutil
 import traceback
@@ -67,23 +68,19 @@ def _process_single_file_worker(args):
         print(traceback.format_exc())
         print(f"Unable to process - {code_path}. Skipping it.")
 
-def ignore_file_path(file_path: str) -> bool:
-    ignore_paths = ["/.venv/", "/node_modules/"]
-    return any([i in file_path for i in ignore_paths])
-
 def create_fdep_data(root_dir, output_base: str = "./output/fdep", graph_dir: str = "./output/graph", clear_existing: bool = True, skip_adaptor:bool = False):
-
+    root_dir = Path(root_dir)
     language_file_map = defaultdict(list)
     os.environ["ROOT_DIR"] = root_dir
+    gitignore_pth = root_dir / ".gitignore"
+    gitign_pattern = gitignore_pth.read_text().splitlines() if gitignore_pth.exists() else []
+    spec = pathspec.PathSpec.from_lines("gitwildmatch", gitign_pattern)
 
-    for dirpath, _, filenames in os.walk(root_dir):
-        if ignore_file_path(dirpath):
-            continue
-        for file_name in filenames:
-            extension = Path(file_name).suffix
-            language = INVERSE_EXTS.get(extension, None)
-            if language is not None:
-                language_file_map[language].append(os.path.join(dirpath, file_name))
+    for file_path in root_dir.rglob("*"):
+        if not spec.match_file(str(file_path.relative_to(root_dir))):
+            language = INVERSE_EXTS.get(file_path.suffix)
+            if language:
+                language_file_map[language].append(file_path)
 
     if os.path.isdir(output_base) and clear_existing:
         shutil.rmtree(output_base, ignore_errors=True)
