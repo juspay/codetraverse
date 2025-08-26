@@ -17,6 +17,7 @@ import {
   AstDiffConfig
 } from './types';
 import { PythonRunner } from './python-runner';
+import { logToFile } from './logger';
 
 /**
  * Main bridge class providing a TypeScript/Node.js API for CodeTraverse
@@ -160,10 +161,10 @@ export class CodeTraverseBridge {
   ): Promise<void> {
     const { stdout, stderr } = await this.runner.runCreateFdepDataAndGraph(rootDir, outputBase, graphDir, noClear);
     if (stderr) {
-      console.error(`Error while creating FDEP data:\n${stderr}`);
+      logToFile.error(`Error while creating FDEP data:\n${stderr}`);
       throw new Error(stderr);
     }
-    console.log(`FDEP data created:\n${stdout}`);
+    logToFile.info(`FDEP data created:\n${stdout}`);
   }
 
   /**
@@ -285,7 +286,7 @@ export class CodeTraverseBridge {
     try {
       const { stdout, stderr } = await this.runner.runAstDiff(config);
       if (stderr) {
-        console.warn(`AST Diff process stderr: ${stderr}`);
+        logToFile.warn(`AST Diff process stderr: ${stderr}`);
       }
       // The Python script prints the output file path, so we return that.
       const match = stdout.match(/Changes written to - (.*)/);
@@ -305,7 +306,7 @@ export class CodeTraverseBridge {
     try {
       const { stdout, stderr } = await this.runner.runComponentExtraction(filePath);
       if (stderr) {
-        console.warn(`Component extraction process stderr: ${stderr}`);
+        logToFile.warn(`Component extraction process stderr: ${stderr}`);
       }
       return JSON.parse(stdout);
     } catch (error) {
@@ -320,7 +321,7 @@ export class CodeTraverseBridge {
     try {
       const { stdout, stderr } = await this.runner.runMultipleComponentExtraction(filePaths);
       if (stderr) {
-        console.warn(`Component extraction process stderr: ${stderr}`);
+        logToFile.warn(`Component extraction process stderr: ${stderr}`);
       }
       return JSON.parse(stdout);
     } catch (error) {

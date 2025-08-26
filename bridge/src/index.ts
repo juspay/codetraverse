@@ -28,6 +28,7 @@
 // Export main classes
 export { CodeTraverseBridge } from './bridge';
 export { PythonRunner } from './python-runner';
+export { logToFile } from './logger';
 
 // Export all types
 export * from './types';

@@ -1,4 +1,5 @@
 import { spawn, ChildProcess } from 'child_process';
+import { Worker, isMainThread, parentPort, workerData } from 'worker_threads';
 import * as path from 'path';
 import * as fs from 'fs';
 import {
@@ -8,6 +9,175 @@ import {
   FileNotFoundError,
   Language
 } from './types';
+import { logToFile } from './logger';
+
+// Worker thread implementation
+if (!isMainThread && workerData?.isWorker) {
+  let currentProcess: ChildProcess | null = null;
+  let currentTimer: NodeJS.Timeout | null = null;
+
+  const cleanup = () => {
+    logToFile.info(`[Worker ${process.pid}] Starting cleanup procedure`);
+    
+    if (currentTimer) {
+      clearTimeout(currentTimer);
+      currentTimer = null;
+      logToFile.debug(`[Worker ${process.pid}] Cleared timeout timer`);
+    }
+    
+    if (currentProcess) {
+      const pid = currentProcess.pid;
+      logToFile.warn(`[Worker ${process.pid}] Killing child process PID: ${pid}`);
+      currentProcess.kill('SIGKILL');
+      currentProcess = null;
+      logToFile.info(`[Worker ${process.pid}] Child process PID: ${pid} killed`);
+    } else {
+      logToFile.debug(`[Worker ${process.pid}] No active child process to cleanup`);
+    }
+    
+    logToFile.info(`[Worker ${process.pid}] Cleanup procedure completed`);
+  };
+
+  const executeCommand = async (data: any) => {
+    return new Promise<void>((resolve) => {
+      const { commandType, uvPath, uvCommand, args, cwd, env, timeoutMs } = data;
+      let stdout = '';
+      let stderr = '';
+
+      if (commandType === 'shell') {
+        // Handle shell script execution
+        logToFile.info(`[Worker ${process.pid}] Spawning shell process: sh ${args.join(' ')}`);
+        logToFile.debug(`[Worker ${process.pid}] Shell process options - cwd: ${cwd}, timeout: ${timeoutMs}ms`);
+
+        currentProcess = spawn('sh', args, {
+          cwd,
+          stdio: ['pipe', 'pipe', 'pipe'],
+          env,
+          shell: true
+        });
+      } else {
+        // Handle Python/uv command execution  
+        logToFile.info(`[Worker ${process.pid}] Spawning process: ${uvPath} ${uvCommand} ${args.join(' ')}`);
+        logToFile.debug(`[Worker ${process.pid}] Process options - cwd: ${cwd}, timeout: ${timeoutMs}ms`);
+
+        currentProcess = spawn(uvPath, [uvCommand, ...args], {
+          cwd,
+          stdio: ['pipe', 'pipe', 'pipe'],
+          env
+        });
+      }
+
+      const childPid = currentProcess.pid;
+      logToFile.info(`[Worker ${process.pid}] Child process spawned with PID: ${childPid}`);
+
+      // Set up timeout if specified
+      if (timeoutMs > 0) {
+        logToFile.debug(`[Worker ${process.pid}] Setting timeout for ${timeoutMs}ms for PID: ${childPid}`);
+        currentTimer = setTimeout(() => {
+          logToFile.warn(`[Worker ${process.pid}] Process PID: ${childPid} TIMED OUT after ${timeoutMs}ms - triggering cleanup`);
+          cleanup();
+          parentPort?.postMessage({
+            type: 'error',
+            data: {
+              error: `Python process timed out after ${timeoutMs}ms`,
+              exitCode: -1,
+              stderr: 'Process timeout'
+            }
+          });
+          resolve();
+        }, timeoutMs);
+      } else {
+        logToFile.debug(`[Worker ${process.pid}] No timeout set for PID: ${childPid}`);
+      }
+
+      // Collect stdout
+      currentProcess.stdout?.on('data', (chunk: Buffer) => {
+        stdout += chunk.toString();
+      });
+
+      // Collect stderr
+      currentProcess.stderr?.on('data', (chunk: Buffer) => {
+        stderr += chunk.toString();
+      });
+
+      // Handle process completion
+      currentProcess.on('close', (code: number | null) => {
+        logToFile.info(`[Worker ${process.pid}] Child process PID: ${childPid} closed with code: ${code}`);
+        
+        if (currentTimer) {
+          clearTimeout(currentTimer);
+          currentTimer = null;
+          logToFile.debug(`[Worker ${process.pid}] Cleared timeout timer for PID: ${childPid}`);
+        }
+
+        if (code === 0) {
+          logToFile.info(`[Worker ${process.pid}] Process PID: ${childPid} completed successfully`);
+          parentPort?.postMessage({
+            type: 'success',
+            data: { stdout: stdout.trim(), stderr: stderr.trim() }
+          });
+        } else {
+          logToFile.error(`[Worker ${process.pid}] Process PID: ${childPid} failed with exit code: ${code}`);
+          if (stderr.trim()) {
+            logToFile.error(`[Worker ${process.pid}] Process PID: ${childPid} stderr: ${stderr.trim()}`);
+          }
+          parentPort?.postMessage({
+            type: 'error',
+            data: {
+              error: `Python process exited with code ${code || 'unknown'}`,
+              exitCode: code || -1,
+              stderr: stderr.trim()
+            }
+          });
+        }
+        
+        currentProcess = null;
+        logToFile.debug(`[Worker ${process.pid}] Process PID: ${childPid} cleaned up, currentProcess set to null`);
+        resolve();
+      });
+
+      // Handle process errors
+      currentProcess.on('error', (error: Error) => {
+        logToFile.error(`[Worker ${process.pid}] Process PID: ${childPid} error: ${error.message}`);
+        
+        if (currentTimer) {
+          clearTimeout(currentTimer);
+          currentTimer = null;
+          logToFile.debug(`[Worker ${process.pid}] Cleared timeout timer due to error for PID: ${childPid}`);
+        }
+        
+        parentPort?.postMessage({
+          type: 'error',
+          data: {
+            error: `Failed to spawn Python process: ${error.message}`,
+            exitCode: -1,
+            stderr: error.message
+          }
+        });
+        
+        currentProcess = null;
+        logToFile.debug(`[Worker ${process.pid}] Process PID: ${childPid} cleaned up after error, currentProcess set to null`);
+        resolve();
+      });
+    });
+  };
+
+  // Listen for messages from main thread
+  parentPort?.on('message', async (message) => {
+    if (message.type === 'execute') {
+      await executeCommand(message.data);
+    } else if (message.type === 'cleanup') {
+      cleanup();
+      parentPort?.postMessage({ type: 'cleanup-complete' });
+    } else if (message.type === 'shutdown') {
+      cleanup();
+      process.exit(0);
+    }
+  });
+
+  // Signal that worker is ready
+  parentPort?.postMessage({ type: 'ready' });
+}
 
 interface CommandOptions {
   args: string[];
@@ -16,25 +186,193 @@ interface CommandOptions {
   cwd?: string;
 }
 
+interface WorkerTask {
+  resolve: (value: { stdout: string; stderr: string }) => void;
+  reject: (reason: any) => void;
+  timer?: NodeJS.Timeout;
+}
+
 /**
- * Utility class for spawning and managing Python processes
+ * Utility class for spawning and managing Python processes using worker threads
  */
 export class PythonRunner {
   private readonly pythonPath: string;
   private readonly codetraversePath: string;
   private readonly timeout: number;
   private readonly workingDirectory: string;
+  private workerPool: Worker[] = [];
+  private readonly maxWorkers: number = 4;
+  private availableWorkers: Worker[] = [];
+  private taskQueue: Array<{ task: any; workerTask: WorkerTask }> = [];
 
   constructor(config: BridgeConfig = {}) {
     this.pythonPath = config.pythonPath || 'python';
     this.codetraversePath = config.codetraversePath || 'codetraverse';
     this.timeout = config.timeout || 60000; // 60 seconds default
     this.workingDirectory = config.workingDirectory || process.cwd();
+    
+    logToFile.info(`[PythonRunner] Initializing with config - pythonPath: ${this.pythonPath}, codetraversePath: ${this.codetraversePath}, timeout: ${this.timeout}ms, maxWorkers: ${this.maxWorkers}`);
+    logToFile.debug(`[PythonRunner] Working directory: ${this.workingDirectory}`);
+    
+    this.initializeWorkerPool();
+  }
+
+  private initializeWorkerPool(): void {
+    logToFile.info(`[PythonRunner] Initializing worker pool with ${this.maxWorkers} workers`);
+    
+    for (let i = 0; i < this.maxWorkers; i++) {
+      this.createWorker();
+    }
+    
+    logToFile.info(`[PythonRunner] Worker pool initialized successfully. Active workers: ${this.workerPool.length}, Available workers: ${this.availableWorkers.length}`);
+  }
+
+  private createWorker(): Worker {
+    const worker = new Worker(__filename, {
+      workerData: { isWorker: true }
+    });
+    
+    const workerThreadId = worker.threadId;
+    logToFile.info(`[PythonRunner] Creating new worker with thread ID: ${workerThreadId}`);
+
+    worker.on('message', (response) => {
+      if (response.type === 'ready') {
+        logToFile.debug(`[PythonRunner] Worker ${workerThreadId} is ready`);
+      }
+      this.handleWorkerMessage(worker, response);
+    });
+
+    worker.on('error', (error) => {
+      logToFile.error(`[PythonRunner] Worker ${workerThreadId} error: ${error.message}`);
+      this.handleWorkerError(worker, error);
+    });
+
+    worker.on('exit', (code) => {
+      if (code !== 0) {
+        logToFile.error(`[PythonRunner] Worker ${workerThreadId} stopped with exit code ${code}`);
+      } else {
+        logToFile.info(`[PythonRunner] Worker ${workerThreadId} exited cleanly`);
+      }
+      this.removeWorker(worker);
+    });
+
+    this.workerPool.push(worker);
+    this.availableWorkers.push(worker);
+    logToFile.debug(`[PythonRunner] Worker ${workerThreadId} added to pool. Total workers: ${this.workerPool.length}`);
+    
+    return worker;
+  }
+
+  private handleWorkerMessage(worker: Worker, response: any): void {
+    // Handle worker responses and resolve pending tasks
+    if (response.type === 'success') {
+      this.availableWorkers.push(worker);
+      this.processQueue();
+    } else if (response.type === 'error') {
+      this.availableWorkers.push(worker);
+      this.processQueue();
+    }
+  }
+
+  private handleWorkerError(worker: Worker, error: Error): void {
+    // Remove failed worker and create a new one
+    this.removeWorker(worker);
+    this.createWorker();
+  }
+
+  private removeWorker(worker: Worker): void {
+    const poolIndex = this.workerPool.indexOf(worker);
+    if (poolIndex > -1) {
+      this.workerPool.splice(poolIndex, 1);
+    }
+
+    const availableIndex = this.availableWorkers.indexOf(worker);
+    if (availableIndex > -1) {
+      this.availableWorkers.splice(availableIndex, 1);
+    }
+  }
+
+  private processQueue(): void {
+    while (this.taskQueue.length > 0 && this.availableWorkers.length > 0) {
+      const { task, workerTask } = this.taskQueue.shift()!;
+      const worker = this.availableWorkers.shift()!;
+      this.executeTaskInWorker(worker, task, workerTask);
+    }
+  }
+
+  private executeTaskInWorker(worker: Worker, task: any, workerTask: WorkerTask): void {
+    // Set up timeout
+    if (task.timeoutMs > 0) {
+      workerTask.timer = setTimeout(() => {
+        workerTask.reject(new PythonProcessError(
+          `Python process timed out after ${task.timeoutMs}ms`,
+          -1,
+          'Process timeout'
+        ));
+        worker.terminate();
+        this.removeWorker(worker);
+        this.createWorker();
+      }, task.timeoutMs);
+    }
+
+    // Set up response handler
+    const messageHandler = (response: any) => {
+      if (workerTask.timer) {
+        clearTimeout(workerTask.timer);
+      }
+
+      worker.off('message', messageHandler);
+      
+      if (response.type === 'success') {
+        workerTask.resolve({
+          stdout: response.data.stdout || '',
+          stderr: response.data.stderr || ''
+        });
+      } else if (response.type === 'error') {
+        workerTask.reject(new PythonProcessError(
+          response.data.error || 'Unknown error',
+          response.data.exitCode || -1,
+          response.data.stderr || ''
+        ));
+      }
+
+      this.availableWorkers.push(worker);
+      this.processQueue();
+    };
+
+    worker.on('message', messageHandler);
+    worker.postMessage({ type: 'execute', data: task });
+  }
+
+  public async cleanup(): Promise<void> {
+    logToFile.warn(`[PythonRunner] Starting cleanup of ${this.workerPool.length} workers`);
+    logToFile.info(`[PythonRunner] Current state - Pool: ${this.workerPool.length}, Available: ${this.availableWorkers.length}, Queued: ${this.taskQueue.length}`);
+    
+    // Terminate all workers
+    const terminationPromises = this.workerPool.map(async (worker) => {
+      const threadId = worker.threadId;
+      logToFile.info(`[PythonRunner] Terminating worker ${threadId}`);
+      try {
+        await worker.terminate();
+        logToFile.debug(`[PythonRunner] Worker ${threadId} terminated successfully`);
+      } catch (error) {
+        logToFile.error(`[PythonRunner] Error terminating worker ${threadId}: ${error}`);
+      }
+    });
+    
+    await Promise.all(terminationPromises);
+    
+    // Clear all pools
+    this.workerPool = [];
+    this.availableWorkers = [];
+    this.taskQueue = [];
+    
+    logToFile.info(`[PythonRunner] Cleanup completed - all workers terminated and pools cleared`);
   }
 
   async createEnv() {
-    console.log(this.pythonPath, this.codetraversePath)
-    await this.executeShell([path.join(this.codetraversePath, "scripts/setup.sh"), this.pythonPath, this.codetraversePath])
+    logToFile.info(`Creating environment with Python path: ${this.pythonPath}, CodeTraverse path: ${this.codetraversePath}`)
+    await this.executeShellCommand([path.join(this.codetraversePath, "scripts/setup.sh"), this.pythonPath, this.codetraversePath])
   }
 
   async installDeps() {
@@ -239,137 +577,270 @@ export class PythonRunner {
     }
   }
 
-  private async executeShell(
-    args: string[]
-  ): Promise<{ stdout: string, stderr: string }> {
+  /**
+   * Execute a shell command using worker thread pool
+   */
+  private async executeShellCommand(
+    args: string[],
+    timeoutMs?: number,
+    cwd?: string
+  ): Promise<{ stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
-      const actualTimeout = 5 * 60 * 1000;
-      let stdout = '';
-      let stderr = '';
+      const actualTimeout = timeoutMs || 5 * 60 * 1000; // 5 minutes default
+      
+      const task = {
+        commandType: 'shell',
+        args,
+        cwd: cwd || this.workingDirectory,
+        env: process.env,
+        timeoutMs: actualTimeout
+      };
 
-      const child: ChildProcess = spawn("sh", args, {
-        cwd: this.workingDirectory,
-        stdio: ['pipe', 'pipe', 'pipe'],
-        shell: true
-      });
+      const workerTask: WorkerTask = { resolve, reject };
 
-      // Set up timeout
-      const timer = setTimeout(() => {
-        child.kill('SIGKILL');
-        reject(new ShellScriptError(
-          `Python process timed out after ${actualTimeout}ms`,
-          -1,
-          'Process timeout'
-        ));
-      }, actualTimeout);
-
-      // Collect stdout
-      child.stdout?.on('data', (data: Buffer) => {
-        stdout += data.toString();
-      });
-
-      // Collect stderr
-      child.stderr?.on('data', (data: Buffer) => {
-        stderr += data.toString();
-      });
-
-      // Handle process completion
-      child.on('close', (code: number | null) => {
-        clearTimeout(timer);
-
-        if (code === 0) {
-          resolve({ stdout: stdout.trim(), stderr: stderr.trim() });
-        } else {
-          reject(new ShellScriptError(
-            `shell script exited with code ${code || 'unknown'}`,
-            code || -1,
-            stderr.trim()
-          ));
-        }
-      });
-
-      // Handle process errors
-      child.on('error', (error: Error) => {
-        clearTimeout(timer);
-        reject(new ShellScriptError(
-          `Failed to spawn Python process: ${error.message}`,
-          -1,
-          error.message
-        ));
-      });
+      // If workers are available, execute immediately
+      if (this.availableWorkers.length > 0) {
+        const worker = this.availableWorkers.shift()!;
+        this.executeTaskInWorker(worker, task, workerTask);
+      } else {
+        // Queue the task
+        this.taskQueue.push({ task, workerTask });
+      }
     });
   }
 
   /**
-   * Execute a Python command with proper error handling
+   * Execute a Python command using worker thread pool
    */
   private async executeCommand({ args, uvCommand = "run", timeoutMs, cwd }: CommandOptions): Promise<{ stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
-      const actualTimeout = timeoutMs || this.timeout;
-      let stdout = '';
-      let stderr = '';
-      const uvPath = path.join(process.env.HOME || "./", "npm_codetraverse", "tmp_env", "bin", "uv")
-      console.log(uvPath, uvCommand, args);
-      console.log(this.codetraversePath);
-      const child: ChildProcess = spawn(uvPath, [uvCommand, ...args], {
+      const actualTimeout = timeoutMs === -1 ? 0 : (timeoutMs || this.timeout);
+      const uvPath = this.getUvPath();
+      
+      const task = {
+        uvPath,
+        uvCommand,
+        args,
         cwd: cwd || this.codetraversePath,
-        stdio: ['pipe', 'pipe', 'pipe'],
         env: {
           ...process.env,
           VIRTUAL_ENV: path.join(process.env.HOME || "./", "npm_codetraverse", ".venv"),
-        }
-      });
+        },
+        timeoutMs: actualTimeout
+      };
 
-      // Set up timeout
-      let timer = undefined;
-      if (timeoutMs != -1) {
-        const timer = setTimeout(() => {
-          child.kill('SIGKILL');
-          reject(new PythonProcessError(
-            `Python process timed out after ${actualTimeout}ms`,
-            -1,
-            'Process timeout'
-          ));
-        }, actualTimeout);
+      const workerTask: WorkerTask = { resolve, reject };
+
+      // If workers are available, execute immediately
+      if (this.availableWorkers.length > 0) {
+        const worker = this.availableWorkers.shift()!;
+        this.executeTaskInWorker(worker, task, workerTask);
+      } else {
+        // Queue the task
+        this.taskQueue.push({ task, workerTask });
+      }
+    });
+  }
+
+  /**
+   * Get the UV executable path with fallbacks
+   */
+  private getUvPath(): string {
+    // Try common UV installation paths
+    const potentialPaths = [
+      path.join(process.env.HOME || "./", "npm_codetraverse", "tmp_env", "bin", "uv"),
+      path.join(process.env.HOME || "./", ".cargo", "bin", "uv"),
+      "uv", // System PATH
+    ];
+
+    for (const uvPath of potentialPaths) {
+      try {
+        // For absolute paths, check if file exists
+        if (path.isAbsolute(uvPath)) {
+          if (require('fs').existsSync(uvPath)) {
+            return uvPath;
+          }
+        } else {
+          // For relative paths (like "uv"), assume it's in PATH
+          return uvPath;
+        }
+      } catch (error) {
+        // Continue to next path
+      }
+    }
+
+    // Fallback to the original path
+    return path.join(process.env.HOME || "./", "npm_codetraverse", "tmp_env", "bin", "uv");
+  }
+
+  /**
+   * Run codetraverse analysis with automatic memory management for VSCode plugin
+   */
+  async runMemoryOptimizedAnalysis(
+    rootDir: string,
+    language: Language,
+    options: {
+      outputBase?: string;
+      graphDir?: string;
+      maxMemoryMB?: number;
+      enableMemoryTracking?: boolean;
+    } = {}
+  ): Promise<{ stdout: string; stderr: string; memoryReport?: any }> {
+    const { outputBase, graphDir, enableMemoryTracking = false } = options;
+    
+    try {
+      // Start memory tracking if requested
+      if (enableMemoryTracking) {
+        await this.startMemoryTracking();
       }
 
-      // Collect stdout
-      child.stdout?.on('data', (data: Buffer) => {
-        stdout += data.toString();
-      });
+      const result = await this.runCreateFdepDataAndGraph(
+        rootDir,
+        outputBase || './vscode_output/fdep',
+        graphDir || './vscode_output/graph',
+        false // Always clear for fresh analysis
+      );
 
-      // Collect stderr
-      child.stderr?.on('data', (data: Buffer) => {
-        stderr += data.toString();
-      });
+      let memoryReport;
+      if (enableMemoryTracking) {
+        memoryReport = await this.getMemoryReport();
+        await this.stopMemoryTracking();
+      }
 
-      // Handle process completion
-      child.on('close', (code: number | null) => {
-        if (timeoutMs != -1) {
-          clearTimeout(timer);
+      // Trigger memory cleanup after analysis
+      await this.cleanupMemory();
+
+      return { ...result, memoryReport };
+    } catch (error) {
+      if (enableMemoryTracking) {
+        await this.stopMemoryTracking();
+      }
+      await this.cleanupMemory();
+      throw error;
+    }
+  }
+
+  /**
+   * Batch process multiple directories with memory management
+   */
+  async runBatchAnalysis(
+    directories: Array<{ path: string; language: Language; outputDir?: string }>,
+    options: {
+      cleanupInterval?: number;
+      maxConcurrent?: number;
+    } = {}
+  ): Promise<Array<{ path: string; result: any; error?: Error }>> {
+    const { cleanupInterval = 3, maxConcurrent = 2 } = options;
+    const results: Array<{ path: string; result: any; error?: Error }> = [];
+    
+    // Process directories in batches to prevent memory buildup
+    for (let i = 0; i < directories.length; i += maxConcurrent) {
+      const batch = directories.slice(i, i + maxConcurrent);
+      
+      const batchPromises = batch.map(async (dir) => {
+        try {
+          const options: any = {};
+          if (dir.outputDir) {
+            options.outputBase = `${dir.outputDir}/fdep`;
+            options.graphDir = `${dir.outputDir}/graph`;
+          }
+          
+          const result = await this.runMemoryOptimizedAnalysis(dir.path, dir.language, options);
+          return { path: dir.path, result };
+        } catch (error) {
+          return { path: dir.path, result: null, error: error as Error };
         }
-
-        if (code === 0) {
-          resolve({ stdout: stdout.trim(), stderr: stderr.trim() });
-        } else {
-          reject(new PythonProcessError(
-            `Python process exited with code ${code || 'unknown'}`,
-            code || -1,
-            stderr.trim()
-          ));
-        }
       });
 
-      // Handle process errors
-      child.on('error', (error: Error) => {
-        clearTimeout(timer);
-        reject(new PythonProcessError(
-          `Failed to spawn Python process: ${error.message}`,
-          -1,
-          error.message
-        ));
+      const batchResults = await Promise.all(batchPromises);
+      results.push(...batchResults);
+
+      // Cleanup after each batch if specified
+      if ((i + maxConcurrent) % cleanupInterval === 0) {
+        await this.cleanupMemory();
+        // Brief pause to allow memory to be freed
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+
+    // Final cleanup
+    await this.cleanupMemory();
+    return results;
+  }
+
+  /**
+   * Start memory tracking in Python process
+   */
+  async startMemoryTracking(): Promise<void> {
+    const script = `
+from codetraverse.utils.memory_manager import memory_manager
+memory_manager.start_tracking()
+memory_manager.take_snapshot("start")
+print("Memory tracking started")
+    `.trim();
+
+    await this.executeCommand({ args: ['-c', script], timeoutMs: 5000 });
+  }
+
+  /**
+   * Stop memory tracking and get final report
+   */
+  async stopMemoryTracking(): Promise<void> {
+    const script = `
+from codetraverse.utils.memory_manager import memory_manager
+memory_manager.stop_tracking()
+memory_manager.clear_all_snapshots()
+print("Memory tracking stopped")
+    `.trim();
+
+    await this.executeCommand({ args: ['-c', script], timeoutMs: 5000 });
+  }
+
+  /**
+   * Get memory usage report from Python process
+   */
+  async getMemoryReport(): Promise<any> {
+    try {
+      const script = `
+import json
+from codetraverse.utils.memory_manager import memory_manager
+report = memory_manager.get_memory_usage()
+print(json.dumps(report))
+      `.trim();
+
+      const result = await this.executeCommand({ args: ['-c', script], timeoutMs: 10000 });
+      return JSON.parse(result.stdout);
+    } catch (error) {
+      logToFile.warn(`Failed to get memory report: ${error}`);
+      return { error: 'Memory report unavailable' };
+    }
+  }
+
+  /**
+   * Trigger memory cleanup in the Python process
+   */
+  async cleanupMemory(): Promise<void> {
+    try {
+      // Execute Python code to trigger memory cleanup
+      const cleanupScript = `
+import gc
+try:
+    from codetraverse.registry.extractor_registry import clear_extractor_cache
+    clear_extractor_cache()
+except ImportError:
+    pass
+gc.collect()
+print("Memory cleanup completed")
+      `.trim();
+
+      await this.executeCommand({ 
+        args: ['-c', cleanupScript], 
+        timeoutMs: 10000 
       });
-    });
+    } catch (error) {
+      // Memory cleanup is non-critical, log but don't throw
+      logToFile.warn(`Memory cleanup failed: ${error}`);
+    }
   }
 
   /**
