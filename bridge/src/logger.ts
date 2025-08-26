@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import os from "os";
 
 export interface LoggerConfig {
   logFilePath?: string;
@@ -13,7 +14,7 @@ export class FileLogger {
   private enableConsole: boolean;
 
   constructor(config: LoggerConfig = {}) {
-    this.logFilePath = path.join("~/.xyne/", 'codetraverse.log');
+    this.logFilePath = path.join(`${os.homedir()}/.xyne/`, 'codetraverse.log');
     this.enableTimestamp = config.enableTimestamp ?? true;
     this.enableConsole = config.enableConsole ?? false;
     
@@ -30,7 +31,7 @@ export class FileLogger {
       }
     } catch (error) {
       // If we can't write to the specified location, fallback to temp directory
-      this.logFilePath = path.join(require('os').tmpdir(), 'codetraverse.log');
+      this.logFilePath = path.join(os.tmpdir(), 'codetraverse.log');
       if (this.enableConsole) {
         process.stderr.write(`Failed to create log file at original location, using fallback: ${this.logFilePath}\n`);
       }
