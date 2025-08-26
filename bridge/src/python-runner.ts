@@ -11,6 +11,142 @@ import {
 } from './types';
 import { logToFile } from './logger';
 
+// Memory tracking utilities
+export interface MemorySnapshot {
+  timestamp: number;
+  nodeMemory: NodeJS.MemoryUsage;
+  processId: number;
+  workerCount: number;
+  availableWorkers: number;
+  queuedTasks: number;
+}
+
+class MemoryTracker {
+  private snapshots: MemorySnapshot[] = [];
+  private trackingEnabled: boolean = false;
+  private intervalId: NodeJS.Timeout | null = null;
+  private readonly maxSnapshots: number = 100;
+
+  startTracking(intervalMs: number = 30000): void {
+    this.trackingEnabled = true;
+    this.snapshots = [];
+    
+    logToFile.info(`[MemoryTracker] Starting memory tracking with ${intervalMs}ms intervals`);
+    
+    // Take initial snapshot
+    this.takeSnapshot('tracking_start');
+    
+    // Set up periodic snapshots
+    this.intervalId = setInterval(() => {
+      if (this.trackingEnabled) {
+        this.takeSnapshot('periodic');
+      }
+    }, intervalMs);
+  }
+
+  stopTracking(): void {
+    this.trackingEnabled = false;
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+    }
+    
+    this.takeSnapshot('tracking_stop');
+    
+    logToFile.info(`[MemoryTracker] Memory tracking stopped. Total snapshots: ${this.snapshots.length}`);
+    this.logMemorySummary();
+  }
+
+  takeSnapshot(context: string, workerCount: number = 0, availableWorkers: number = 0, queuedTasks: number = 0): MemorySnapshot {
+    const memory = process.memoryUsage();
+    const snapshot: MemorySnapshot = {
+      timestamp: Date.now(),
+      nodeMemory: memory,
+      processId: process.pid,
+      workerCount,
+      availableWorkers,
+      queuedTasks
+    };
+    
+    // Store snapshot (keep only last N snapshots)
+    this.snapshots.push(snapshot);
+    if (this.snapshots.length > this.maxSnapshots) {
+      this.snapshots.shift();
+    }
+    
+    // Log detailed memory info
+    logToFile.debug(`[MemoryTracker] ${context} - Memory snapshot: RSS=${this.formatBytes(memory.rss)}, HeapUsed=${this.formatBytes(memory.heapUsed)}, HeapTotal=${this.formatBytes(memory.heapTotal)}, External=${this.formatBytes(memory.external)}, Workers=${workerCount}, Available=${availableWorkers}, Queued=${queuedTasks}`);
+    
+    return snapshot;
+  }
+
+  logMemoryDelta(beforeSnapshot: MemorySnapshot, afterSnapshot: MemorySnapshot, context: string): void {
+    const rssDelta = afterSnapshot.nodeMemory.rss - beforeSnapshot.nodeMemory.rss;
+    const heapDelta = afterSnapshot.nodeMemory.heapUsed - beforeSnapshot.nodeMemory.heapUsed;
+    const externalDelta = afterSnapshot.nodeMemory.external - beforeSnapshot.nodeMemory.external;
+    const timeDelta = afterSnapshot.timestamp - beforeSnapshot.timestamp;
+    
+    logToFile.info(`[MemoryTracker] ${context} - Memory delta over ${timeDelta}ms: RSS=${this.formatBytesDelta(rssDelta)}, Heap=${this.formatBytesDelta(heapDelta)}, External=${this.formatBytesDelta(externalDelta)}`);
+    
+    // Log warning for significant memory increases
+    if (rssDelta > 50 * 1024 * 1024) { // 50MB threshold
+      logToFile.warn(`[MemoryTracker] ${context} - Significant RSS memory increase detected: ${this.formatBytes(rssDelta)}`);
+    }
+    if (heapDelta > 25 * 1024 * 1024) { // 25MB threshold
+      logToFile.warn(`[MemoryTracker] ${context} - Significant heap memory increase detected: ${this.formatBytes(heapDelta)}`);
+    }
+  }
+
+  private logMemorySummary(): void {
+    if (this.snapshots.length < 2) return;
+    
+    const first = this.snapshots[0];
+    const last = this.snapshots[this.snapshots.length - 1];
+    
+    if (!first || !last) return;
+    
+    const totalRssDelta = last.nodeMemory.rss - first.nodeMemory.rss;
+    const totalHeapDelta = last.nodeMemory.heapUsed - first.nodeMemory.heapUsed;
+    const totalTime = last.timestamp - first.timestamp;
+    
+    logToFile.info(`[MemoryTracker] Session Summary - Duration: ${totalTime}ms, Total RSS Delta: ${this.formatBytesDelta(totalRssDelta)}, Total Heap Delta: ${this.formatBytesDelta(totalHeapDelta)}`);
+    
+    // Find peak memory usage
+    const peakRss = Math.max(...this.snapshots.map(s => s.nodeMemory.rss));
+    const peakHeap = Math.max(...this.snapshots.map(s => s.nodeMemory.heapUsed));
+    
+    logToFile.info(`[MemoryTracker] Peak Usage - RSS: ${this.formatBytes(peakRss)}, Heap: ${this.formatBytes(peakHeap)}`);
+  }
+
+  private formatBytes(bytes: number): string {
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let size = Math.abs(bytes);
+    let unitIndex = 0;
+    
+    while (size >= 1024 && unitIndex < units.length - 1) {
+      size /= 1024;
+      unitIndex++;
+    }
+    
+    const sign = bytes < 0 ? '-' : '';
+    return `${sign}${size.toFixed(2)}${units[unitIndex]}`;
+  }
+
+  private formatBytesDelta(bytes: number): string {
+    const sign = bytes >= 0 ? '+' : '';
+    return `${sign}${this.formatBytes(bytes)}`;
+  }
+
+  getCurrentMemoryInfo(): string {
+    const memory = process.memoryUsage();
+    return `RSS=${this.formatBytes(memory.rss)}, Heap=${this.formatBytes(memory.heapUsed)}/${this.formatBytes(memory.heapTotal)}, External=${this.formatBytes(memory.external)}`;
+  }
+
+  getSnapshots(): MemorySnapshot[] {
+    return [...this.snapshots];
+  }
+}
+
 // Worker thread implementation
 if (!isMainThread && workerData?.isWorker) {
   let currentProcess: ChildProcess | null = null;
@@ -204,15 +340,19 @@ export class PythonRunner {
   private readonly maxWorkers: number = 4;
   private availableWorkers: Worker[] = [];
   private taskQueue: Array<{ task: any; workerTask: WorkerTask }> = [];
+  private memoryTracker: MemoryTracker;
+  private memoryTrackingEnabled: boolean = false;
 
   constructor(config: BridgeConfig = {}) {
     this.pythonPath = config.pythonPath || 'python';
     this.codetraversePath = config.codetraversePath || 'codetraverse';
     this.timeout = config.timeout || 60000; // 60 seconds default
     this.workingDirectory = config.workingDirectory || process.cwd();
+    this.memoryTracker = new MemoryTracker();
     
     logToFile.info(`[PythonRunner] Initializing with config - pythonPath: ${this.pythonPath}, codetraversePath: ${this.codetraversePath}, timeout: ${this.timeout}ms, maxWorkers: ${this.maxWorkers}`);
     logToFile.debug(`[PythonRunner] Working directory: ${this.workingDirectory}`);
+    logToFile.debug(`[PythonRunner] Initial memory state: ${this.memoryTracker.getCurrentMemoryInfo()}`);
     
     this.initializeWorkerPool();
   }
@@ -345,8 +485,16 @@ export class PythonRunner {
   }
 
   public async cleanup(): Promise<void> {
+    const beforeCleanup = this.memoryTrackingEnabled ? 
+      this.memoryTracker.takeSnapshot('before_cleanup', this.workerPool.length, this.availableWorkers.length, this.taskQueue.length) : 
+      null;
+      
     logToFile.warn(`[PythonRunner] Starting cleanup of ${this.workerPool.length} workers`);
     logToFile.info(`[PythonRunner] Current state - Pool: ${this.workerPool.length}, Available: ${this.availableWorkers.length}, Queued: ${this.taskQueue.length}`);
+    
+    if (this.memoryTrackingEnabled) {
+      logToFile.info(`[PythonRunner] Pre-cleanup memory state: ${this.memoryTracker.getCurrentMemoryInfo()}`);
+    }
     
     // Terminate all workers
     const terminationPromises = this.workerPool.map(async (worker) => {
@@ -367,7 +515,79 @@ export class PythonRunner {
     this.availableWorkers = [];
     this.taskQueue = [];
     
+    // Stop memory tracking if enabled
+    if (this.memoryTrackingEnabled) {
+      const afterCleanup = this.memoryTracker.takeSnapshot('after_cleanup', 0, 0, 0);
+      if (beforeCleanup) {
+        this.memoryTracker.logMemoryDelta(beforeCleanup, afterCleanup, 'cleanup_operation');
+      }
+      this.memoryTracker.stopTracking();
+      this.memoryTrackingEnabled = false;
+    }
+    
     logToFile.info(`[PythonRunner] Cleanup completed - all workers terminated and pools cleared`);
+  }
+
+  /**
+   * Enable Node.js memory tracking with configurable interval
+   */
+  public enableMemoryTracking(intervalMs: number = 30000): void {
+    if (!this.memoryTrackingEnabled) {
+      this.memoryTrackingEnabled = true;
+      this.memoryTracker.startTracking(intervalMs);
+      logToFile.info(`[PythonRunner] Memory tracking enabled with ${intervalMs}ms intervals`);
+    } else {
+      logToFile.warn(`[PythonRunner] Memory tracking is already enabled`);
+    }
+  }
+
+  /**
+   * Disable Node.js memory tracking
+   */
+  public disableMemoryTracking(): void {
+    if (this.memoryTrackingEnabled) {
+      this.memoryTracker.stopTracking();
+      this.memoryTrackingEnabled = false;
+      logToFile.info(`[PythonRunner] Memory tracking disabled`);
+    } else {
+      logToFile.warn(`[PythonRunner] Memory tracking is already disabled`);
+    }
+  }
+
+  /**
+   * Get current memory usage information
+   */
+  public getCurrentMemoryInfo(): string {
+    const info = this.memoryTracker.getCurrentMemoryInfo();
+    logToFile.debug(`[PythonRunner] Current memory info requested: ${info}`);
+    return info;
+  }
+
+  /**
+   * Take a manual memory snapshot
+   */
+  public takeMemorySnapshot(context: string): void {
+    this.memoryTracker.takeSnapshot(
+      context,
+      this.workerPool.length,
+      this.availableWorkers.length,
+      this.taskQueue.length
+    );
+    logToFile.debug(`[PythonRunner] Manual memory snapshot taken: ${context}`);
+  }
+
+  /**
+   * Get all memory snapshots taken so far
+   */
+  public getMemorySnapshots(): MemorySnapshot[] {
+    return this.memoryTracker.getSnapshots();
+  }
+
+  /**
+   * Check if memory tracking is currently enabled
+   */
+  public isMemoryTrackingEnabled(): boolean {
+    return this.memoryTrackingEnabled;
   }
 
   async createEnv() {
@@ -376,6 +596,7 @@ export class PythonRunner {
   }
 
   async installDeps() {
+    logToFile.info(`installing deps: ${this.pythonPath}, CodeTraverse path: ${this.codetraversePath}`)
     const requirementsPath = path.join(this.codetraversePath, "codetraverse", "requirements.txt");
     if (fs.existsSync(requirementsPath)) {
       const envPath = path.join(process.env.HOME || "./", "npm_codetraverse");
@@ -610,9 +831,23 @@ export class PythonRunner {
   }
 
   /**
-   * Execute a Python command using worker thread pool
+   * Execute a Python command using worker thread pool with memory tracking
    */
   private async executeCommand({ args, uvCommand = "run", timeoutMs, cwd }: CommandOptions): Promise<{ stdout: string; stderr: string }> {
+    const s = args.join(" ")
+    logToFile.info(`Running executeCommand: ${uvCommand} ${s} in ${cwd}`);
+    
+    // Take memory snapshot before execution if tracking is enabled
+    let beforeSnapshot: MemorySnapshot | null = null;
+    if (this.memoryTrackingEnabled) {
+      beforeSnapshot = this.memoryTracker.takeSnapshot(
+        `before_command_${uvCommand}`,
+        this.workerPool.length,
+        this.availableWorkers.length,
+        this.taskQueue.length
+      );
+    }
+
     return new Promise((resolve, reject) => {
       const actualTimeout = timeoutMs === -1 ? 0 : (timeoutMs || this.timeout);
       const uvPath = this.getUvPath();
@@ -629,7 +864,37 @@ export class PythonRunner {
         timeoutMs: actualTimeout
       };
 
-      const workerTask: WorkerTask = { resolve, reject };
+      const originalResolve = resolve;
+      const originalReject = reject;
+
+      // Wrap resolve/reject to include memory tracking
+      const wrappedResolve = (value: { stdout: string; stderr: string }) => {
+        if (this.memoryTrackingEnabled && beforeSnapshot) {
+          const afterSnapshot = this.memoryTracker.takeSnapshot(
+            `after_command_${uvCommand}`,
+            this.workerPool.length,
+            this.availableWorkers.length,
+            this.taskQueue.length
+          );
+          this.memoryTracker.logMemoryDelta(beforeSnapshot, afterSnapshot, `command_${uvCommand}`);
+        }
+        originalResolve(value);
+      };
+
+      const wrappedReject = (reason: any) => {
+        if (this.memoryTrackingEnabled && beforeSnapshot) {
+          const afterSnapshot = this.memoryTracker.takeSnapshot(
+            `after_command_${uvCommand}_error`,
+            this.workerPool.length,
+            this.availableWorkers.length,
+            this.taskQueue.length
+          );
+          this.memoryTracker.logMemoryDelta(beforeSnapshot, afterSnapshot, `command_${uvCommand}_error`);
+        }
+        originalReject(reason);
+      };
+
+      const workerTask: WorkerTask = { resolve: wrappedResolve, reject: wrappedReject };
 
       // If workers are available, execute immediately
       if (this.availableWorkers.length > 0) {
