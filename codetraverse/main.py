@@ -80,7 +80,7 @@ def create_fdep_data(root_dir, output_base: str = "./output/fdep", graph_dir: st
         if not spec.match_file(str(file_path.relative_to(root_dir))):
             language = INVERSE_EXTS.get(file_path.suffix)
             if language:
-                language_file_map[language].append(file_path)
+                language_file_map[language].append(str(file_path))
 
     if os.path.isdir(output_base) and clear_existing:
         shutil.rmtree(output_base, ignore_errors=True)
@@ -90,7 +90,7 @@ def create_fdep_data(root_dir, output_base: str = "./output/fdep", graph_dir: st
     os.makedirs(graph_dir, exist_ok=True)
     for language in language_file_map:
         try:
-            tasks_args = [(code_path, language, root_dir, output_base) for code_path in language_file_map[language]]
+            tasks_args = [(code_path, language, str(root_dir), output_base) for code_path in language_file_map[language]]
 
             with ThreadPoolExecutor(max_workers=min(32, os.cpu_count() + 4)) as executor:
                 list(executor.map(_process_single_file_worker, tasks_args))
