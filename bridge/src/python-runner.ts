@@ -493,6 +493,112 @@ export class PythonRunner {
     worker.postMessage({ type: 'execute', data: task });
   }
 
+  public async cleanup(): Promise<void> {
+    const beforeCleanup = this.memoryTrackingEnabled ? 
+      this.memoryTracker.takeSnapshot('before_cleanup', this.workerPool.length, this.availableWorkers.length, this.taskQueue.length) : 
+      null;
+
+    logToFile.warn(`[PythonRunner] Starting cleanup of ${this.workerPool.length} workers`);
+    logToFile.info(`[PythonRunner] Current state - Pool: ${this.workerPool.length}, Available: ${this.availableWorkers.length}, Queued: ${this.taskQueue.length}`);
+
+    if (this.memoryTrackingEnabled) {
+      logToFile.info(`[PythonRunner] Pre-cleanup memory state: ${this.memoryTracker.getCurrentMemoryInfo()}`);
+    }
+
+    // Terminate all workers
+    const terminationPromises = this.workerPool.map(async (worker) => {
+      const threadId = worker.threadId;
+      logToFile.info(`[PythonRunner] Terminating worker ${threadId}`);
+      try {
+        await worker.terminate();
+        logToFile.debug(`[PythonRunner] Worker ${threadId} terminated successfully`);
+      } catch (error) {
+        logToFile.error(`[PythonRunner] Error terminating worker ${threadId}: ${error}`);
+      }
+    });
+
+    await Promise.all(terminationPromises);
+
+    // Clear all pools
+    this.workerPool = [];
+    this.availableWorkers = [];
+    this.taskQueue = [];
+
+    // Stop memory tracking if enabled
+    if (this.memoryTrackingEnabled) {
+      const afterCleanup = this.memoryTracker.takeSnapshot('after_cleanup', 0, 0, 0);
+      if (beforeCleanup) {
+        this.memoryTracker.logMemoryDelta(beforeCleanup, afterCleanup, 'cleanup_operation');
+      }
+      this.memoryTracker.stopTracking();
+      this.memoryTrackingEnabled = false;
+    }
+
+    logToFile.info(`[PythonRunner] Cleanup completed - all workers terminated and pools cleared`);
+  }
+
+  /**
+   * Enable Node.js memory tracking with configurable interval
+   */
+  public enableMemoryTracking(intervalMs: number = 30000): void {
+    if (!this.memoryTrackingEnabled) {
+      this.memoryTrackingEnabled = true;
+      this.memoryTracker.startTracking(intervalMs);
+      logToFile.info(`[PythonRunner] Memory tracking enabled with ${intervalMs}ms intervals`);
+    } else {
+      logToFile.warn(`[PythonRunner] Memory tracking is already enabled`);
+    }
+  }
+
+  /**
+   * Disable Node.js memory tracking
+   */
+  public disableMemoryTracking(): void {
+    if (this.memoryTrackingEnabled) {
+      this.memoryTracker.stopTracking();
+      this.memoryTrackingEnabled = false;
+      logToFile.info(`[PythonRunner] Memory tracking disabled`);
+    } else {
+      logToFile.warn(`[PythonRunner] Memory tracking is already disabled`);
+    }
+  }
+
+  /**
+   * Get current memory usage information
+   */
+  public getCurrentMemoryInfo(): string {
+    const info = this.memoryTracker.getCurrentMemoryInfo();
+    logToFile.debug(`[PythonRunner] Current memory info requested: ${info}`);
+    return info;
+  }
+
+  /**
+   * Take a manual memory snapshot
+   */
+  public takeMemorySnapshot(context: string): void {
+    this.memoryTracker.takeSnapshot(
+      context,
+      this.workerPool.length,
+      this.availableWorkers.length,
+      this.taskQueue.length
+    );
+    logToFile.debug(`[PythonRunner] Manual memory snapshot taken: ${context}`);
+  }
+
+  /**
+   * Get all memory snapshots taken so far
+   */
+  public getMemorySnapshots(): MemorySnapshot[] {
+    return this.memoryTracker.getSnapshots();
+  }
+
+  /**
+   * Check if memory tracking is currently enabled
+   */
+  public isMemoryTrackingEnabled(): boolean {
+    return this.memoryTrackingEnabled;
+  }
+
   async createEnv() {
     logToFile.info(`Creating environment with Python path: ${this.pythonPath}, CodeTraverse path: ${this.codetraversePath}`)
     await this.executeShellCommand([path.join(this.codetraversePath, "scripts/setup.sh"), this.pythonPath, this.codetraversePath])
