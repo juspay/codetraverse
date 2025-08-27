@@ -34,6 +34,7 @@ export class CodeTraverseBridge {
 
   async createEnv() {
     await this.runner.createEnv();
+    console.log("DONE");
   }
 
   async installDeps() {
@@ -498,7 +499,8 @@ export class CodeTraverseBridge {
   // const obj = new CodeTraverseBridge({ pythonPath: "python3", codetraversePath: "/Users/jignyas.s/Desktop/Juspay/code/node_modules/codetraverse-bridge-jp" })
   // const obj = new CodeTraverseBridge({ pythonPath: "/opt/homebrew/bin/python3", codetraversePath: "/Users/pramod.p/codetraverse" })
   // console.log(await obj.findPath("/Users/jignyas.s/Desktop/Juspay/codegen2/codegen/xyne_tmp/graph/repo_function_calls.graphml", "App.Routes::formatGatewayDoc", "Database.GptResponse::findOneGptResponseByCategoryDBE"))
-  // console.log(await obj.getAllModules())
+  // console.log(await obj.getAllModules("/Users/jignyas.s/.xyne/22812dffb0598ddfed96fb326d3ecf68/graph/repo_function_calls.graphml"))
+  // await obj.createEnv();
   // await obj.createFdepData("/Users/jignyas.s/Desktop/Juspay/jaf/jaf", "/Users/jignyas.s/Desktop/Juspay/codetraverse/output/fdep", "/Users/jignyas.s/Desktop/Juspay/codetraverse/output/graph");
   // console.log(await obj.getAllModules("/Users/jignyas.s/Desktop/Juspay/codetraverse/output/graph/repo_function_calls.graphml"));
   // await obj.installDeps()

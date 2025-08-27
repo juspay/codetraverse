@@ -189,7 +189,7 @@ if (!isMainThread && workerData?.isWorker) {
           cwd,
           stdio: ['pipe', 'pipe', 'pipe'],
           env,
-          shell: true
+          // shell: true
         });
       } else {
         // Handle Python/uv command execution  
@@ -342,6 +342,7 @@ export class PythonRunner {
   private taskQueue: Array<{ task: any; workerTask: WorkerTask }> = [];
   private memoryTracker: MemoryTracker;
   private memoryTrackingEnabled: boolean = false;
+  private activeTasks: Map<Worker, WorkerTask> = new Map();
 
   constructor(config: BridgeConfig = {}) {
     this.pythonPath = config.pythonPath || 'python';
@@ -376,9 +377,6 @@ export class PythonRunner {
     logToFile.info(`[PythonRunner] Creating new worker with thread ID: ${workerThreadId}`);
 
     worker.on('message', (response) => {
-      if (response.type === 'ready') {
-        logToFile.debug(`[PythonRunner] Worker ${workerThreadId} is ready`);
-      }
       this.handleWorkerMessage(worker, response);
     });
 
@@ -396,6 +394,8 @@ export class PythonRunner {
       this.removeWorker(worker);
     });
 
+    worker.unref();
+
     this.workerPool.push(worker);
     this.availableWorkers.push(worker);
     logToFile.debug(`[PythonRunner] Worker ${workerThreadId} added to pool. Total workers: ${this.workerPool.length}`);
@@ -404,17 +404,50 @@ export class PythonRunner {
   }
 
   private handleWorkerMessage(worker: Worker, response: any): void {
-    // Handle worker responses and resolve pending tasks
-    if (response.type === 'success') {
+    const workerTask = this.activeTasks.get(worker);
+
+    if (response.type === 'ready') {
+      logToFile.debug(`[PythonRunner] Worker ${worker.threadId} is ready`);
+      // This worker is now available, so we can process the queue
       this.availableWorkers.push(worker);
       this.processQueue();
-    } else if (response.type === 'error') {
-      this.availableWorkers.push(worker);
-      this.processQueue();
+      return;
     }
+
+    if (!workerTask) {
+      logToFile.warn(`[PythonRunner] Received message from worker ${worker.threadId} without an active task.`);
+      return;
+    }
+
+    if (workerTask.timer) {
+      clearTimeout(workerTask.timer);
+    }
+
+    this.activeTasks.delete(worker);
+
+    if (response.type === 'success') {
+      workerTask.resolve({
+        stdout: response.data.stdout || '',
+        stderr: response.data.stderr || ''
+      });
+    } else if (response.type === 'error') {
+      workerTask.reject(new PythonProcessError(
+        response.data.error || 'Unknown error',
+        response.data.exitCode || -1,
+        response.data.stderr || ''
+      ));
+    }
+
+    this.availableWorkers.push(worker);
+    this.processQueue();
   }
 
   private handleWorkerError(worker: Worker, error: Error): void {
+    const workerTask = this.activeTasks.get(worker);
+    if (workerTask) {
+      workerTask.reject(error);
+      this.activeTasks.delete(worker);
+    }
     // Remove failed worker and create a new one
     this.removeWorker(worker);
     this.createWorker();
@@ -441,6 +474,8 @@ export class PythonRunner {
   }
 
   private executeTaskInWorker(worker: Worker, task: any, workerTask: WorkerTask): void {
+    this.activeTasks.set(worker, workerTask);
+
     // Set up timeout
     if (task.timeoutMs > 0) {
       workerTask.timer = setTimeout(() => {
@@ -449,145 +484,13 @@ export class PythonRunner {
           -1,
           'Process timeout'
         ));
+        this.activeTasks.delete(worker);
         worker.terminate();
         this.removeWorker(worker);
         this.createWorker();
       }, task.timeoutMs);
     }
-
-    // Set up response handler
-    const messageHandler = (response: any) => {
-      if (workerTask.timer) {
-        clearTimeout(workerTask.timer);
-      }
-
-      worker.off('message', messageHandler);
-      
-      if (response.type === 'success') {
-        workerTask.resolve({
-          stdout: response.data.stdout || '',
-          stderr: response.data.stderr || ''
-        });
-      } else if (response.type === 'error') {
-        workerTask.reject(new PythonProcessError(
-          response.data.error || 'Unknown error',
-          response.data.exitCode || -1,
-          response.data.stderr || ''
-        ));
-      }
-
-      this.availableWorkers.push(worker);
-      this.processQueue();
-    };
-
-    worker.on('message', messageHandler);
     worker.postMessage({ type: 'execute', data: task });
-  }
-
-  public async cleanup(): Promise<void> {
-    const beforeCleanup = this.memoryTrackingEnabled ? 
-      this.memoryTracker.takeSnapshot('before_cleanup', this.workerPool.length, this.availableWorkers.length, this.taskQueue.length) : 
-      null;
-      
-    logToFile.warn(`[PythonRunner] Starting cleanup of ${this.workerPool.length} workers`);
-    logToFile.info(`[PythonRunner] Current state - Pool: ${this.workerPool.length}, Available: ${this.availableWorkers.length}, Queued: ${this.taskQueue.length}`);
-    
-    if (this.memoryTrackingEnabled) {
-      logToFile.info(`[PythonRunner] Pre-cleanup memory state: ${this.memoryTracker.getCurrentMemoryInfo()}`);
-    }
-    
-    // Terminate all workers
-    const terminationPromises = this.workerPool.map(async (worker) => {
-      const threadId = worker.threadId;
-      logToFile.info(`[PythonRunner] Terminating worker ${threadId}`);
-      try {
-        await worker.terminate();
-        logToFile.debug(`[PythonRunner] Worker ${threadId} terminated successfully`);
-      } catch (error) {
-        logToFile.error(`[PythonRunner] Error terminating worker ${threadId}: ${error}`);
-      }
-    });
-    
-    await Promise.all(terminationPromises);
-    
-    // Clear all pools
-    this.workerPool = [];
-    this.availableWorkers = [];
-    this.taskQueue = [];
-    
-    // Stop memory tracking if enabled
-    if (this.memoryTrackingEnabled) {
-      const afterCleanup = this.memoryTracker.takeSnapshot('after_cleanup', 0, 0, 0);
-      if (beforeCleanup) {
-        this.memoryTracker.logMemoryDelta(beforeCleanup, afterCleanup, 'cleanup_operation');
-      }
-      this.memoryTracker.stopTracking();
-      this.memoryTrackingEnabled = false;
-    }
-    
-    logToFile.info(`[PythonRunner] Cleanup completed - all workers terminated and pools cleared`);
-  }
-
-  /**
-   * Enable Node.js memory tracking with configurable interval
-   */
-  public enableMemoryTracking(intervalMs: number = 30000): void {
-    if (!this.memoryTrackingEnabled) {
-      this.memoryTrackingEnabled = true;
-      this.memoryTracker.startTracking(intervalMs);
-      logToFile.info(`[PythonRunner] Memory tracking enabled with ${intervalMs}ms intervals`);
-    } else {
-      logToFile.warn(`[PythonRunner] Memory tracking is already enabled`);
-    }
-  }
-
-  /**
-   * Disable Node.js memory tracking
-   */
-  public disableMemoryTracking(): void {
-    if (this.memoryTrackingEnabled) {
-      this.memoryTracker.stopTracking();
-      this.memoryTrackingEnabled = false;
-      logToFile.info(`[PythonRunner] Memory tracking disabled`);
-    } else {
-      logToFile.warn(`[PythonRunner] Memory tracking is already disabled`);
-    }
-  }
-
-  /**
-   * Get current memory usage information
-   */
-  public getCurrentMemoryInfo(): string {
-    const info = this.memoryTracker.getCurrentMemoryInfo();
-    logToFile.debug(`[PythonRunner] Current memory info requested: ${info}`);
-    return info;
-  }
-
-  /**
-   * Take a manual memory snapshot
-   */
-  public takeMemorySnapshot(context: string): void {
-    this.memoryTracker.takeSnapshot(
-      context,
-      this.workerPool.length,
-      this.availableWorkers.length,
-      this.taskQueue.length
-    );
-    logToFile.debug(`[PythonRunner] Manual memory snapshot taken: ${context}`);
-  }
-
-  /**
-   * Get all memory snapshots taken so far
-   */
-  public getMemorySnapshots(): MemorySnapshot[] {
-    return this.memoryTracker.getSnapshots();
-  }
-
-  /**
-   * Check if memory tracking is currently enabled
-   */
-  public isMemoryTrackingEnabled(): boolean {
-    return this.memoryTrackingEnabled;
   }
 
   async createEnv() {
@@ -596,7 +499,6 @@ export class PythonRunner {
   }
 
   async installDeps() {
-    logToFile.info(`installing deps: ${this.pythonPath}, CodeTraverse path: ${this.codetraversePath}`)
     const requirementsPath = path.join(this.codetraversePath, "codetraverse", "requirements.txt");
     if (fs.existsSync(requirementsPath)) {
       const envPath = path.join(process.env.HOME || "./", "npm_codetraverse");
