@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "npm run build --workspace=bridge",
+    "build": "npm run build --workspace=bridge && cp -r bridge/dist ./dist",
     "test": "npm run test --workspace=bridge",
     "lint": "npm run lint --workspace=bridge",
     "clean": "npm run clean --workspace=bridge",
@@ -15,7 +15,8 @@
     "install:bridge": "npm install --workspace=bridge",
     "dev:bridge": "npm run dev --workspace=bridge",
     "prepublishOnly": "npm run build && rm -rf dist && ncp bridge/dist dist",
-    "postpublish": "rm -rf dist"
+    "postpublish": "rm -rf dist",
+    "package": "npm run build && npm pack"
   },
   "files": [
     "dist",
