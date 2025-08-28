@@ -30,6 +30,7 @@ function main() {
 
   const allHaskellComponents: any[] = [];
   const allRustComponents: any[] = [];
+  const allTscomponenets: any[] = [];
 
   function walk(dir: string) {
     const files = fs.readdirSync(dir);
@@ -48,11 +49,23 @@ function main() {
             let extractor;
             if (path.extname(fullPath) === ".hs") {
                 extractor = new HaskellComponentExtractor();
-            } else {
+                extractor.processFile(fullPath);
+                allHaskellComponents.push(...extractor.extractAllComponents());
+            } else if (path.extname(fullPath) === ".ts") {
                 extractor = new TypeScriptComponentExtractor();
+                extractor.processFile(fullPath);
+                allTscomponenets.push(...extractor.extractAllComponents());
             }
-            extractor.processFile(fullPath);
-            allComponents.push(...extractor.extractAllComponents());
+            else if (path.extname(fullPath) === ".rs") {
+                extractor = new RustComponentExtractor();
+                extractor.processFile(fullPath);
+                allRustComponents.push(...extractor.extractAllComponents());
+            }
+            else {
+                console.log(`Unsupported file type: ${fullPath}`);
+                continue;
+            }
+
         } catch (e: any) {
             console.error(`Error processing file ${fullPath}:`, e.message);
         }
@@ -64,9 +77,15 @@ function main() {
   
   let adaptedComponents;
   if (process.argv[3] === 'haskell') {
-      adaptedComponents = adaptHaskellComponents(allComponents);
+      adaptedComponents = adaptHaskellComponents(allHaskellComponents);
+  } else if (process.argv[3] ===  'typescript') {
+      adaptedComponents = adaptTypeScriptComponents(allTscomponenets);
+  }
+  else if (process.argv[3] ===  'rust') {
+      adaptedComponents = adaptRustComponents(allRustComponents);
   } else {
-      adaptedComponents = adaptTypeScriptComponents(allComponents);
+      console.error("Please provide a valid language: haskell, typescript or rust");
+      return;
   }
   const { nodes, edges } = adaptedComponents;
   const graph = buildGraphFromSchema({ nodes, edges });
