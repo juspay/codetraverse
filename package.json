@@ -1,29 +1,17 @@
 {
-  "name": "codetraverse-bridge-jp",
+  "name": "codetraverse",
   "version": "0.1.56",
-  "description": "CodeTraverse - Multi-language static code analysis tool with Node.js bridge",
+  "description": "CodeTraverse - Multi-language static code analysis tool",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "npm run build --workspace=bridge",
-    "test": "npm run test --workspace=bridge",
-    "lint": "npm run lint --workspace=bridge",
-    "clean": "npm run clean --workspace=bridge",
-    "bridge:build": "npm run build --workspace=bridge",
-    "bridge:test": "npm run test --workspace=bridge",
-    "bridge:publish": "npm publish",
-    "install:bridge": "npm install --workspace=bridge",
-    "dev:bridge": "npm run dev --workspace=bridge",
-    "prepublishOnly": "npm run build && rm -rf dist && ncp bridge/dist dist",
-    "postpublish": "rm -rf dist"
+    "build": "rm -rf dist && tsc -p codetraverse/tsconfig.json",
+    "prepublishOnly": "npm run build"
   },
   "files": [
     "dist",
     "codetraverse",
     "scripts"
-  ],
-  "workspaces": [
-    "bridge"
   ],
   "keywords": [
     "static-analysis",
@@ -53,17 +41,23 @@
     "npm": ">=7.0.0"
   },
   "dependencies": {
+    "chardet": "^0.7.0",
+    "cheerio": "^1.0.0-rc.12",
     "jsnetworkx": "^0.3.4",
+    "module-alias": "^2.2.3",
     "tree-sitter": "^0.21.1",
     "tree-sitter-haskell": "^0.23.1",
     "tree-sitter-rust": "^0.21.0",
-    "tree-sitter-typescript": "^0.23.2",
-    "chardet": "^0.7.0",
-    "cheerio": "^1.0.0-rc.12"
+    "tree-sitter-typescript": "^0.23.2"
   },
   "devDependencies": {
+    "@types/cheerio": "^0.22.35",
     "@types/node": "^18.19.123",
     "ncp": "^2.0.0",
-    "@types/cheerio": "^0.22.35"
+    "typescript": "^4.5.2",
+    "tsconfig-paths": "^4.2.0"
+  },
+  "_moduleAliases": {
+    "@": "codetraverse/dist"
   }
 }
