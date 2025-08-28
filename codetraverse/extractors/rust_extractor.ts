@@ -1,6 +1,6 @@
 import Parser, { SyntaxNode } from "tree-sitter";
 import { FunctionCall } from "../types/types";
-import Rust from "tree-sitter-rust";
+const Rust = require("tree-sitter-rust");
 import fs from "fs";
 import path from "path";
 import { ComponentExtractor } from "../base/component_extractor";
