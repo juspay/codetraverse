@@ -240,7 +240,7 @@ def generate_ast_diff(
         changed_files = git_provider.get_changed_files_from_commits(to_commit, from_commit)
         
         # --- 2.5 Get Structured Diff for fallback ---
-        structured_diff_added, structured_diff_removed = git_provider.get_structured_diff(from_commit, to_commit)
+        # structured_diff_added, structured_diff_removed = git_provider.get_structured_diff(from_commit, to_commit)
 
         # print("files",changed_files)
         # --- 3. Process Files ---
@@ -254,6 +254,7 @@ def generate_ast_diff(
                 print(parser)
                 if not parser or not differ:
                     if category == "modified":
+                        structured_diff_added, structured_diff_removed = git_provider.get_structured_diff(from_commit, to_commit)
                         added_lines = structured_diff_added.get(file_path, [])
                         removed_lines = structured_diff_removed.get(file_path, [])
 
