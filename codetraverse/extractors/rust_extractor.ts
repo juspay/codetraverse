@@ -1,10 +1,10 @@
 import Parser, { SyntaxNode } from "tree-sitter";
-import { FunctionCall } from "./types";
-const Rust = require("tree-sitter-rust");
+import { FunctionCall } from "../types/types";
+import Rust from "tree-sitter-rust";
 import fs from "fs";
 import path from "path";
 import { ComponentExtractor } from "../base/component_extractor";
-import { Component, Span, Parameter, Field, Variant, Call, Literal, Variable, TypeUsed, Import } from "./types";
+import { Component, Span, Parameter, Field, Variant, Call, Literal, Variable, TypeUsed, Import } from "../types/types";
 
 interface RustImport {
     path: string;
