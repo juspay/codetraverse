@@ -1,6 +1,6 @@
 import Parser, { SyntaxNode } from "tree-sitter";
-import Haskell from "tree-sitter-haskell";
-import fs from "fs";
+import * as Haskell from "tree-sitter-haskell";
+import * as fs from "fs";
 import { ComponentExtractor } from "../base/component_extractor";
 import {
   Component,
@@ -11,7 +11,7 @@ import {
   ClassComponent,
   Instance,
   TopLevelComponent,
-} from "./types";
+} from "../types/types";
 
 const TOP_LEVEL_KINDS = new Set([
   "header",
@@ -403,11 +403,7 @@ export class HaskellComponentExtractor implements ComponentExtractor {
             this.currentModule
           );
         } else {
-          comp.functionCalls = this.extractFunctionCalls(
-            bodyCode,
-            importMap,
-            this.currentModule
-          );
+          comp.functionCalls = [];
         }
 
         const whereDefs = this.extractWhereDefinitions(child, srcBytes);
@@ -415,8 +411,9 @@ export class HaskellComponentExtractor implements ComponentExtractor {
           comp.whereDefinitions = whereDefs;
           for (const whereDef of whereDefs) {
             if (whereDef.kind === "function") {
-              whereDef.functionCalls = this.extractFunctionCalls(
-                whereDef.code,
+              whereDef.functionCalls = this.extractFunctionCallsNode(
+                child,
+                srcBytes,
                 importMap,
                 this.currentModule
               );
@@ -434,8 +431,9 @@ export class HaskellComponentExtractor implements ComponentExtractor {
         );
         if (instanceComp) {
           instanceComp.module = this.currentModule;
-          instanceComp.functionCalls = this.extractFunctionCalls(
-            instanceComp.code,
+          instanceComp.functionCalls = this.extractFunctionCallsNode(
+            child,
+            srcBytes,
             importMap,
             this.currentModule
           );
@@ -449,8 +447,9 @@ export class HaskellComponentExtractor implements ComponentExtractor {
         );
         if (dataComp) {
           dataComp.module = this.currentModule;
-          dataComp.functionCalls = this.extractFunctionCalls(
-            dataComp.code,
+          dataComp.functionCalls = this.extractFunctionCallsNode(
+            child,
+            srcBytes,
             importMap,
             this.currentModule
           );
@@ -1492,215 +1491,7 @@ export class HaskellComponentExtractor implements ComponentExtractor {
     importMap: Record<string, string[]>,
     currentModule: string
   ): FunctionCall[] {
-    const lines = funcCode.split("\n");
-    const identifiers: FunctionCall[] = [];
-    const stringPattern = /"(?:[^"\\]|\\.)*"/g;
-    const operatorPattern = /\((\S+)\)/g;
-    const qualifiedNamePattern =
-      /\b((?:[A-Z][a-zA-Z0-9_]*\.)+)([a-z][a-zA-Z0-9_']*)\b/g;
-    const listPattern = /\[(.*?)\]/g;
-    const tuplePattern = /\(([^)]*,.*?)\)/g;
-    const recordPattern = /\{(.*?)\}/g;
-    const lambdaPattern = /\\([^>]+)->/g;
-    const numericLiteralPattern = /\b\d+(?:\.\d+)?\b/g;
-    const collectionPatterns: Record<string, string[]> = {
-      Map: ["lookup", "insert", "delete", "fromList", "toList"],
-      Set: ["fromList", "toList", "union", "difference"],
-    };
-    const skipKeywords = new Set([
-      "if",
-      "then",
-      "else",
-      "let",
-      "in",
-      "do",
-      "case",
-      "of",
-      "where",
-      "data",
-      "type",
-      "newtype",
-      "class",
-      "instance",
-      "deriving",
-      "import",
-      "module",
-      "as",
-      "hiding",
-      "qualified",
-      "infix",
-      "infixl",
-      "infixr",
-      "pure",
-      "return",
-      "mempty",
-      "mappend",
-    ]);
-
-    for (const line of lines) {
-      let processedLine = line.replace(/--.*/, "");
-      processedLine = processedLine.replace(stringPattern, "");
-
-      if (
-        processedLine.includes("::") ||
-        processedLine.trim().startsWith("instance") ||
-        processedLine.trim().startsWith("where")
-      ) {
-        continue;
-      }
-
-      let match;
-      while ((match = qualifiedNamePattern.exec(processedLine)) !== null) {
-        const prefix = match[1].slice(0, -1);
-        const baseName = match[2];
-
-        if (!prefix || skipKeywords.has(baseName)) {
-          continue;
-        }
-
-        let resolvedModules = [prefix];
-        const components = prefix.split(".");
-        if (components.length > 0) {
-          const firstComponent = components[0];
-          const resolved = importMap[firstComponent] || [firstComponent];
-          if (components.length > 1) {
-            resolvedModules = resolved.map(
-              (r) => `${r}.${components.slice(1).join(".")}`
-            );
-          } else {
-            resolvedModules = resolved;
-          }
-        }
-
-        identifiers.push({
-          name: `${prefix}.${baseName}`,
-          type: "qualified",
-          modules: resolvedModules,
-          base: baseName,
-          context: "function_call",
-        });
-      }
-
-      while ((match = /\b([a-z][a-zA-Z0-9_']*)s*(?=\()/g.exec(processedLine)) !== null) {
-        const call = match[1];
-        if (skipKeywords.has(call)) continue;
-        identifiers.push({
-          name: call,
-          type: "function",
-          modules: [currentModule],
-          base: call,
-          context: "function_call",
-        });
-      }
-
-      while ((match = operatorPattern.exec(processedLine)) !== null) {
-        const op = match[1];
-        if (skipKeywords.has(op)) continue;
-        identifiers.push({
-          name: op,
-          type: "operator",
-          context: "operation",
-        });
-      }
-
-      while ((match = listPattern.exec(processedLine)) !== null) {
-        const elements = match[1].split(",").map((e) => e.trim());
-        identifiers.push({
-          name: match[0],
-          type: "literal",
-          subtype: "list",
-          elements: elements,
-          context: "literal",
-        });
-      }
-
-      while ((match = tuplePattern.exec(processedLine)) !== null) {
-        const elements = match[1].split(",").map((e) => e.trim());
-        identifiers.push({
-          name: match[0],
-          type: "literal",
-          subtype: "tuple",
-          elements: elements,
-          length: elements.length,
-          context: "literal",
-        });
-      }
-
-      while ((match = recordPattern.exec(processedLine)) !== null) {
-        const fields = match[1].split(",").map((f) => f.trim());
-        identifiers.push({
-          name: match[0],
-          type: "record",
-          fields: fields,
-          context: "record",
-        });
-      }
-
-      if (lambdaPattern.test(processedLine)) {
-        identifiers.push({
-          name: "λ",
-          type: "lambda",
-          context: "anonymous_function",
-        });
-      }
-
-      for (const [collType, funcs] of Object.entries(collectionPatterns)) {
-        for (const func of funcs) {
-          if (new RegExp(`\\b${func}\\b`).test(processedLine)) {
-            identifiers.push({
-              name: func,
-              type: "collection_function",
-              collection: collType,
-              context: "data_structure",
-            });
-          }
-        }
-      }
-
-      while ((match = /\b([A-Z][a-zA-Z0-9_']*)\b/g.exec(processedLine)) !== null) {
-        const ctor = match[1];
-        if (skipKeywords.has(ctor)) continue;
-        identifiers.push({
-          name: ctor,
-          type: "type_constructor",
-          context: "type_system",
-        });
-      }
-
-      if (processedLine.includes("=") && !processedLine.includes("type")) {
-        while ((match = /\b([a-z][a-zA-Z0-9_']*)\b/g.exec(processedLine)) !== null) {
-          const v = match[1];
-          if (skipKeywords.has(v)) continue;
-          identifiers.push({
-            name: v,
-            type: "variable",
-            context: "binding",
-          });
-        }
-      }
-
-      while ((match = numericLiteralPattern.exec(processedLine)) !== null) {
-        const num = match[0];
-        identifiers.push({
-          name: num,
-          type: "literal",
-          subtype: "numeric",
-          value: num.includes(".") ? parseFloat(num) : parseInt(num, 10),
-          context: "literal",
-        });
-      }
-    }
-
-    const seen = new Set<string>();
-    const uniqueIdentifiers: FunctionCall[] = [];
-    for (const ident of identifiers) {
-      const key = `${ident.name},${ident.type},${ident.context}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        uniqueIdentifiers.push(ident);
-      }
-    }
-    return uniqueIdentifiers;
+    return [];
   }
 
   private findTypeDependencies(
