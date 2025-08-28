@@ -2,6 +2,8 @@ import * as fs from "fs";
 import * as path from "path";
 import { HaskellComponentExtractor } from "./extractors/haskell_extractor";
 import { TypeScriptComponentExtractor } from "./extractors/typescript_extractor";
+import { adaptHaskellComponents } from "./adapters/haskell_adapter";
+import { buildGraphFromSchema } from "./utils/jsnetworkx_graph";
 
 function main() {
   const repoPath = process.argv[2];
@@ -15,9 +17,15 @@ function main() {
     return;
   }
 
-  const outputDir = "output/fdep";
+  const outputDir = "output";
   fs.mkdirSync(outputDir, { recursive: true });
+  const fdepDir = path.join(outputDir, "fdep");
+  fs.mkdirSync(fdepDir, { recursive: true });
+  const graphDir = path.join(outputDir, "graph");
+  fs.mkdirSync(graphDir, { recursive: true });
 
+
+  const allComponents: any[] = [];
   function walk(dir: string) {
     const files = fs.readdirSync(dir);
     for (const file of files) {
@@ -39,14 +47,7 @@ function main() {
                 extractor = new TypeScriptComponentExtractor();
             }
             extractor.processFile(fullPath);
-            const components = extractor.extractAllComponents();
-            const relativePath = path.relative(repoPath, fullPath);
-            const outputDirPath = path.join(outputDir, path.dirname(relativePath));
-            fs.mkdirSync(outputDirPath, { recursive: true });
-            const outputFileName = path.basename(relativePath) + ".json";
-            const outputPath = path.join(outputDirPath, outputFileName);
-            fs.writeFileSync(outputPath, JSON.stringify(components, null, 2), "utf-8");
-            console.log(`Successfully extracted components to ${outputPath}`);
+            allComponents.push(...extractor.extractAllComponents());
         } catch (e: any) {
             console.error(`Error processing file ${fullPath}:`, e.message);
         }
@@ -55,6 +56,18 @@ function main() {
   }
 
   walk(repoPath);
+  
+  const { nodes, edges } = adaptHaskellComponents(allComponents);
+  const graph = buildGraphFromSchema({ nodes, edges });
+
+  const graphData = {
+    nodes: graph.nodes(true).map(([node, attrs]) => ({ id: node, ...attrs })),
+    edges: graph.edges(true).map(([u, v, attrs]) => ({ from: u, to: v, ...attrs })),
+  };
+
+  const outputPath = path.join(graphDir, "fdep.json");
+  fs.writeFileSync(outputPath, JSON.stringify(graphData, null, 2), "utf-8");
+  console.log(`Successfully extracted components to ${outputPath}`);
 }
 
 main();
