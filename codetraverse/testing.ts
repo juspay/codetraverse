@@ -3,6 +3,7 @@ import * as path from "path";
 import { HaskellComponentExtractor } from "./extractors/haskell_extractor";
 import { TypeScriptComponentExtractor } from "./extractors/typescript_extractor";
 import { adaptHaskellComponents } from "./adapters/haskell_adapter";
+import { adaptTypeScriptComponents } from "./adapters/typescript_adapter";
 import { buildGraphFromSchema } from "./utils/jsnetworkx_graph";
 
 function main() {
@@ -57,7 +58,13 @@ function main() {
 
   walk(repoPath);
   
-  const { nodes, edges } = adaptHaskellComponents(allComponents);
+  let adaptedComponents;
+  if (process.argv[3] === 'haskell') {
+      adaptedComponents = adaptHaskellComponents(allComponents);
+  } else {
+      adaptedComponents = adaptTypeScriptComponents(allComponents);
+  }
+  const { nodes, edges } = adaptedComponents;
   const graph = buildGraphFromSchema({ nodes, edges });
 
   const graphData = {
