@@ -10,9 +10,9 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.HaskellComponentExtractor = void 0;
-var tree_sitter_1 = require("tree-sitter");
-var tree_sitter_haskell_1 = require("tree-sitter-haskell");
-var fs_1 = require("fs");
+var Parser = require("tree-sitter");
+var Haskell = require("tree-sitter-haskell");
+var fs = require("fs");
 var TOP_LEVEL_KINDS = new Set([
     "header",
     "pragma",
@@ -47,16 +47,34 @@ var HaskellComponentExtractor = /** @class */ (function () {
         this.allComponents = [];
         this.currentModule = "";
         this.currentFilePath = "";
-        this.parser = new tree_sitter_1.default();
-        this.hsLanguage = tree_sitter_haskell_1.default;
+        this.parser = new Parser();
+        this.hsLanguage = Haskell;
         this.parser.setLanguage(this.hsLanguage);
     }
     HaskellComponentExtractor.prototype.processFile = function (filePath) {
         var _this = this;
-        var src = fs_1.default.readFileSync(filePath);
+        // Read file with explicit UTF-8 encoding
+        var fileContent = fs.readFileSync(filePath, "utf-8");
         this.currentFilePath = filePath;
-        var tree = this.parser.parse(src.toString());
-        this.importMap = this.parseImports(tree.rootNode, src);
+        // Check if file is empty or contains only whitespace
+        if (fileContent.trim().length === 0) {
+            console.log("Skipping empty file: ".concat(filePath));
+            return;
+        }
+        // Validate that the content can be parsed
+        var tree;
+        try {
+            tree = this.parser.parse(fileContent);
+        }
+        catch (error) {
+            // console.error(`Failed to parse file ${filePath}:`, error);
+            return;
+        }
+        if (!tree || !tree.rootNode) {
+            console.error("Invalid parse tree for file ".concat(filePath));
+            return;
+        }
+        this.importMap = this.parseImports(tree.rootNode, Buffer.from(fileContent));
         for (var _i = 0, _a = tree.rootNode.children; _i < _a.length; _i++) {
             var child = _a[_i];
             if (child.type === "header") {
@@ -66,7 +84,7 @@ var HaskellComponentExtractor = /** @class */ (function () {
                     for (var _b = 0, _c = moduleNode.children; _b < _c.length; _b++) {
                         var moduleId = _c[_b];
                         if (moduleId.type === "module_id") {
-                            modulePath.push(src.slice(moduleId.startIndex, moduleId.endIndex).toString());
+                            modulePath.push(Buffer.from(fileContent).slice(moduleId.startIndex, moduleId.endIndex).toString());
                         }
                     }
                 }
@@ -75,7 +93,7 @@ var HaskellComponentExtractor = /** @class */ (function () {
             }
         }
         var rawGroups = tree.rootNode.children.map(function (i) {
-            return _this.extractTopLevelComponents(i, src, _this.importMap);
+            return _this.extractTopLevelComponents(i, Buffer.from(fileContent), _this.importMap);
         });
         this.allComponents = rawGroups.flat();
         for (var _d = 0, _e = this.allComponents; _d < _e.length; _d++) {
@@ -90,7 +108,7 @@ var HaskellComponentExtractor = /** @class */ (function () {
         }
     };
     HaskellComponentExtractor.prototype.writeToFile = function (outputPath) {
-        fs_1.default.writeFileSync(outputPath, JSON.stringify(this.allComponents, null, 2), "utf-8");
+        fs.writeFileSync(outputPath, JSON.stringify(this.allComponents, null, 2), "utf-8");
     };
     HaskellComponentExtractor.prototype.extractAllComponents = function () {
         return this.allComponents;
@@ -360,7 +378,7 @@ var HaskellComponentExtractor = /** @class */ (function () {
                     comp.functionCalls = this.extractFunctionCallsNode(bodyNode, srcBytes, importMap, this.currentModule);
                 }
                 else {
-                    comp.functionCalls = this.extractFunctionCalls(bodyCode, importMap, this.currentModule);
+                    comp.functionCalls = [];
                 }
                 var whereDefs = this.extractWhereDefinitions(child, srcBytes);
                 if (whereDefs.length > 0) {
@@ -368,7 +386,7 @@ var HaskellComponentExtractor = /** @class */ (function () {
                     for (var _s = 0, whereDefs_1 = whereDefs; _s < whereDefs_1.length; _s++) {
                         var whereDef = whereDefs_1[_s];
                         if (whereDef.kind === "function") {
-                            whereDef.functionCalls = this.extractFunctionCalls(whereDef.code, importMap, this.currentModule);
+                            whereDef.functionCalls = this.extractFunctionCallsNode(child, srcBytes, importMap, this.currentModule);
                         }
                     }
                 }
@@ -379,7 +397,7 @@ var HaskellComponentExtractor = /** @class */ (function () {
                 var instanceComp = this.extractInstanceComponent(child, srcBytes, importMap);
                 if (instanceComp) {
                     instanceComp.module = this.currentModule;
-                    instanceComp.functionCalls = this.extractFunctionCalls(instanceComp.code, importMap, this.currentModule);
+                    instanceComp.functionCalls = this.extractFunctionCallsNode(child, srcBytes, importMap, this.currentModule);
                     components.push(instanceComp);
                 }
             }
@@ -387,7 +405,7 @@ var HaskellComponentExtractor = /** @class */ (function () {
                 var dataComp = this.extractDataTypeComponent(child, srcBytes, importMap);
                 if (dataComp) {
                     dataComp.module = this.currentModule;
-                    dataComp.functionCalls = this.extractFunctionCalls(dataComp.code, importMap, this.currentModule);
+                    dataComp.functionCalls = this.extractFunctionCallsNode(child, srcBytes, importMap, this.currentModule);
                     components.push(dataComp);
                 }
             }
@@ -1326,205 +1344,7 @@ var HaskellComponentExtractor = /** @class */ (function () {
         };
     };
     HaskellComponentExtractor.prototype.extractFunctionCalls = function (funcCode, importMap, currentModule) {
-        var lines = funcCode.split("\n");
-        var identifiers = [];
-        var stringPattern = /"(?:[^"\\]|\\.)*"/g;
-        var operatorPattern = /\((\S+)\)/g;
-        var qualifiedNamePattern = /\b((?:[A-Z][a-zA-Z0-9_]*\.)+)([a-z][a-zA-Z0-9_']*)\b/g;
-        var listPattern = /\[(.*?)\]/g;
-        var tuplePattern = /\(([^)]*,.*?)\)/g;
-        var recordPattern = /\{(.*?)\}/g;
-        var lambdaPattern = /\\([^>]+)->/g;
-        var numericLiteralPattern = /\b\d+(?:\.\d+)?\b/g;
-        var collectionPatterns = {
-            Map: ["lookup", "insert", "delete", "fromList", "toList"],
-            Set: ["fromList", "toList", "union", "difference"],
-        };
-        var skipKeywords = new Set([
-            "if",
-            "then",
-            "else",
-            "let",
-            "in",
-            "do",
-            "case",
-            "of",
-            "where",
-            "data",
-            "type",
-            "newtype",
-            "class",
-            "instance",
-            "deriving",
-            "import",
-            "module",
-            "as",
-            "hiding",
-            "qualified",
-            "infix",
-            "infixl",
-            "infixr",
-            "pure",
-            "return",
-            "mempty",
-            "mappend",
-        ]);
-        for (var _i = 0, lines_1 = lines; _i < lines_1.length; _i++) {
-            var line = lines_1[_i];
-            var processedLine = line.replace(/--.*/, "");
-            processedLine = processedLine.replace(stringPattern, "");
-            if (processedLine.includes("::") ||
-                processedLine.trim().startsWith("instance") ||
-                processedLine.trim().startsWith("where")) {
-                continue;
-            }
-            var match = void 0;
-            var _loop_1 = function () {
-                var prefix = match[1].slice(0, -1);
-                var baseName = match[2];
-                if (!prefix || skipKeywords.has(baseName)) {
-                    return "continue";
-                }
-                var resolvedModules = [prefix];
-                var components = prefix.split(".");
-                if (components.length > 0) {
-                    var firstComponent = components[0];
-                    var resolved = importMap[firstComponent] || [firstComponent];
-                    if (components.length > 1) {
-                        resolvedModules = resolved.map(function (r) { return "".concat(r, ".").concat(components.slice(1).join(".")); });
-                    }
-                    else {
-                        resolvedModules = resolved;
-                    }
-                }
-                identifiers.push({
-                    name: "".concat(prefix, ".").concat(baseName),
-                    type: "qualified",
-                    modules: resolvedModules,
-                    base: baseName,
-                    context: "function_call",
-                });
-            };
-            while ((match = qualifiedNamePattern.exec(processedLine)) !== null) {
-                _loop_1();
-            }
-            while ((match = /\b([a-z][a-zA-Z0-9_']*)s*(?=\()/g.exec(processedLine)) !== null) {
-                var call = match[1];
-                if (skipKeywords.has(call))
-                    continue;
-                identifiers.push({
-                    name: call,
-                    type: "function",
-                    modules: [currentModule],
-                    base: call,
-                    context: "function_call",
-                });
-            }
-            while ((match = operatorPattern.exec(processedLine)) !== null) {
-                var op = match[1];
-                if (skipKeywords.has(op))
-                    continue;
-                identifiers.push({
-                    name: op,
-                    type: "operator",
-                    context: "operation",
-                });
-            }
-            while ((match = listPattern.exec(processedLine)) !== null) {
-                var elements = match[1].split(",").map(function (e) { return e.trim(); });
-                identifiers.push({
-                    name: match[0],
-                    type: "literal",
-                    subtype: "list",
-                    elements: elements,
-                    context: "literal",
-                });
-            }
-            while ((match = tuplePattern.exec(processedLine)) !== null) {
-                var elements = match[1].split(",").map(function (e) { return e.trim(); });
-                identifiers.push({
-                    name: match[0],
-                    type: "literal",
-                    subtype: "tuple",
-                    elements: elements,
-                    length: elements.length,
-                    context: "literal",
-                });
-            }
-            while ((match = recordPattern.exec(processedLine)) !== null) {
-                var fields = match[1].split(",").map(function (f) { return f.trim(); });
-                identifiers.push({
-                    name: match[0],
-                    type: "record",
-                    fields: fields,
-                    context: "record",
-                });
-            }
-            if (lambdaPattern.test(processedLine)) {
-                identifiers.push({
-                    name: "λ",
-                    type: "lambda",
-                    context: "anonymous_function",
-                });
-            }
-            for (var _a = 0, _b = Object.entries(collectionPatterns); _a < _b.length; _a++) {
-                var _c = _b[_a], collType = _c[0], funcs = _c[1];
-                for (var _d = 0, funcs_1 = funcs; _d < funcs_1.length; _d++) {
-                    var func = funcs_1[_d];
-                    if (new RegExp("\\b".concat(func, "\\b")).test(processedLine)) {
-                        identifiers.push({
-                            name: func,
-                            type: "collection_function",
-                            collection: collType,
-                            context: "data_structure",
-                        });
-                    }
-                }
-            }
-            while ((match = /\b([A-Z][a-zA-Z0-9_']*)\b/g.exec(processedLine)) !== null) {
-                var ctor = match[1];
-                if (skipKeywords.has(ctor))
-                    continue;
-                identifiers.push({
-                    name: ctor,
-                    type: "type_constructor",
-                    context: "type_system",
-                });
-            }
-            if (processedLine.includes("=") && !processedLine.includes("type")) {
-                while ((match = /\b([a-z][a-zA-Z0-9_']*)\b/g.exec(processedLine)) !== null) {
-                    var v = match[1];
-                    if (skipKeywords.has(v))
-                        continue;
-                    identifiers.push({
-                        name: v,
-                        type: "variable",
-                        context: "binding",
-                    });
-                }
-            }
-            while ((match = numericLiteralPattern.exec(processedLine)) !== null) {
-                var num = match[0];
-                identifiers.push({
-                    name: num,
-                    type: "literal",
-                    subtype: "numeric",
-                    value: num.includes(".") ? parseFloat(num) : parseInt(num, 10),
-                    context: "literal",
-                });
-            }
-        }
-        var seen = new Set();
-        var uniqueIdentifiers = [];
-        for (var _e = 0, identifiers_2 = identifiers; _e < identifiers_2.length; _e++) {
-            var ident = identifiers_2[_e];
-            var key = "".concat(ident.name, ",").concat(ident.type, ",").concat(ident.context);
-            if (!seen.has(key)) {
-                seen.add(key);
-                uniqueIdentifiers.push(ident);
-            }
-        }
-        return uniqueIdentifiers;
+        return [];
     };
     HaskellComponentExtractor.prototype.findTypeDependencies = function (funcName, components) {
         for (var _i = 0, components_2 = components; _i < components_2.length; _i++) {
