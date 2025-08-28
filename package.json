@@ -53,7 +53,11 @@
     "npm": ">=7.0.0"
   },
   "devDependencies": {
-    "@types/node": "^18.19.117",
+    "@types/node": "^18.19.123",
     "ncp": "^2.0.0"
+  },
+  "dependencies": {
+    "tree-sitter": "^0.21.1",
+    "tree-sitter-haskell": "^0.23.1"
   }
 }
