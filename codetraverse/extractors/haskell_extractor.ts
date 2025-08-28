@@ -1,5 +1,7 @@
-import Parser, { SyntaxNode } from "tree-sitter";
-import * as Haskell from "tree-sitter-haskell";
+const Parser = require("tree-sitter");
+const Haskell = require("tree-sitter-haskell");
+
+type SyntaxNode = any;
 import * as fs from "fs";
 import { ComponentExtractor } from "../base/component_extractor";
 import {
@@ -43,7 +45,7 @@ const TOP_LEVEL_KINDS = new Set([
 ]);
 
 export class HaskellComponentExtractor implements ComponentExtractor {
-  private parser: Parser;
+  private parser: any;
   private readonly hsLanguage: any;
   private importMap: Record<string, string[]> = {};
   public allComponents: Component[] = [];
@@ -57,11 +59,30 @@ export class HaskellComponentExtractor implements ComponentExtractor {
   }
 
   processFile(filePath: string): void {
-    const src = fs.readFileSync(filePath);
+    // Read file with explicit UTF-8 encoding
+    const fileContent = fs.readFileSync(filePath, "utf-8");
     this.currentFilePath = filePath;
 
-    const tree = this.parser.parse(src.toString());
-    this.importMap = this.parseImports(tree.rootNode, src);
+    // Check if file is empty or contains only whitespace
+    if (fileContent.trim().length === 0) {
+      console.log(`Skipping empty file: ${filePath}`);
+      return;
+    }
+
+    // Validate that the content can be parsed
+    let tree;
+    try {
+      tree = this.parser.parse(fileContent);
+    } catch (error) {
+      console.error(`Failed to parse file ${filePath}:`, error);
+      return;
+    }
+
+    if (!tree || !tree.rootNode) {
+      console.error(`Invalid parse tree for file ${filePath}`);
+      return;
+    }
+    this.importMap = this.parseImports(tree.rootNode, Buffer.from(fileContent));
 
     for (const child of tree.rootNode.children) {
       if (child.type === "header") {
@@ -71,7 +92,7 @@ export class HaskellComponentExtractor implements ComponentExtractor {
           for (const moduleId of moduleNode.children) {
             if (moduleId.type === "module_id") {
               modulePath.push(
-                src.slice(moduleId.startIndex, moduleId.endIndex).toString()
+                Buffer.from(fileContent).slice(moduleId.startIndex, moduleId.endIndex).toString()
               );
             }
           }
@@ -82,7 +103,7 @@ export class HaskellComponentExtractor implements ComponentExtractor {
     }
 
     const rawGroups = tree.rootNode.children.map((i) =>
-      this.extractTopLevelComponents(i, src, this.importMap)
+      this.extractTopLevelComponents(i, Buffer.from(fileContent), this.importMap)
     );
     this.allComponents = rawGroups.flat();
 
