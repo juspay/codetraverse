@@ -120,33 +120,39 @@ export class TypeScriptComponentExtractor implements ComponentExtractor {
     }
 
     public processFile(filePath: string): void {
-        const code = fs.readFileSync(filePath, 'utf-8');
-        const tree = this.parser.parse(code);
-        const rootFolder = path.dirname(filePath);
-        const imports = this.collectImportsForFile(tree.rootNode, code);
-        const components = this.walkNode(tree.rootNode, code, filePath, rootFolder, undefined, imports);
+        try {
+            const code = fs.readFileSync(filePath, 'utf-8');
+            const tree = this.parser.parse(code);
+            const rootFolder = path.dirname(filePath);
+            const imports = this.collectImportsForFile(tree.rootNode, code);
+            const components = this.walkNode(tree.rootNode, code, filePath, rootFolder, undefined, imports);
 
-        for (const comp of components) {
-            const rootDir = process.env.ROOT_DIR || "";
-            if (rootDir && filePath) {
-                comp.file_path = path.relative(rootDir, filePath).replace(/\\/g, "/");
-            } else {
-                comp.file_path = filePath.replace(/\\/g, "/");
+            for (const comp of components) {
+                const rootDir = process.env.ROOT_DIR || "";
+                if (rootDir && filePath) {
+                    comp.file_path = path.relative(rootDir, filePath).replace(/\\/g, "/");
+                } else {
+                    comp.file_path = filePath.replace(/\\/g, "/");
+                }
+
+                if (!comp.module || comp.file_path.split(".").length === 2) {
+                    comp.module = comp.file_path;
+                }
             }
 
-            if (!comp.module || comp.file_path.split(".").length === 2) {
-                comp.module = comp.file_path;
-            }
+            this.allComponents = components.filter(c => {
+                try {
+                    JSON.stringify(c);
+                    return true;
+                } catch (e) {
+                    return false;
+                }
+            });
+        } catch (e) {
+            console.error(`Failed to process file: ${filePath}`);
+            console.error(e);
+            this.allComponents = [];
         }
-
-        this.allComponents = components.filter(c => {
-            try {
-                JSON.stringify(c);
-                return true;
-            } catch (e) {
-                return false;
-            }
-        });
     }
 
     public writeToFile(outputPath: string): void {
@@ -659,7 +665,7 @@ export class TypeScriptComponentExtractor implements ComponentExtractor {
                     let calleeId: string;
                     if (baseName in imports) {
                         let sourceFile = imports[baseName];
-                        if (!sourceFile.endsWith('.ts')) {
+                        if (typeof sourceFile === 'string' && !sourceFile.endsWith('.ts')) {
                             sourceFile += '.ts';
                         }
                         calleeId = `${sourceFile}::${baseName}`;

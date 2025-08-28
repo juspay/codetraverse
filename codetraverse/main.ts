@@ -2,13 +2,14 @@ import * as fs from "fs";
 import * as path from "path";
 import * as jsnx from "jsnetworkx";
 import { HaskellComponentExtractor } from "./extractors/haskell_extractor";
+import { TypeScriptComponentExtractor } from "./extractors/typescript_extractor";
 import { buildGraphFromSchema } from "./utils/jsnetworkx_graph";
 import { adaptHaskellComponents } from "./adapters/haskell_adapter";
 // import { adaptPythonComponents } from "./adapters/python_adapter";
 // import { adaptRescriptComponents } from "./adapters/rescript_adapter";
 // import { adaptRustComponents } from "./adapters/rust_adapter";
 // import { adaptGoComponents } from "./adapters/go_adapter";
-// import { adaptTypescriptComponents } from "./adapters/typescript_adapter";
+import { adaptTypeScriptComponents } from "./adapters/typescript_adapter";
 // import { adaptPurescriptComponents } from "./adapters/purescript_adapter";
 // import { adaptJavascriptComponents } from "./adapters/javascript_adapter";
 import { Component } from "./types/types";
@@ -56,7 +57,7 @@ const adapterMap: Record<string, (components: Component[]) => { nodes: any[], ed
     // "rescript": adaptRescriptComponents,
     // "rust": adaptRustComponents,
     // "golang": adaptGoComponents,
-    // "typescript": adaptTypescriptComponents,
+    "typescript": adaptTypeScriptComponents
     // "purescript": adaptPurescriptComponents,
     // "javascript": adaptJavascriptComponents
 };
@@ -86,15 +87,19 @@ function combineSchemas(old: { nodes: any[], edges: any[] }, newSchema: { nodes:
     };
 }
 
-function getExtractor(language: string): ComponentExtractor {
+function getExtractor(language: string): ComponentExtractor | undefined {
     switch (language) {
         case "haskell":
             return new HaskellComponentExtractor();
+        
+        case "typescript":
+            return new TypeScriptComponentExtractor();
         // case "python":
         //     return new PythonComponentExtractor();
         // Add other extractors here as they are implemented
         default:
-            throw new Error(`No extractor found for language: ${language}`);
+            console.log(`No extractor found for language: ${language}. Skipping it.`);
+            return undefined;
     }
 }
 
@@ -102,12 +107,14 @@ function _processSingleFileWorker(args: [string, string, string, string]) {
     const [codePath, languageStr, rootDirPath, outputBasePath] = args;
     try {
         const extractorInstance = getExtractor(languageStr);
-        extractorInstance.processFile(codePath);
-        const relPath = path.relative(rootDirPath, codePath);
-        const jsonRel = path.join(path.dirname(relPath), path.basename(relPath, path.extname(relPath))) + ".json";
-        const outPath = path.join(outputBasePath, jsonRel);
-        fs.mkdirSync(path.dirname(outPath), { recursive: true });
-        extractorInstance.writeToFile(outPath);
+        if (extractorInstance) {
+            extractorInstance.processFile(codePath);
+            const relPath = path.relative(rootDirPath, codePath);
+            const jsonRel = path.join(path.dirname(relPath), path.basename(relPath, path.extname(relPath))) + ".json";
+            const outPath = path.join(outputBasePath, jsonRel);
+            fs.mkdirSync(path.dirname(outPath), { recursive: true });
+            extractorInstance.writeToFile(outPath);
+        }
     } catch (e: any) {
         console.error(e.stack);
         console.error(`Unable to process - ${codePath}. Skipping it.`);
