@@ -246,7 +246,7 @@ def generate_ast_diff(
         # --- 3. Process Files ---
         for category in ["modified", "added", "deleted"]:
             for file_path in changed_files.get(category, []):
-                if file_path.endswith(".lock"):
+                if not orchestrator.is_supported(file_path):
                     continue
                 parser = orchestrator.get_parser(file_path)
                 differ = orchestrator.get_differ(file_path)
