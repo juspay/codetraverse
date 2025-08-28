@@ -53,17 +53,20 @@
     "npm": ">=7.0.0"
   },
   "dependencies": {
+    "@types/chardet": "^0.8.3",
+    "chardet": "^0.7.0",
+    "cheerio": "^1.1.2",
+    "ignore": "^7.0.5",
     "jsnetworkx": "^0.3.4",
     "tree-sitter": "^0.21.1",
     "tree-sitter-haskell": "^0.23.1",
-    "tree-sitter-rust": "^0.21.0",
-    "tree-sitter-typescript": "^0.23.2",
-    "chardet": "^0.7.0",
-    "cheerio": "^1.0.0-rc.12"
+    "tree-sitter-python": "^0.21.0",
+    "tree-sitter-rust": "^0.23.0",
+    "tree-sitter-typescript": "^0.23.2"
   },
   "devDependencies": {
+    "@types/cheerio": "^0.22.35",
     "@types/node": "^18.19.123",
-    "ncp": "^2.0.0",
-    "@types/cheerio": "^0.22.35"
+    "ncp": "^2.0.0"
   }
 }

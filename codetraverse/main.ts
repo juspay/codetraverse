@@ -2,11 +2,10 @@ import 'module-alias/register';
 import * as fs from "fs";
 import * as path from "path";
 import * as jsnx from "jsnetworkx";
-import { HaskellComponentExtractor } from "./extractors/haskell_extractor";
-import { TypeScriptComponentExtractor } from "./extractors/typescript_extractor";
 import { buildGraphFromSchema } from "./utils/jsnetworkx_graph";
 import { adaptHaskellComponents } from "./adapters/haskell_adapter";
-// import { adaptPythonComponents } from "./adapters/python_adapter";
+import { adaptPythonComponents } from "./adapters/python_adapter";
+import { getExtractor } from "./registry/extractor_registry";
 // import { adaptRescriptComponents } from "./adapters/rescript_adapter";
 // import { adaptRustComponents } from "./adapters/rust_adapter";
 // import { adaptGoComponents } from "./adapters/go_adapter";
@@ -14,7 +13,19 @@ import { adaptTypeScriptComponents } from "./adapters/typescript_adapter";
 // import { adaptPurescriptComponents } from "./adapters/purescript_adapter";
 // import { adaptJavascriptComponents } from "./adapters/javascript_adapter";
 import { Component } from "./types/types";
-import { ComponentExtractor } from "./base/component_extractor";
+import ignore from "ignore";
+
+function loadGitIgnore(baseDir: string): ignore.Ignore {
+    const gitignorePath = path.join(baseDir, ".gitignore");
+    const ig = ignore();
+
+    if (fs.existsSync(gitignorePath)) {
+        const content = fs.readFileSync(gitignorePath, "utf8");
+        ig.add(content.split(/\r?\n/));
+    }
+
+    return ig;
+}
 
 // Import the load function from utils
 function loadComponentsWithoutHash(fdepDir: string): Component[] {
@@ -47,14 +58,14 @@ function loadComponentsWithoutHash(fdepDir: string): Component[] {
             }
         }
     }
-    
+
     walkDir(fdepDir);
     return components;
 }
 
 const adapterMap: Record<string, (components: Component[]) => { nodes: any[], edges: any[] }> = {
     "haskell": adaptHaskellComponents,
-    // "python": adaptPythonComponents,
+    "python": adaptPythonComponents,
     // "rescript": adaptRescriptComponents,
     // "rust": adaptRustComponents,
     // "golang": adaptGoComponents,
@@ -64,14 +75,14 @@ const adapterMap: Record<string, (components: Component[]) => { nodes: any[], ed
 };
 
 const EXT_MAP: Record<string, string[]> = {
-    "haskell": [".hs" , ".lhs" , ".hs-boot"],
+    "haskell": [".hs", ".lhs", ".hs-boot"],
     "python": [".py"],
-    "rescript": [".res"],
-    "golang": [".go"],
+    // "rescript": [".res"],
+    // "golang": [".go"],
     "rust": [".rs"],
     "typescript": [".ts", ".tsx"],
-    "purescript": [".purs"],
-    "javascript": [".js", ".jsx", ".mjs", ".cjs"]
+    // "purescript": [".purs"],
+    // "javascript": [".js", ".jsx", ".mjs", ".cjs"]
 };
 
 const INVERSE_EXTS: Record<string, string> = {};
@@ -86,22 +97,6 @@ function combineSchemas(old: { nodes: any[], edges: any[] }, newSchema: { nodes:
         nodes: old.nodes.concat(newSchema.nodes),
         edges: old.edges.concat(newSchema.edges)
     };
-}
-
-function getExtractor(language: string): ComponentExtractor | undefined {
-    switch (language) {
-        case "haskell":
-            return new HaskellComponentExtractor();
-        
-        case "typescript":
-            return new TypeScriptComponentExtractor();
-        // case "python":
-        //     return new PythonComponentExtractor();
-        // Add other extractors here as they are implemented
-        default:
-            console.log(`No extractor found for language: ${language}. Skipping it.`);
-            return undefined;
-    }
 }
 
 function _processSingleFileWorker(args: [string, string, string, string]) {
@@ -126,70 +121,14 @@ export function createFdepData(rootDir: string, outputBase = "./output/fdep", gr
     process.env.ROOT_DIR = rootDir;
     const rootDirPath = path.resolve(rootDir);
     const languageFileMap: Record<string, string[]> = {};
-    const gitignorePath = path.join(rootDirPath, ".gitignore");
-    const gitignorePattern = fs.existsSync(gitignorePath) ? fs.readFileSync(gitignorePath, "utf-8").split("\n") : [];
-    
-    function isIgnored(filePath: string, patterns: string[]): boolean {
-        for (const pattern of patterns) {
-            if (pattern.trim() === "" || pattern.startsWith("#")) {
-                continue; // Skip empty lines and comments
-            }
-            
-            if (pattern.startsWith("!")) {
-                const cleanPattern = pattern.substring(1);
-                if (matchesGitignorePattern(filePath, cleanPattern)) {
-                    return false;
-                }
-            } else {
-                if (matchesGitignorePattern(filePath, pattern)) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-    
-    function matchesGitignorePattern(filePath: string, pattern: string): boolean {
-        // Convert gitignore glob pattern to regex
-        let regexPattern = pattern
-            .replace(/\./g, '\\.')  // Escape dots
-            .replace(/\*/g, '.*')   // Convert * to .*
-            .replace(/\?/g, '.')    // Convert ? to .
-            .replace(/\//g, '\\/'); // Escape forward slashes
-        
-        // If pattern ends with /, it only matches directories
-        if (pattern.endsWith('/')) {
-            regexPattern = regexPattern.slice(0, -2) + '$'; // Remove the escaped / and anchor to end
-            return new RegExp(regexPattern).test(filePath + '/');
-        }
-        
-        // If pattern doesn't start with /, it can match at any level
-        if (!pattern.startsWith('/')) {
-            regexPattern = '(^|/)' + regexPattern;
-        }
-        
-        regexPattern = '^' + regexPattern + '($|/)';
-        
-        try {
-            return new RegExp(regexPattern).test(filePath);
-        } catch (e) {
-            // If regex is invalid, fall back to simple string matching
-            return filePath.includes(pattern.replace(/[*?]/g, ''));
-        }
-    }
+    const ig = loadGitIgnore(rootDir);
 
     function walk(dir: string) {
         const files = fs.readdirSync(dir);
         for (const file of files) {
             const fullPath = path.join(dir, file);
             const relativePath = path.relative(rootDirPath, fullPath);
-            const ignored = isIgnored(relativePath, gitignorePattern);
-            
-            // Debug: log first few files
-            if (languageFileMap.haskell?.length < 5 || path.extname(fullPath) === '.hs') {
-                console.log(`File: ${relativePath}, ignored: ${ignored}, ext: ${path.extname(fullPath)}`);
-            }
-            
+            const ignored = ig.ignores(relativePath);
             if (ignored) {
                 continue;
             }
