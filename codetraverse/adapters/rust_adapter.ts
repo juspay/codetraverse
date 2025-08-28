@@ -1,4 +1,4 @@
-import { Component, FunctionCall } from '../extractors/types';
+import { Component, FunctionCall } from '../types/types';
 
 interface Node {
     id: string;
