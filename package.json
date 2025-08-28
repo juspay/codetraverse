@@ -52,12 +52,16 @@
     "node": ">=14.0.0",
     "npm": ">=7.0.0"
   },
-  "devDependencies": {
-    "@types/node": "^18.19.123",
-    "ncp": "^2.0.0"
-  },
   "dependencies": {
     "tree-sitter": "^0.21.1",
-    "tree-sitter-haskell": "^0.23.1"
+    "tree-sitter-haskell": "^0.23.1",
+    "tree-sitter-typescript": "^0.23.2",
+    "chardet": "^0.7.0",
+    "cheerio": "^1.0.0-rc.12"
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.123",
+    "ncp": "^2.0.0",
+    "@types/cheerio": "^0.22.35"
   }
 }

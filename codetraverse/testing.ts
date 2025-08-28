@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { HaskellComponentExtractor } from "./extractors/haskell_extractor";
+import { TypeScriptComponentExtractor } from "./extractors/typescript_extractor";
 
 function main() {
   const repoPath = process.argv[2];
@@ -23,7 +24,7 @@ function main() {
       const fullPath = path.join(dir, file);
       if (fs.statSync(fullPath).isDirectory()) {
         walk(fullPath);
-      } else if (path.extname(fullPath) === ".hs") {
+      } else if (path.extname(fullPath) === ".hs" || path.extname(fullPath) === ".ts") {
         try {
             const fileContent = fs.readFileSync(fullPath, "utf-8");
             if (fileContent.trim().length === 0) {
@@ -31,7 +32,12 @@ function main() {
                 continue;
             }
             console.log(`Processing ${fullPath}`);
-            const extractor = new HaskellComponentExtractor();
+            let extractor;
+            if (path.extname(fullPath) === ".hs") {
+                extractor = new HaskellComponentExtractor();
+            } else {
+                extractor = new TypeScriptComponentExtractor();
+            }
             extractor.processFile(fullPath);
             const components = extractor.extractAllComponents();
             const relativePath = path.relative(repoPath, fullPath);

@@ -36,6 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const haskell_extractor_1 = require("./extractors/haskell_extractor");
+const typescript_extractor_1 = require("./extractors/typescript_extractor");
 function main() {
     const repoPath = process.argv[2];
     if (!repoPath) {
@@ -55,7 +56,7 @@ function main() {
             if (fs.statSync(fullPath).isDirectory()) {
                 walk(fullPath);
             }
-            else if (path.extname(fullPath) === ".hs") {
+            else if (path.extname(fullPath) === ".hs" || path.extname(fullPath) === ".ts") {
                 try {
                     const fileContent = fs.readFileSync(fullPath, "utf-8");
                     if (fileContent.trim().length === 0) {
@@ -63,7 +64,13 @@ function main() {
                         continue;
                     }
                     console.log(`Processing ${fullPath}`);
-                    const extractor = new haskell_extractor_1.HaskellComponentExtractor();
+                    let extractor;
+                    if (path.extname(fullPath) === ".hs") {
+                        extractor = new haskell_extractor_1.HaskellComponentExtractor();
+                    }
+                    else {
+                        extractor = new typescript_extractor_1.TypeScriptComponentExtractor();
+                    }
                     extractor.processFile(fullPath);
                     const components = extractor.extractAllComponents();
                     const relativePath = path.relative(repoPath, fullPath);
