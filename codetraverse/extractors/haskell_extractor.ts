@@ -74,7 +74,7 @@ export class HaskellComponentExtractor implements ComponentExtractor {
     try {
       tree = this.parser.parse(fileContent);
     } catch (error) {
-      console.error(`Failed to parse file ${filePath}:`, error);
+      // console.error(`Failed to parse file ${filePath}:`, error);
       return;
     }
 

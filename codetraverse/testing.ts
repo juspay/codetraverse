@@ -4,6 +4,8 @@ import { HaskellComponentExtractor } from "./extractors/haskell_extractor";
 import { TypeScriptComponentExtractor } from "./extractors/typescript_extractor";
 import { adaptHaskellComponents } from "./adapters/haskell_adapter";
 import { adaptTypeScriptComponents } from "./adapters/typescript_adapter";
+import { RustComponentExtractor } from "./extractors/rust_extractor";
+import { adaptRustComponents } from "./adapters/rust_adapter";
 import { buildGraphFromSchema } from "./utils/jsnetworkx_graph";
 
 function main() {
@@ -26,7 +28,9 @@ function main() {
   fs.mkdirSync(graphDir, { recursive: true });
 
 
-  const allComponents: any[] = [];
+  const allHaskellComponents: any[] = [];
+  const allRustComponents: any[] = [];
+
   function walk(dir: string) {
     const files = fs.readdirSync(dir);
     for (const file of files) {
