@@ -1,7 +1,9 @@
 import * as fs from "fs";
 import * as path from "path";
 import { HaskellComponentExtractor } from "./extractors/haskell_extractor";
+import { TypeScriptComponentExtractor } from "./extractors/typescript_extractor";
 import { adaptHaskellComponents } from "./adapters/haskell_adapter";
+import { adaptTypeScriptComponents } from "./adapters/typescript_adapter";
 import { RustComponentExtractor } from "./extractors/rust_extractor";
 import { adaptRustComponents } from "./adapters/rust_adapter";
 import { buildGraphFromSchema } from "./utils/jsnetworkx_graph";
@@ -35,7 +37,7 @@ function main() {
       const fullPath = path.join(dir, file);
       if (fs.statSync(fullPath).isDirectory()) {
         walk(fullPath);
-      } else if (path.extname(fullPath) === ".hs") {
+      } else if (path.extname(fullPath) === ".hs" || path.extname(fullPath) === ".ts") {
         try {
             const fileContent = fs.readFileSync(fullPath, "utf-8");
             if (fileContent.trim().length === 0) {
@@ -43,27 +45,14 @@ function main() {
                 continue;
             }
             console.log(`Processing ${fullPath}`);
-            const extractor = new HaskellComponentExtractor();
+            let extractor;
+            if (path.extname(fullPath) === ".hs") {
+                extractor = new HaskellComponentExtractor();
+            } else {
+                extractor = new TypeScriptComponentExtractor();
+            }
             extractor.processFile(fullPath);
-            for (const component of extractor.extractAllComponents()) {
-                allHaskellComponents.push(component);
-            }
-        } catch (e: any) {
-            console.error(`Error processing file ${fullPath}:`, e.message);
-        }
-      } else if (path.extname(fullPath) === ".rs") {
-        try {
-            const fileContent = fs.readFileSync(fullPath, "utf-8");
-            if (fileContent.trim().length === 0) {
-                console.log(`Skipping empty file: ${fullPath}`);
-                continue;
-            }
-            console.log(`Processing ${fullPath}`);
-            const extractor = new RustComponentExtractor();
-            extractor.processFile(fullPath);
-            for (const component of extractor.extractAllComponents()) {
-                allRustComponents.push(component);
-            }
+            allComponents.push(...extractor.extractAllComponents());
         } catch (e: any) {
             console.error(`Error processing file ${fullPath}:`, e.message);
         }
@@ -73,30 +62,14 @@ function main() {
 
   walk(repoPath);
   
-  let allNodes: any[] = [];
-  let allEdges: any[] = [];
-
-  if (allHaskellComponents.length > 0) {
-    const { nodes, edges } = adaptHaskellComponents(allHaskellComponents);
-    for (const node of nodes) {
-        allNodes.push(node);
-    }
-    for (const edge of edges) {
-        allEdges.push(edge);
-    }
+  let adaptedComponents;
+  if (process.argv[3] === 'haskell') {
+      adaptedComponents = adaptHaskellComponents(allComponents);
+  } else {
+      adaptedComponents = adaptTypeScriptComponents(allComponents);
   }
-
-  if (allRustComponents.length > 0) {
-    const { nodes, edges } = adaptRustComponents(allRustComponents);
-    for (const node of nodes) {
-        allNodes.push(node);
-    }
-    for (const edge of edges) {
-        allEdges.push(edge);
-    }
-  }
-
-  const graph = buildGraphFromSchema({ nodes: allNodes, edges: allEdges });
+  const { nodes, edges } = adaptedComponents;
+  const graph = buildGraphFromSchema({ nodes, edges });
 
   const graphData = {
     nodes: graph.nodes(true).map(([node, attrs]) => ({ id: node, ...attrs })),
