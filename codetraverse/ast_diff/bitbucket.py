@@ -1,4 +1,5 @@
 import requests
+from typing import Tuple
 
 def handle_response(response, function, *args):
     if response.status_code == 200:
@@ -57,6 +58,36 @@ class BitBucket:
             }
             response = requests.get(final_url, auth = self.auth, headers = self.headers, params=params)
             return handle_response(response, lambda x: x.text)
+
+    def get_structured_diff(self, from_commit: str, to_commit: str) -> Tuple[dict, dict]:
+        """Parse Bitbucket diff into structured added/removed changes with line numbers"""
+        def discover_changes(response):
+            json_data = response.json()
+            added_changes = {}
+            removed_changes = {}
+
+            for diff in json_data.get("diffs", []):
+                path_obj = diff.get("destination") or diff.get("source")
+                if not path_obj:
+                    continue
+                
+                full_path = self.get_file_path_from_object(path_obj)
+                filename = full_path.split("/")[-1]
+
+                for hunk in diff.get("hunks", []):
+                    for segment in hunk.get("segments", []):
+                        if segment["type"] == "ADDED":
+                            for line in segment.get("lines", []):
+                                added_changes.setdefault(filename, []).append((line["destination"], line["line"].rstrip()))
+                        elif segment["type"] == "REMOVED":
+                            for line in segment.get("lines", []):
+                                removed_changes.setdefault(filename, []).append((line["source"], line["line"].rstrip()))
+            return added_changes, removed_changes
+
+        final_url = self.DIFF_URL.format(projectKey=self.project_key, repositorySlug=self.repo_slug)
+        params = {"to": to_commit, "from": from_commit, "contextLines": 0}
+        response = requests.get(final_url, auth=self.auth, headers=self.headers, params=params)
+        return handle_response(response, discover_changes)
 
     def get_pr_bitbucket(self, pr_id: str):
         final_url = self.GET_PR_URL.format(projectKey=self.project_key, repositorySlug=self.repo_slug, pullRequestId=pr_id)
