@@ -1,13 +1,16 @@
- import { HaskellComponentExtractor } from '../extractors/haskell_extractor';
+import { HaskellComponentExtractor } from '../extractors/haskell_extractor';
+import { PythonComponentExtractor } from '../extractors/python_extractor';
+import { RustComponentExtractor } from '../extractors/rust_extractor';
+import { TypeScriptComponentExtractor } from '../extractors/typescript_extractor';
 // Import other extractors here
 
 const extractorMap: Record<string, any> = {
     "haskell": HaskellComponentExtractor,
-    // "python": PythonComponentExtractor,
+    "python": PythonComponentExtractor,
     // "rescript": RescriptComponentExtractor,
-    // "rust": RustComponentExtractor,
+    "rust": RustComponentExtractor,
     // "golang": GoComponentExtractor,
-    // "typescript": TypescriptComponentExtractor,
+    "typescript": TypeScriptComponentExtractor,
     // "purescript": PurescriptComponentExtractor,
     // "javascript": JavascriptComponentExtractor
 };

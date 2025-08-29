@@ -14,3 +14,4 @@ node_modules
 bridge/dist
 *.log
 codetraverse/dist
+dist

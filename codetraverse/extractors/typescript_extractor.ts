@@ -4,7 +4,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { ComponentExtractor } from "../base/component_extractor";
 import { Component } from "../types/types";
-import { chardet, detect } from "chardet";
+import { detect } from "chardet";
 import { load } from "cheerio";
 
 function parseHtmlToText(filePath: string): string {

@@ -5,7 +5,14 @@
     "target": "es2015",
     "moduleResolution": "node",
     "sourceMap": true,
-    "outDir": "dist"
+    "declaration": true,
+    "outDir": "../dist",
+    "downlevelIteration": true,
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./*"]
+    }
   },
   "include": [
     "**/*",
