@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as jsnx from 'jsnetworkx';
-import { buildGraphFromSchema } from '@/utils/jsnetworkx_graph';
+import { buildGraphFromSchema } from './utils/jsnetworkx_graph';
 
 export function loadGraph(graphPath: string): jsnx.Graph | null {
     if (!fs.existsSync(graphPath)) {

@@ -1,10 +1,9 @@
-import 'module-alias/register';
 import * as fs from 'fs';
 import * as path from 'path';
-import { loadGraph } from '@/path';
-import { buildCleanGraph } from '@/utils/jsnetworkx_graph';
-import { computeNodeMetrics } from '@/utils/graph_partitioner';
-import { createFdepData } from '@/main';
+import { loadGraph } from '../path';
+import { buildCleanGraph } from './jsnetworkx_graph';
+import { computeNodeMetrics } from './graph_partitioner';
+import { createFdepData } from '../main';
 import { ArgumentParser } from 'argparse';
 import * as jsnx from 'jsnetworkx';
 
