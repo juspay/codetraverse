@@ -316,7 +316,10 @@ export class PythonComponentExtractor implements ComponentExtractor {
 
     public parseFile(filePath: string): { plain: string; tree: Parser.Tree } {
         const plain = parseHtmlToText(filePath);
-        const tree = this.parser.parse(plain);
+        const options: Parser.Options = {
+            bufferSize: 1024 * 1024,
+        };
+        const tree = this.parser.parse(plain, null, options);
         return { plain, tree };
     }
 
