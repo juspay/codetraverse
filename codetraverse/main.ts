@@ -6,7 +6,7 @@ import { adaptHaskellComponents } from "./adapters/haskell_adapter";
 import { adaptPythonComponents } from "./adapters/python_adapter";
 import { getExtractor } from "./registry/extractor_registry";
 // import { adaptRescriptComponents } from "./adapters/rescript_adapter";
-// import { adaptRustComponents } from "./adapters/rust_adapter";
+import { adaptRustComponents } from "./adapters/rust_adapter";
 // import { adaptGoComponents } from "./adapters/go_adapter";
 import { adaptTypeScriptComponents } from "./adapters/typescript_adapter";
 // import { adaptPurescriptComponents } from "./adapters/purescript_adapter";
@@ -66,7 +66,7 @@ const adapterMap: Record<string, (components: Component[]) => { nodes: any[], ed
     "haskell": adaptHaskellComponents,
     "python": adaptPythonComponents,
     // "rescript": adaptRescriptComponents,
-    // "rust": adaptRustComponents,
+    "rust": adaptRustComponents,
     // "golang": adaptGoComponents,
     "typescript": adaptTypeScriptComponents
     // "purescript": adaptPurescriptComponents,
