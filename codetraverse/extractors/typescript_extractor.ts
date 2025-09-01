@@ -215,6 +215,9 @@ export class TypeScriptComponentExtractor implements ComponentExtractor {
 
     private parseFile(filePath: string): [string, Parser.Tree] {
         const plain = parseHtmlToText(filePath);
+        const options: Parser.Options = {
+            bufferSize: 1024 * 1024,
+        }
         const tree = this.parser.parse(plain);
         return [plain, tree];
     }
