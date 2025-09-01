@@ -12,6 +12,17 @@ export interface Component {
   [key: string]: any;
 }
 
+export interface PathResult {
+  found: boolean;
+  path: string[];
+  message: string;
+}
+
+export interface NeighborResult {
+  incoming: Array<{ from: string; relation: string }>;
+  outgoing: Array<{ to: string; relation: string }>;
+}
+
 export interface FunctionCall {
   name: string;
   type: string;
@@ -90,57 +101,57 @@ export type TopLevelComponent =
   | Instance;
 
 export interface Span {
-    startLine: number;
-    endLine: number;
-    startByte: number;
-    endByte: number;
+  startLine: number;
+  endLine: number;
+  startByte: number;
+  endByte: number;
 }
 
 export interface Parameter {
-    name: string;
-    type: string | null;
-    filePath: string;
+  name: string;
+  type: string | null;
+  filePath: string;
 }
 
 export interface Field {
-    name: string;
-    type: string;
-    visibility: string;
-    filePath: string;
+  name: string;
+  type: string;
+  visibility: string;
+  filePath: string;
 }
 
 export interface Variant {
-    name: string;
-    fields: { name: string; type: string; filePath: string }[];
+  name: string;
+  fields: { name: string; type: string; filePath: string }[];
 }
 
 export interface Call {
-    name?: string;
-    resolvedName?: string;
-    receiver?: string;
-    resolvedReceiver?: string;
-    method?: string;
-    fullPath?: string;
-    filePath: string;
-    span: Span;
+  name?: string;
+  resolvedName?: string;
+  receiver?: string;
+  resolvedReceiver?: string;
+  method?: string;
+  fullPath?: string;
+  filePath: string;
+  span: Span;
 }
 
 export interface Literal {
-    type: string;
-    value: string;
-    filePath: string;
-    span: Span;
+  type: string;
+  value: string;
+  filePath: string;
+  span: Span;
 }
 
 export interface Variable {
-    name: string;
-    type: string | null;
-    value: string | null;
-    filePath: string;
-    span: Span;
+  name: string;
+  type: string | null;
+  value: string | null;
+  filePath: string;
+  span: Span;
 }
 
 export interface TypeUsed {
-    type: string;
-    resolvedType: string;
+  type: string;
+  resolvedType: string;
 }

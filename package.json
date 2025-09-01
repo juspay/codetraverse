@@ -1,12 +1,13 @@
 {
   "name": "codetraverse-bridge-jp",
-  "version": "0.1.60",
+  "version": "0.1.61",
   "description": "CodeTraverse - Multi-language static code analysis tool",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "rm -rf dist && tsc",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "prepack": "npm run build"
   },
   "files": [
     "dist"

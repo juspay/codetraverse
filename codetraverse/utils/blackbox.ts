@@ -1,13 +1,72 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { loadGraph } from '../path';
+import { loadGraph, findFromSingleSource } from '../path'; // Import findFromSingleSource
 import { buildCleanGraph } from './jsnetworkx_graph';
 import { computeNodeMetrics } from './graph_partitioner';
-import { createFdepData } from '../main';
-import { ArgumentParser } from 'argparse';
-import * as jsnx from 'jsnetworkx';
+import { PathResult, NeighborResult } from '@/types/types';
 
 type ModuleInfo = { [key: string]: any };
+
+function parsePathResult(stdout: string): PathResult {
+    const lines = stdout.trim().split('\n');
+
+    const pathLine = lines.find(line => line.includes('->'));
+    if (pathLine) {
+        const parts = pathLine.split('->').map(part => part.trim());
+        const pathMatch = parts.length > 1 ? parts : null;
+
+        return {
+            found: true,
+            path: pathMatch || [],
+            message: stdout
+        };
+    }
+
+    return {
+        found: false,
+        path: [],
+        message: stdout
+    };
+}
+
+function parseNeighborResult(stdout: string): NeighborResult {
+    const lines = stdout.trim().split('\n');
+    const incoming: Array<{ from: string; relation: string }> = [];
+    const outgoing: Array<{ to: string; relation: string }> = [];
+
+    let section: 'incoming' | 'outgoing' | null = null;
+
+    for (const line of lines) {
+        if (line.includes('edges INTO')) {
+            section = 'incoming';
+            continue;
+        } else if (line.includes('edges OUT OF')) {
+            section = 'outgoing';
+            continue;
+        }
+
+        // Parse edge lines like: "PgIntegrationApp::process --[calls]--> PgIntegrationApp::make"
+        const edgeMatch = line.match(/(.+?)\s+--\[(.+?)\]-->\s+(.+)/);
+        if (edgeMatch && section) {
+            const [, from, relation, to] = edgeMatch;
+
+            if (section === 'incoming' && from && relation) {
+                incoming.push({ from: from.trim(), relation: relation.trim() });
+            } else if (section === 'outgoing' && to && relation) {
+                outgoing.push({ to: to.trim(), relation: relation.trim() });
+            }
+        }
+    }
+
+    return { incoming, outgoing };
+}
+
+function wrapError(error: any, functionName: string): Error {
+    if (error instanceof Error) {
+        return new Error(`Error in ${functionName}: ${error.message}`);
+    }
+    return new Error(`Unknown error in ${functionName}: ${String(error)}`);
+}
 
 export function getAllModules(graphPath: string): string[] {
     const root = graphPath.split('/').slice(0, 2).join('/');
@@ -209,14 +268,22 @@ export function getFunctionParent(graphPath: string, moduleName: string, compone
     return result;
 }
 
-export function getSubgraph(graphPath: string, moduleName: string, componentName: string, parentDepth: number = 1, childDepth: number = 1): jsnx.Graph | null {
+export function getSubgraph(
+    graphPath: string,
+    moduleName: string,
+    componentName: string,
+    parentDepth: number = 1,
+    childDepth: number = 1
+): { nodes: any[][]; edges: any[][] } {
     const G = loadGraph(graphPath);
     if (!G) {
-        return null;
+        console.error(`Error: Graph not found at ${graphPath}`);
+        return { nodes: [], edges: [] };
     }
     const target = `${moduleName}::${componentName}`;
     if (!G.hasNode(target)) {
-        return null;
+        console.error(`Error: Target '${target}' not in graph`);
+        return { nodes: [], edges: [] };
     }
 
     const nodesToInclude = new Set<string>([target]);
@@ -229,7 +296,14 @@ export function getSubgraph(graphPath: string, moduleName: string, componentName
         nodesToInclude.add(child[0]);
     }
 
-    return G.subgraph(Array.from(nodesToInclude));
+    const subgraph = G.subgraph(Array.from(nodesToInclude));
+    const nodes = subgraph.nodes().map((n: string) => {
+        const [nodeModule, nodeComponent] = n.includes('::') ? n.split('::', 2) : ['', n];
+        return [n, nodeModule, nodeComponent];
+    });
+    const edges = subgraph.edges();
+
+    return { nodes, edges };
 }
 
 export function getCommonParents(graphPath: string, moduleName1: string, componentName1: string, moduleName2: string, componentName2: string): any[][] {
@@ -318,127 +392,82 @@ export function getImportantNodes(fdepPath: string, outputDir: string = '', epsi
     return JSON.stringify({ status: 'ok' });
 }
 
-async function main() {
-    const parser = new ArgumentParser({
-        description: 'Code Analysis Tool',
-    });
-    const subparsers = parser.add_subparsers({ dest: 'function', help: 'Available functions' });
-
-    const parserModule = subparsers.add_parser('getModuleInfo', { help: 'Get module information' });
-    parserModule.add_argument('fdep_folder', { help: 'Path to fdep folder' });
-    parserModule.add_argument('module_name', { help: 'Module name to search for' });
-
-    const parserFunc = subparsers.add_parser('getFunctionInfo', { help: 'Get function information' });
-    parserFunc.add_argument('fdep_folder', { help: 'Path to fdep folder' });
-    parserFunc.add_argument('module_name', { help: 'Module name' });
-    parserFunc.add_argument('component_name', { help: 'Component name' });
-
-    const parserChildren = subparsers.add_parser('getFunctionChildren', { help: 'Get function children' });
-    parserChildren.add_argument('graph_path', { help: 'Path to graph file' });
-    parserChildren.add_argument('module_name', { help: 'Module name' });
-    parserChildren.add_argument('component_name', { help: 'Component name' });
-    parserChildren.add_argument('--depth', { type: 'int', default: 1, help: 'Search depth (default: 1)' });
-
-    const parserParent = subparsers.add_parser('getFunctionParent', { help: 'Get function parents' });
-    parserParent.add_argument('graph_path', { help: 'Path to graph file' });
-    parserParent.add_argument('module_name', { help: 'Module name' });
-    parserParent.add_argument('component_name', { help: 'Component name' });
-    parserParent.add_argument('--depth', { type: 'int', default: 1, help: 'Search depth (default: 1)' });
-
-    const parserSubgraph = subparsers.add_parser('getSubgraph', { help: 'Get subgraph' });
-    parserSubgraph.add_argument('graph_path', { help: 'Path to graph file' });
-    parserSubgraph.add_argument('module_name', { help: 'Module name' });
-    parserSubgraph.add_argument('component_name', { help: 'Component name' });
-    parserSubgraph.add_argument('--parent_depth', { type: 'int', default: 1, help: 'Parent depth (default: 1)' });
-    parserSubgraph.add_argument('--child_depth', { type: 'int', default: 1, help: 'Child depth (default: 1)' });
-
-    const parserCommonParents = subparsers.add_parser('getCommonParents', { help: 'Get common parents' });
-    parserCommonParents.add_argument('graph_path', { help: 'Path to graph file' });
-    parserCommonParents.add_argument('module_name1', { help: 'First module name' });
-    parserCommonParents.add_argument('component_name1', { help: 'First component name' });
-    parserCommonParents.add_argument('module_name2', { help: 'Second module name' });
-    parserCommonParents.add_argument('component_name2', { help: 'Second component name' });
-
-    const parserCommonChildren = subparsers.add_parser('getCommonChildren', { help: 'Get common children' });
-    parserCommonChildren.add_argument('graph_path', { help: 'Path to graph file' });
-    parserCommonChildren.add_argument('module_name1', { help: 'First module name' });
-    parserCommonChildren.add_argument('component_name1', { help: 'First component name' });
-    parserCommonChildren.add_argument('module_name2', { help: 'Second module name' });
-    parserCommonChildren.add_argument('component_name2', { help: 'Second component name' });
-
-    const parserCreateFdep = subparsers.add_parser('createFdepData', { help: 'Create Fdep Data' });
-    parserCreateFdep.add_argument('root_dir', { help: 'The directory for which fdep should be created' });
-    parserCreateFdep.add_argument('--output_base', { help: 'Path for fdep output', default: './output/fdep' });
-    parserCreateFdep.add_argument('--graph_dir', { help: 'path for graph output', default: './output/graph' });
-    parserCreateFdep.add_argument('--clear_existing', { help: 'Clear existing output', default: true });
-
-    const parserGetAllModules = subparsers.add_parser('getAllModules', { help: 'Get all valid modules in a graph' });
-    parserGetAllModules.add_argument('graph_path', { help: 'Location to the graphml file' });
-
-    const parserGetImportantNodes = subparsers.add_parser('getImportantNodes', { help: 'Get important nodes' });
-    parserGetImportantNodes.add_argument('fdep_path', { help: 'The file path to fdep' });
-    parserGetImportantNodes.add_argument('--output_path', { type: 'str', default: '', help: 'The file path to save the network graph' });
-    parserGetImportantNodes.add_argument('--epsilon', { type: 'float', default: 0.2, help: 'Epsilon for epsilon-greedy algorithm' });
-    parserGetImportantNodes.add_argument('--percentage', { type: 'int', default: 5, help: 'Percentage of codebase for important nodes' });
-
-    const args = parser.parse_args();
-
+export async function findPath(
+    graphPath: string,
+    fromComponent: string,
+    toComponent: string
+): Promise<PathResult> {
     try {
-        let result: any;
-        switch (args.function) {
-            case 'getModuleInfo':
-                result = getModuleInfo(args.fdep_folder, args.module_name);
-                console.log(JSON.stringify(result, null, 2));
-                break;
-            case 'getFunctionInfo':
-                result = getFunctionInfo(args.fdep_folder, args.module_name, args.component_name);
-                console.log(JSON.stringify(result, null, 2));
-                break;
-            case 'getFunctionChildren':
-                result = getFunctionChildren(args.graph_path, args.module_name, args.component_name, args.depth);
-                console.log(JSON.stringify(result, null, 2));
-                break;
-            case 'getFunctionParent':
-                result = getFunctionParent(args.graph_path, args.module_name, args.component_name, args.depth);
-                console.log(JSON.stringify(result, null, 2));
-                break;
-            case 'getSubgraph':
-                result = getSubgraph(args.graph_path, args.module_name, args.component_name, args.parent_depth, args.child_depth);
-                const out = result ? { nodes: result.nodes(), edges: result.edges() } : { nodes: [], edges: [] };
-                console.log(JSON.stringify(out));
-                break;
-            case 'getCommonParents':
-                result = getCommonParents(args.graph_path, args.module_name1, args.component_name1, args.module_name2, args.component_name2);
-                console.log(JSON.stringify(result, null, 2));
-                break;
-            case 'getCommonChildren':
-                result = getCommonChildren(args.graph_path, args.module_name1, args.component_name1, args.module_name2, args.component_name2);
-                console.log(JSON.stringify(result, null, 2));
-                break;
-            case 'getImportantNodes':
-                result = getImportantNodes(args.fdep_path, args.output_path, args.epsilon, args.percentage);
-                console.log(JSON.stringify(result, null, 2));
-                break;
-            case 'createFdepData':
-                createFdepData(args.root_dir, args.output_base, args.graph_dir, args.clear_existing);
-                console.log(JSON.stringify({ status: 'success' }, null, 2));
-                break;
-            case 'getAllModules':
-                result = getAllModules(args.graph_path);
-                console.log(JSON.stringify(result, null, 2));
-                break;
-            default:
-                parser.print_help();
-                break;
+        const G = loadGraph(graphPath);
+        if (!G) {
+            throw new Error(`Graph not found at ${graphPath}`);
         }
-    } catch (e) {
-        if (e instanceof Error) {
-            console.error(`Error: ${e.message}`);
+
+        if (!G.hasNode(fromComponent)) {
+            throw new Error(`Source component '${fromComponent}' not in graph.`);
         }
-        process.exit(1);
+        if (!G.hasNode(toComponent)) {
+            throw new Error(`Target component '${toComponent}' not in graph.`);
+        }
+
+        try {
+            const path = findFromSingleSource(G, fromComponent, toComponent);
+            const formattedPath = path.join(' -> ');
+            return parsePathResult(formattedPath);
+        } catch (e: any) {
+            if (e.name === 'NetworkXNoPath') {
+                return { found: false, path: [], message: `No path found from '${fromComponent}' to '${toComponent}'.` };
+            }
+            throw e;
+        }
+    } catch (error) {
+        throw wrapError(error, 'findPath');
     }
 }
 
-if (require.main === module) {
-    main();
+export async function getNeighbors(graphPath: string, component: string): Promise<NeighborResult> {
+    try {
+        const G = loadGraph(graphPath);
+        if (!G) {
+            throw new Error(`Graph not found at ${graphPath}`);
+        }
+
+        if (!G.hasNode(component)) {
+            throw new Error(`Component '${component}' not in graph.`);
+        }
+
+        // To mimic the stdout for parseNeighborResult, we need to construct a string
+        // that includes incoming and outgoing edges.
+        let stdout = '';
+        const preds = Array.from(G.predecessors(component));
+        if (preds.length > 0) {
+            stdout += `\nNodes with edges INTO '${component}' (${preds.length}):\n`;
+            for (const p of preds) {
+                const rel = G.getEdgeData(p, component) ? (G.getEdgeData(p, component) as any).relation || "" : "";
+                stdout += `  ${p} --[${rel}]--> ${component}\n`;
+            }
+        } else {
+            stdout += `\nNo incoming edges to '${component}'.\n`;
+        }
+
+        const succs = Array.from(G.successors(component));
+        if (succs.length > 0) {
+            stdout += `\nNodes with edges OUT OF '${component}' (${succs.length}):\n`;
+            for (const s of succs) {
+                const rel = G.getEdgeData(component, s) ? (G.getEdgeData(component, s) as any).relation || "" : "";
+                stdout += `  ${component} --[${rel}]--> ${s}\n`;
+            }
+        } else {
+            stdout += `\nNo outgoing edges from '${component}'.\n`;
+        }
+
+        return parseNeighborResult(stdout);
+    } catch (error) {
+        throw wrapError(error, 'getNeighbors');
+    }
 }
+
+// (async () => {
+//     // console.log(await findPath("/Users/jignyas.s/.xyne/dd1766ce5a6ff3ecca16060e112db785/graph/repo_function_calls.json", "Main::processSpecFolders'", "Main::isGenAll"));
+//     console.log(await getSubgraph("/Users/jignyas.s/.xyne/dd1766ce5a6ff3ecca16060e112db785/graph/repo_function_calls.json", "Main", "processSpecFolders"));
+// })();
