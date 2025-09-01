@@ -6,17 +6,17 @@
     "moduleResolution": "node",
     "sourceMap": true,
     "declaration": true,
-    "outDir": "../dist",
+    "outDir": "./dist",
     "downlevelIteration": true,
     "skipLibCheck": true,
-    "baseUrl": ".",
+    "baseUrl": "./codetraverse",
     "paths": {
       "@/*": ["./*"]
     }
   },
   "include": [
-    "**/*",
-    "test_orchestrator.ts"
+    "codetraverse/**/*",
+    "codetraverse/test_orchestrator.ts"
   ],
   "exclude": [
     "node_modules"
