@@ -68,7 +68,7 @@ const adapterMap: Record<string, (components: Component[]) => { nodes: any[], ed
     // "rescript": adaptRescriptComponents,
     "rust": adaptRustComponents,
     "golang": adaptGoComponents,
-    "typescript": adaptTypeScriptComponents
+    "typescript": adaptTypeScriptComponents,
     // "purescript": adaptPurescriptComponents,
     "javascript": adaptJavascriptComponents
 };
