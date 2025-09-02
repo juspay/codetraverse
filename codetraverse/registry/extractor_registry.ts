@@ -1,5 +1,6 @@
 import { GoComponentExtractor } from '../extractors/go_extractor';
 import { HaskellComponentExtractor } from '../extractors/haskell_extractor';
+import { JavascriptExtractor } from '../extractors/javascript_extractor';
 import { PythonComponentExtractor } from '../extractors/python_extractor';
 import { RustComponentExtractor } from '../extractors/rust_extractor';
 import { TypeScriptComponentExtractor } from '../extractors/typescript_extractor';
@@ -7,13 +8,13 @@ import { TypeScriptComponentExtractor } from '../extractors/typescript_extractor
 
 const extractorMap: Record<string, any> = {
     "haskell": HaskellComponentExtractor,
+    "javascript": JavascriptExtractor,
     "python": PythonComponentExtractor,
     // "rescript": RescriptComponentExtractor,
     "rust": RustComponentExtractor,
     "golang": GoComponentExtractor,
     "typescript": TypeScriptComponentExtractor,
-    // "purescript": PurescriptComponentExtractor,
-    // "javascript": JavascriptComponentExtractor
+    // "purescript": PurescriptComponentExtractor
 };
 
 export function getExtractor(language: string) {

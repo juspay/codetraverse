@@ -10,7 +10,7 @@ import { adaptRustComponents } from "./adapters/rust_adapter";
 import { adaptGoComponents } from "./adapters/go_adapter";
 import { adaptTypeScriptComponents } from "./adapters/typescript_adapter";
 // import { adaptPurescriptComponents } from "./adapters/purescript_adapter";
-// import { adaptJavascriptComponents } from "./adapters/javascript_adapter";
+import { adaptJavascriptComponents } from "./adapters/javascript_adapter";
 import { Component } from "./types/types";
 import ignore from "ignore";
 
@@ -70,7 +70,7 @@ const adapterMap: Record<string, (components: Component[]) => { nodes: any[], ed
     "golang": adaptGoComponents,
     "typescript": adaptTypeScriptComponents
     // "purescript": adaptPurescriptComponents,
-    // "javascript": adaptJavascriptComponents
+    "javascript": adaptJavascriptComponents
 };
 
 const EXT_MAP: Record<string, string[]> = {
@@ -81,7 +81,7 @@ const EXT_MAP: Record<string, string[]> = {
     "rust": [".rs"],
     "typescript": [".ts", ".tsx"],
     // "purescript": [".purs"],
-    // "javascript": [".js", ".jsx", ".mjs", ".cjs"]
+    "javascript": [".js", ".jsx", ".mjs", ".cjs"]
 };
 
 const INVERSE_EXTS: Record<string, string> = {};
