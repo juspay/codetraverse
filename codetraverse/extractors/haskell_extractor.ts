@@ -72,8 +72,12 @@ export class HaskellComponentExtractor implements ComponentExtractor {
     // Validate that the content can be parsed
     let tree;
     try {
-      tree = this.parser.parse(fileContent);
+      const options: any = {
+        bufferSize: 1024 * 1024,
+      };
+      tree = this.parser.parse(fileContent, null, options);
     } catch (error) {
+      console.log(`Error parsing file ${filePath}: ${error.message}`);
       return;
     }
 
