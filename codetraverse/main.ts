@@ -190,7 +190,9 @@ function createGraph(fdepDir: string, graphDir: string) {
 
     for (const func of rawFuncs) {
         try {
-            const compLanguage = INVERSE_EXTS[path.extname(func.file_path || "")];
+            // Handle both possible field names for file path
+            const filePath = func.file_path || func.filePath || "";
+            const compLanguage = INVERSE_EXTS[path.extname(filePath)];
             if (compLanguage) {
                 if (!langCompDict[compLanguage]) {
                     langCompDict[compLanguage] = [];
