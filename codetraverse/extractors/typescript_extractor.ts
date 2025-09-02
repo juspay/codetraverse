@@ -107,6 +107,7 @@ export class TypeScriptComponentExtractor implements ComponentExtractor {
     private parser: Parser;
     public allComponents: Component[] = [];
     private readonly tsLanguage: any;
+    private readonly tsxLanguage: any;
     
     private static readonly UTILITY_TYPES = new Set([
         "Partial", "Required", "Readonly", "Pick", "Omit",
@@ -116,17 +117,33 @@ export class TypeScriptComponentExtractor implements ComponentExtractor {
     constructor() {
         this.parser = new Parser();
         this.tsLanguage = (TypeScript as any).typescript;
+        this.tsxLanguage = (TypeScript as any).tsx;
         this.parser.setLanguage(this.tsLanguage);
     }
 
     public processFile(filePath: string): void {
         try {
+            const fileExtension = path.extname(filePath);
+            if (fileExtension === '.tsx') {
+                this.parser.setLanguage(this.tsxLanguage);
+            } else {
+                this.parser.setLanguage(this.tsLanguage);
+            }
+    
             const code = fs.readFileSync(filePath, 'utf-8');
-            const tree = this.parser.parse(code);
+            if (typeof code !== 'string') {
+                console.error(`Failed to read file or file is not a string: ${filePath}`);
+                this.allComponents = [];
+                return;
+            }
+            const options: Parser.Options = {
+                bufferSize: 1024 * 1024,
+            }
+            const tree = this.parser.parse(code, null, options);
             const rootFolder = path.dirname(filePath);
             const imports = this.collectImportsForFile(tree.rootNode, code);
             const components = this.walkNode(tree.rootNode, code, filePath, rootFolder, undefined, imports);
-
+    
             for (const comp of components) {
                 const rootDir = process.env.ROOT_DIR || "";
                 if (rootDir && filePath) {
@@ -134,12 +151,13 @@ export class TypeScriptComponentExtractor implements ComponentExtractor {
                 } else {
                     comp.file_path = filePath.replace(/\\/g, "/");
                 }
-
-                if (!comp.module || comp.file_path.split(".").length === 2) {
+    
+                if (!comp.module) {
                     comp.module = comp.file_path;
                 }
+                comp.filePath = comp.file_path;
             }
-
+    
             this.allComponents = components.filter(c => {
                 try {
                     JSON.stringify(c);
@@ -148,9 +166,9 @@ export class TypeScriptComponentExtractor implements ComponentExtractor {
                     return false;
                 }
             });
-        } catch (e) {
+        } catch (e: any) {
             console.error(`Failed to process file: ${filePath}`);
-            console.error(e);
+            console.error(e.stack);
             this.allComponents = [];
         }
     }
@@ -211,15 +229,6 @@ export class TypeScriptComponentExtractor implements ComponentExtractor {
         }
 
         return imports;
-    }
-
-    private parseFile(filePath: string): [string, Parser.Tree] {
-        const plain = parseHtmlToText(filePath);
-        const options: Parser.Options = {
-            bufferSize: 1024 * 1024,
-        }
-        const tree = this.parser.parse(plain);
-        return [plain, tree];
     }
 
     private extractIdent(node: SyntaxNode, code: string): string | null {
@@ -623,102 +632,107 @@ export class TypeScriptComponentExtractor implements ComponentExtractor {
 
     private extractFunctionCalls(filePath: string, node: SyntaxNode, code: string, moduleName: string, imports: Record<string, string>, className?: string, classBases?: string[]): any[] {
         const calls: any[] = [];
-
-        const visit = (n: SyntaxNode) => {
-            if (n.type === 'call_expression') {
-                const fn = n.childForFieldName('function');
-                if (!fn) {
-                    return;
-                }
-
-                if (fn.type === "member_expression") {
-                    const objectNode = fn.childForFieldName("object");
-                    const propertyNode = fn.childForFieldName("property");
-                    const methodName = propertyNode ? this.getText(propertyNode, code) : null;
-
-                    if (objectNode) {
-                        if (objectNode.type === "super") {
-                            const baseClass = classBases && classBases.length > 0 ? classBases[0] : "(super_class)";
-                            const calleeId = `${moduleName}::${baseClass}.${methodName}`;
-                            calls.push({
-                                name: `super.${methodName}`,
-                                base_name: methodName,
-                                resolved_callee: calleeId,
-                            });
-                        } else if (objectNode.type === "this") {
-                            const calleeId = `${moduleName}::${className || "(this_class)"}.${methodName}`;
-                            calls.push({
-                                name: `this.${methodName}`,
-                                base_name: methodName,
-                                resolved_callee: calleeId,
-                            });
-                        } else if (objectNode.type === "identifier") {
-                            const objName = this.getText(objectNode, code);
-                            const calleeId = `${moduleName}::${objName}.${methodName}`;
-                            calls.push({
-                                name: `${objName}.${methodName}`,
-                                base_name: methodName,
-                                resolved_callee: calleeId,
-                            });
-                        }
+        try {
+            const visit = (n: SyntaxNode) => {
+                if (n.type === 'call_expression') {
+                    const fn = n.childForFieldName('function');
+                    if (!fn) {
+                        return;
                     }
-                } else if (fn.type === "identifier") {
-                    const calleeText = this.getText(fn, code);
-                    const baseName = calleeText;
-                    let calleeId: string;
-                    if (baseName in imports) {
-                        let sourceFile = imports[baseName];
-                        if (typeof sourceFile === 'string' && !sourceFile.endsWith('.ts')) {
-                            sourceFile += '.ts';
-                        }
-                        calleeId = `${sourceFile}::${baseName}`;
-                    } else {
-                        calleeId = `${filePath}::${baseName}`;
-                    }
-
-                    if (calleeId.startsWith("./")) {
-                        calls.push({
-                            name: calleeText,
-                            base_name: baseName,
-                            resolved_callee: calleeId,
-                        });
-                    } else {
-                        const rootDir = process.env.ROOT_DIR || "";
-                        const configDir = findTsconfigDir(rootDir, filePath);
-                        let absoluteCalleeId: string | undefined;
-                        if (configDir) {
-                            const completeConfigPath = path.join(configDir, "tsconfig.json");
-                            const aliasPaths = pathsAliasesFromTsconfig(completeConfigPath);
-                            absoluteCalleeId = resolveCalleeId(calleeId, configDir, aliasPaths);
-                            if (absoluteCalleeId.startsWith(configDir)) {
-                                absoluteCalleeId = path.relative(rootDir, absoluteCalleeId);
+    
+                    if (fn.type === "member_expression") {
+                        const objectNode = fn.childForFieldName("object");
+                        const propertyNode = fn.childForFieldName("property");
+                        const methodName = propertyNode ? this.getText(propertyNode, code) : null;
+    
+                        if (objectNode) {
+                            if (objectNode.type === "super") {
+                                const baseClass = classBases && classBases.length > 0 ? classBases[0] : "(super_class)";
+                                const calleeId = `${moduleName}::${baseClass}.${methodName}`;
+                                calls.push({
+                                    name: `super.${methodName}`,
+                                    base_name: methodName,
+                                    resolved_callee: calleeId,
+                                });
+                            } else if (objectNode.type === "this") {
+                                const calleeId = `${moduleName}::${className || "(this_class)"}.${methodName}`;
+                                calls.push({
+                                    name: `this.${methodName}`,
+                                    base_name: methodName,
+                                    resolved_callee: calleeId,
+                                });
+                            } else if (objectNode.type === "identifier") {
+                                const objName = this.getText(objectNode, code);
+                                const calleeId = `${moduleName}::${objName}.${methodName}`;
+                                calls.push({
+                                    name: `${objName}.${methodName}`,
+                                    base_name: methodName,
+                                    resolved_callee: calleeId,
+                                });
                             }
-                        } else {
-                            console.log(`typescript issue No tsconfig.json found up to ${rootDir}`);
                         }
-                        calls.push({
-                            name: calleeText,
-                            base_name: baseName,
-                            resolved_callee: absoluteCalleeId || calleeId,
-                        });
+                    } else if (fn.type === "identifier") {
+                        const calleeText = this.getText(fn, code);
+                        const baseName = calleeText;
+                        let calleeId: string;
+    
+                        if (baseName in imports) {
+                            let sourceFile = imports[baseName];
+                            if (typeof sourceFile === 'string' && !sourceFile.endsWith('.ts')) {
+                                sourceFile += '.ts';
+                            }
+                            calleeId = `${sourceFile}::${baseName}`;
+                        } else {
+                            calleeId = `${moduleName}::${baseName}`;
+                        }
+    
+                        if (calleeId.startsWith("./")) {
+                            calls.push({
+                                name: calleeText,
+                                base_name: baseName,
+                                resolved_callee: calleeId,
+                            });
+                        } else {
+                            const rootDir = process.env.ROOT_DIR || "";
+                            const configDir = findTsconfigDir(rootDir, filePath);
+                            let absoluteCalleeId: string | undefined;
+                            if (configDir) {
+                                const completeConfigPath = path.join(configDir, "tsconfig.json");
+                                const aliasPaths = pathsAliasesFromTsconfig(completeConfigPath);
+                                absoluteCalleeId = resolveCalleeId(calleeId, configDir, aliasPaths);
+                                if (absoluteCalleeId.startsWith(configDir)) {
+                                    absoluteCalleeId = path.relative(rootDir, absoluteCalleeId);
+                                }
+                            } else {
+                                console.log(`typescript issue No tsconfig.json found up to ${rootDir}`);
+                            }
+                            calls.push({
+                                name: calleeText,
+                                base_name: baseName,
+                                resolved_callee: absoluteCalleeId || calleeId,
+                            });
+                        }
+                    }
+    
+                    const args = n.childForFieldName('arguments');
+                    if (args) {
+                        for (const arg of args.children) {
+                            visit(arg);
+                        }
                     }
                 }
-
-                const args = n.childForFieldName('arguments');
-                if (args) {
-                    for (const arg of args.children) {
-                        visit(arg);
-                    }
+    
+                for (const c of n.children) {
+                    visit(c);
                 }
-            }
-
-            for (const c of n.children) {
-                visit(c);
-            }
-        };
-        visit(node);
+            };
+            visit(node);
+        } catch (e) {
+            console.error(`Error extracting function calls from ${filePath}: ${e}`);
+        }
         return calls;
     }
+    
 
     private extractTypeDependencies(node: SyntaxNode, code: string): string[] {
         const deps = new Set<string>();
