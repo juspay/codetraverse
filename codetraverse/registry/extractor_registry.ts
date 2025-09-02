@@ -1,3 +1,4 @@
+import { GoComponentExtractor } from '../extractors/go_extractor';
 import { HaskellComponentExtractor } from '../extractors/haskell_extractor';
 import { PythonComponentExtractor } from '../extractors/python_extractor';
 import { RustComponentExtractor } from '../extractors/rust_extractor';
@@ -9,7 +10,7 @@ const extractorMap: Record<string, any> = {
     "python": PythonComponentExtractor,
     // "rescript": RescriptComponentExtractor,
     "rust": RustComponentExtractor,
-    // "golang": GoComponentExtractor,
+    "golang": GoComponentExtractor,
     "typescript": TypeScriptComponentExtractor,
     // "purescript": PurescriptComponentExtractor,
     // "javascript": JavascriptComponentExtractor

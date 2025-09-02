@@ -7,7 +7,7 @@ import { adaptPythonComponents } from "./adapters/python_adapter";
 import { getExtractor } from "./registry/extractor_registry";
 // import { adaptRescriptComponents } from "./adapters/rescript_adapter";
 import { adaptRustComponents } from "./adapters/rust_adapter";
-// import { adaptGoComponents } from "./adapters/go_adapter";
+import { adaptGoComponents } from "./adapters/go_adapter";
 import { adaptTypeScriptComponents } from "./adapters/typescript_adapter";
 // import { adaptPurescriptComponents } from "./adapters/purescript_adapter";
 // import { adaptJavascriptComponents } from "./adapters/javascript_adapter";
@@ -67,7 +67,7 @@ const adapterMap: Record<string, (components: Component[]) => { nodes: any[], ed
     "python": adaptPythonComponents,
     // "rescript": adaptRescriptComponents,
     "rust": adaptRustComponents,
-    // "golang": adaptGoComponents,
+    "golang": adaptGoComponents,
     "typescript": adaptTypeScriptComponents
     // "purescript": adaptPurescriptComponents,
     // "javascript": adaptJavascriptComponents
@@ -77,7 +77,7 @@ const EXT_MAP: Record<string, string[]> = {
     "haskell": [".hs", ".lhs", ".hs-boot"],
     "python": [".py"],
     // "rescript": [".res"],
-    // "golang": [".go"],
+    "golang": [".go"],
     "rust": [".rs"],
     "typescript": [".ts", ".tsx"],
     // "purescript": [".purs"],
@@ -103,12 +103,15 @@ function _processSingleFileWorker(args: [string, string, string, string]) {
     try {
         const extractorInstance = getExtractor(languageStr);
         if (extractorInstance) {
+            console.log(`Processing file: ${codePath}`);
             extractorInstance.processFile(codePath);
             const relPath = path.relative(rootDirPath, codePath);
             const jsonRel = path.join(path.dirname(relPath), path.basename(relPath, path.extname(relPath))) + ".json";
             const outPath = path.join(outputBasePath, jsonRel);
+            console.log(`Writing output to: ${outPath}`);
             fs.mkdirSync(path.dirname(outPath), { recursive: true });
             extractorInstance.writeToFile(outPath);
+            console.log(`Finished writing to: ${outPath}`);
         }
     } catch (e: any) {
         console.error(e.stack);
@@ -187,7 +190,7 @@ function createGraph(fdepDir: string, graphDir: string) {
 
     for (const func of rawFuncs) {
         try {
-            const compLanguage = INVERSE_EXTS[path.extname(func.filePath || "")];
+            const compLanguage = INVERSE_EXTS[path.extname(func.file_path || "")];
             if (compLanguage) {
                 if (!langCompDict[compLanguage]) {
                     langCompDict[compLanguage] = [];
