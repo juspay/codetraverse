@@ -1,6 +1,6 @@
 {
   "name": "codetraverse-bridge-jp",
-  "version": "0.1.65",
+  "version": "0.1.66",
   "description": "CodeTraverse - Multi-language static code analysis tool",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

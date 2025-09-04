@@ -73,6 +73,8 @@ const adapterMap: Record<string, (components: Component[]) => { nodes: any[], ed
     "javascript": adaptJavascriptComponents
 };
 
+export const LANGUAGES_SUPPORTED = Object.keys(adapterMap);
+
 const EXT_MAP: Record<string, string[]> = {
     "haskell": [".hs", ".lhs", ".hs-boot"],
     "python": [".py"],
@@ -108,7 +110,7 @@ function _processSingleFileWorker(args: [string, string, string, string]) {
             const relPath = path.relative(rootDirPath, codePath);
             const jsonRel = path.join(path.dirname(relPath), path.basename(relPath, path.extname(relPath))) + ".json";
             const outPath = path.join(outputBasePath, jsonRel);
-            console.log(`Writing output to: ${outPath}`);
+        console.log(`Writing output to: ${outPath}`);
             fs.mkdirSync(path.dirname(outPath), { recursive: true });
             extractorInstance.writeToFile(outPath);
             console.log(`Finished writing to: ${outPath}`);
@@ -119,7 +121,18 @@ function _processSingleFileWorker(args: [string, string, string, string]) {
     }
 }
 
-export function createFdepData(rootDir: string, outputBase = "./output/fdep", graphDir = "./output/graph", clearExisting = true, skipAdaptor = false) {
+export function createFdepData(
+    rootDir: string,
+    outputBase: string = "./output/fdep",
+    graphDir: string = "./output/graph",
+    clearExisting: boolean = true,
+    skipAdaptor: boolean = false,
+    allowedLanguages: string[] | undefined = undefined,
+    progressCallback: (progress: { percentage: number, message: string }) => void = () => {}
+) {
+    if (allowedLanguages === undefined) {
+        allowedLanguages = LANGUAGES_SUPPORTED;
+    }
     process.env.ROOT_DIR = rootDir;
     const rootDirPath = path.resolve(rootDir);
     const languageFileMap: Record<string, string[]> = {};
@@ -138,7 +151,7 @@ export function createFdepData(rootDir: string, outputBase = "./output/fdep", gr
                 walk(fullPath);
             } else {
                 const language = INVERSE_EXTS[path.extname(fullPath)];
-                if (language) {
+                if (language && allowedLanguages.includes(language)) {
                     if (!languageFileMap[language]) {
                         languageFileMap[language] = [];
                     }
@@ -148,6 +161,7 @@ export function createFdepData(rootDir: string, outputBase = "./output/fdep", gr
         }
     }
     walk(rootDirPath);
+    progressCallback({ percentage: 5, message: "File discovery complete." });
 
     // Debug: Print language file map
     const languageFileCounts = Object.entries(languageFileMap).map(([lang, files]) => `${lang}: ${files.length} files`);
@@ -163,11 +177,19 @@ export function createFdepData(rootDir: string, outputBase = "./output/fdep", gr
     fs.mkdirSync(outputBase, { recursive: true });
     fs.mkdirSync(graphDir, { recursive: true });
 
+    const totalFiles = Object.values(languageFileMap).reduce((sum, files) => sum + files.length, 0);
+    let processedFiles = 0;
+
     for (const language in languageFileMap) {
         console.log(`Processing ${languageFileMap[language].length} ${language} files...`);
         try {
             const tasksArgs = languageFileMap[language].map(codePath => [codePath, language, rootDirPath, outputBase] as [string, string, string, string]);
-            tasksArgs.forEach(_processSingleFileWorker);
+            tasksArgs.forEach(args => {
+                _processSingleFileWorker(args);
+                processedFiles++;
+                const percentage = 5 + Math.round((processedFiles / totalFiles) * 90);
+                progressCallback({ percentage, message: `Processing file ${processedFiles}/${totalFiles}: ${path.basename(args[0])}` });
+            });
         } catch (e: any) {
             console.error(e.stack);
             console.error("ERROR -", e);
@@ -179,10 +201,10 @@ export function createFdepData(rootDir: string, outputBase = "./output/fdep", gr
         return;
     }
 
-    createGraph(outputBase, graphDir);
+    createGraph(outputBase, graphDir, progressCallback);
 }
 
-function createGraph(fdepDir: string, graphDir: string) {
+function createGraph(fdepDir: string, graphDir: string, progressCallback: (progress: { percentage: number, message: string }) => void) {
     const rawFuncs = loadComponentsWithoutHash(fdepDir);
 
     const langCompDict: Record<string, Component[]> = {};
@@ -236,6 +258,7 @@ function createGraph(fdepDir: string, graphDir: string) {
     fs.writeFileSync(graphGp, JSON.stringify(graphData, null, 2));
 
     console.log(`Wrote graph data to ${graphGp}`);
+    progressCallback({ percentage: 100, message: "Graph generation complete." });
 }
 
 
