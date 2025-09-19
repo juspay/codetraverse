@@ -1,6 +1,7 @@
 import json
 import re
 import os
+import html
 from collections import defaultdict
 from tree_sitter import Language, Parser, Node
 import tree_sitter_rescript
@@ -16,6 +17,7 @@ class RescriptComponentExtractor(ComponentExtractor):
         self.file_module_name = None
 
     def _get_node_text(self, node: Node) -> str:
+        # The source_bytes are now from the unescaped string, so we just decode.
         return self.source_bytes[node.start_byte:node.end_byte].decode(errors="ignore")
 
     def _find_enclosing_module_name(self, node: Node) -> str:
@@ -38,7 +40,11 @@ class RescriptComponentExtractor(ComponentExtractor):
 
         with open(file_path, 'r', encoding='utf-8') as f:
             source_code = f.read()
-        self.source_bytes = source_code.encode("utf-8")
+        
+        # Unescape HTML entities before parsing. This is the correct, simple approach
+        # for source code files that are not HTML.
+        unescaped_code = html.unescape(source_code)
+        self.source_bytes = unescaped_code.encode("utf-8")
 
         tree = self.parser.parse(self.source_bytes)
         root_node = tree.root_node
@@ -83,13 +89,22 @@ class RescriptComponentExtractor(ComponentExtractor):
                         function_calls.append(call_name)
             
             elif n.type == 'pipe_expression':
-                right_operand = n.child_by_field_name('right')
-                if right_operand:
-                    if right_operand.type in ('value_identifier', 'value_identifier_path', 'member_expression'):
-                        call_name = self._get_node_text(right_operand).strip()
+                # A pipe expression `a->b->c` creates dependencies on a, b, and c.
+                # We iterate through all children and extract any identifiers.
+                for child in n.children:
+                    if child.type == 'value_identifier':
+                        call_name = self._get_node_text(child).strip()
                         if call_name:
                             function_calls.append(call_name)
             
+            elif n.type == 'send_expression':
+                # This is for expressions like `document->getTitle` which are related to @send externals
+                right_operand = n.child_by_field_name('right')
+                if right_operand:
+                    call_name = self._get_node_text(right_operand).strip()
+                    if call_name:
+                        function_calls.append(call_name)
+
             for child_node in n.children: 
                 traverse_for_calls(child_node)
 
@@ -174,6 +189,8 @@ class RescriptComponentExtractor(ComponentExtractor):
             "let_declaration": self._extract_let_declaration,
             "jsx_element": self._extract_jsx_element,
             "jsx_self_closing_element": self._extract_jsx_element,
+            "type_alias": self._extract_type,
+            "type_binding": self._extract_type,
         }.get(node.type)
 
     def _collect_imports(self, root: Node):
@@ -277,7 +294,11 @@ class RescriptComponentExtractor(ComponentExtractor):
     def _extract_type(self, node: Node):
         name_node = node.child_by_field_name("name")
         if not name_node:
+            name_node = node.child_by_field_name("type_identifier")
+
+        if not name_node:
             return None
+
         type_name = self._get_node_text(name_node)
         start, end = node.start_point[0] + 1, node.end_point[0] + 1
         code = self._get_node_text(node)
@@ -290,7 +311,7 @@ class RescriptComponentExtractor(ComponentExtractor):
             if definition_node.type == "record_type":
                 subkind = "record"
                 for field_decl in definition_node.named_children:
-                    if field_decl.type == "field_declaration":
+                    if field_decl.type == "record_type_field":
                         fn = field_decl.child_by_field_name("name")
                         ft = field_decl.child_by_field_name("type")
                         if fn and ft:
@@ -320,7 +341,6 @@ class RescriptComponentExtractor(ComponentExtractor):
 
         func_calls = self.extract_function_calls(node)
         lits = self.extract_literals(node)
-
         comp = {
             "kind": "type",
             "name": type_name,
@@ -338,22 +358,27 @@ class RescriptComponentExtractor(ComponentExtractor):
         return comp
 
     def _extract_external(self, node: Node):
-        name_node = node.child_by_field_name("name")
+        name_node = None
+        type_node = None
+        for child in node.named_children:
+            if child.type == "value_identifier":
+                name_node = child
+            elif child.type == "type_annotation":
+                type_node = child
+        
         if not name_node:
             return None
         ext_name = self._get_node_text(name_node)
 
-        type_node = node.child_by_field_name("type")
         type_str = None
-        if type_node and type_node.named_children:
-            type_str = self._get_node_text(type_node.named_children[0])
+        if type_node:
+            type_str = self._get_node_text(type_node).strip()
 
         start, end = node.start_point[0] + 1, node.end_point[0] + 1
         code = self._get_node_text(node)
 
         func_calls = self.extract_function_calls(node)
         lits = self.extract_literals(node)
-
         comp = {
             "kind": "external",
             "name": ext_name,
@@ -375,7 +400,12 @@ class RescriptComponentExtractor(ComponentExtractor):
                 c = self._extract_let_binding_details(binding)
                 if c:
                     components.append(c)
+            elif binding.type == "external_declaration":
+                c = self._extract_external(binding)
+                if c:
+                    components.append(c)
         return components if components else None
+
 
     def is_function(self, node: Node, code: str) -> bool:
         value_node = node.child_by_field_name("value")
@@ -408,7 +438,7 @@ class RescriptComponentExtractor(ComponentExtractor):
         param_annotations = {}
         return_type_annotation = None
 
-        value_node = let_binding_node.child_by_field_name("body")
+        value_node = let_binding_node.child_by_field_name("value")
         is_explicit_fn = value_node and value_node.type == "function"
         
         fn_body_for_walk = None
@@ -447,14 +477,20 @@ class RescriptComponentExtractor(ComponentExtractor):
         else:
             fn_body_for_walk = value_node
         
-
-        calls = self.extract_function_calls(let_binding_node)
-        lits = self.extract_literals(let_binding_node)
+        calls = []
+        lits = []
+        if fn_body_for_walk:
+            calls = self.extract_function_calls(fn_body_for_walk)
+            lits = self.extract_literals(fn_body_for_walk)
+        else:
+            calls = self.extract_function_calls(let_binding_node)
+            lits = self.extract_literals(let_binding_node)
 
         local_vars = []
         jsx_elems = []
 
         def walk_recursive(current_node: Node, current_depth: int = 0):
+            # print("walk_recursive", current_node.type, current_depth)
             
             if current_depth > 50: return
             if current_node is None: 
@@ -467,10 +503,18 @@ class RescriptComponentExtractor(ComponentExtractor):
             elif current_node.type == "let_declaration":
                 for binding_child in current_node.named_children:
                     if binding_child.type == "let_binding":
-                        if binding_child != let_binding_node :
+                        if binding_child != let_binding_node:
                             local_var_comp = self._extract_let_binding_details(binding_child)
                             if local_var_comp:
                                 local_vars.append(local_var_comp)
+                    elif binding_child.type == "external_declaration":
+                        ext_comp = self._extract_external(binding_child)
+                        if ext_comp:
+                            local_vars.append(ext_comp)
+            elif current_node.type == "external_declaration":
+                ext_comp = self._extract_external(current_node)
+                if ext_comp:
+                    local_vars.append(ext_comp)
             for child in current_node.children:
                 walk_recursive(child, current_depth + 1)
         
