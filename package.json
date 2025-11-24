@@ -1,58 +1,30 @@
 {
-  "name": "codetraverse-bridge-jp",
-  "version": "0.1.21",
-  "description": "CodeTraverse - Multi-language static code analysis tool with Node.js bridge",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "name": "codetraverse",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/fdep.js",
   "scripts": {
-    "build": "npm run build --workspace=bridge",
-    "test": "npm run test --workspace=bridge",
-    "lint": "npm run lint --workspace=bridge",
-    "clean": "npm run clean --workspace=bridge",
-    "bridge:build": "npm run build --workspace=bridge",
-    "bridge:test": "npm run test --workspace=bridge",
-    "bridge:publish": "npm publish",
-    "install:bridge": "npm install --workspace=bridge",
-    "dev:bridge": "npm run dev --workspace=bridge",
-    "prepublishOnly": "npm run build && rm -rf dist && ncp bridge/dist dist",
-    "postpublish": "rm -rf dist"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "files": [
-    "dist",
-    "codetraverse",
-    "scripts"
-  ],
-  "workspaces": [
-    "bridge"
-  ],
-  "keywords": [
-    "static-analysis",
-    "code-analysis",
-    "dependency-graph",
-    "tree-sitter",
-    "typescript",
-    "python",
-    "rust",
-    "go",
-    "haskell",
-    "rescript"
-  ],
-  "author": "Juspay",
-  "license": "MIT",
+  "bin": {
+    "ts_fdep": "dist/fdep.js"
+  },
   "repository": {
     "type": "git",
-    "url": "https://github.com/juspay/codetraverse.git"
+    "url": "git+https://github.com/juspay/codetraverse.git"
   },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
   "bugs": {
     "url": "https://github.com/juspay/codetraverse/issues"
   },
   "homepage": "https://github.com/juspay/codetraverse#readme",
-  "engines": {
-    "node": ">=14.0.0",
-    "npm": ">=7.0.0"
-  },
   "devDependencies": {
-    "@types/node": "^18.19.117",
-    "ncp": "^2.0.0"
+    "@types/node": "^24.10.1",
+    "esbuild": "^0.27.0",
+    "ts-morph": "^27.0.2",
+    "typescript": "^5.9.3"
   }
 }
