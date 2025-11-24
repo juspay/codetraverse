@@ -4,7 +4,8 @@
   "description": "",
   "main": "dist/fdep.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "esbuild src/ts_fdep/fdep.ts --bundle --platform=node --outfile=dist/fdep.js"
   },
   "bin": {
     "ts_fdep": "dist/fdep.js"

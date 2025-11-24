@@ -66,6 +66,7 @@ def create_python_fdep(codebase_dir: Path) -> bool:
         import pickle
 
         graph = build_project_graph(str(codebase_dir))
+        print(graph)
         with open(PICKLE_FILE_PATH, "wb") as f:
             pickle.dump(graph, f)
         return True
@@ -73,7 +74,7 @@ def create_python_fdep(codebase_dir: Path) -> bool:
         print(e)
         return False
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(description="Simple FDEP CLI")
     parser.add_argument("-l", "--lang", dest="language", choices=["python", "typescript"], required=True, type=str, help="Language of repo")
     parser.add_argument("-s", "--src", dest="source", required=True, type=str, help="Path of the project dir")

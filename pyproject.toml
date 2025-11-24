@@ -1,0 +1,19 @@
+[project]
+name = "fdep_cli"
+version = "0.1.0"
+description = "A simple FDEP CLI tool"
+requires-python = ">=3.9"
+
+[project.scripts]
+fdep_cli = "fdep_processor:main"
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
