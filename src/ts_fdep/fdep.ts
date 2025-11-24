@@ -6,6 +6,7 @@ import {
   SyntaxKind,
   CallExpression,
   Symbol as MorphSymbol,
+  SourceFile,
 } from "ts-morph";
 import * as path from "path";
 import { writeFileSync } from "fs";
@@ -14,14 +15,11 @@ import * as fs from "fs";
 
 enum NodeType {
   Function = "Function",
-  Method = "Method",
   Class = "Class",
   Type = "Type",
   Enum = "Enum",
   Interface = "Interface",
-  VariableFunction = "VariableFunction",
-  Getter = "Getter",
-  Setter = "Setter",
+  Variable = "Variable",
   Unknown = "Unknown",
 }
 
@@ -129,8 +127,14 @@ function isDefinition(node: Node): boolean {
   if (Node.isGetAccessorDeclaration(node)) return true;
   if (Node.isSetAccessorDeclaration(node)) return true;
 
-  // Named variable = function
   if (Node.isVariableDeclaration(node)) {
+    // any variable initialized at the top level of a file
+    const varStatement = node.getVariableStatement();
+    if (varStatement && varStatement.getParent() instanceof SourceFile) {
+      if (node.getInitializer()) return true;
+    }
+
+    // or a function expression
     const init = node.getInitializer();
     if (
       node.getName() &&
@@ -267,14 +271,24 @@ export function buildGraph(tsconfigPath: string): Graph {
 
       let t = NodeType.Unknown;
       if (Node.isFunctionDeclaration(node)) t = NodeType.Function;
-      else if (Node.isMethodDeclaration(node)) t = NodeType.Method;
+      else if (Node.isMethodDeclaration(node)) t = NodeType.Function;
       else if (Node.isClassDeclaration(node)) t = NodeType.Class;
       else if (Node.isInterfaceDeclaration(node)) t = NodeType.Interface;
       else if (Node.isEnumDeclaration(node)) t = NodeType.Enum;
       else if (Node.isTypeAliasDeclaration(node)) t = NodeType.Type;
-      else if (Node.isGetAccessorDeclaration(node)) t = NodeType.Getter;
-      else if (Node.isSetAccessorDeclaration(node)) t = NodeType.Setter;
-      else if (Node.isVariableDeclaration(node)) t = NodeType.VariableFunction;
+      else if (Node.isGetAccessorDeclaration(node)) t = NodeType.Function;
+      else if (Node.isSetAccessorDeclaration(node)) t = NodeType.Function;
+      else if (Node.isVariableDeclaration(node)) {
+        const init = node.getInitializer();
+        if (
+          init &&
+          (Node.isFunctionExpression(init) || Node.isArrowFunction(init))
+        ) {
+          t = NodeType.Function;
+        } else {
+          t = NodeType.Variable;
+        }
+      }
 
       register(nodes, node, t, tscPath.dir);
     });
@@ -302,6 +316,29 @@ export function buildGraph(tsconfigPath: string): Graph {
             }
           }
         }
+      }
+
+      // identifier references
+      const identifiers = node.getDescendantsOfKind(SyntaxKind.Identifier);
+      for (const i of identifiers) {
+        try {
+          for (const d of i.getSymbol()?.getDeclarations() ?? []) {
+            if (isDefinition(d)) {
+              const tid = buildDeclId(d, tscPath.dir);
+              if (
+                !tid.includes("<anonymous>") &&
+                nodes.has(tid) &&
+                nodes.get(tid)!.nodeType === NodeType.Variable
+              ) {
+                const key = `${id}|${tid}`;
+                if (!edgesSet.has(key)) {
+                  edgesSet.add(key);
+                  edges.push([id, tid]);
+                }
+              }
+            }
+          }
+        } catch {}
       }
 
       nodes.get(id)!.typesUsed = collectTypesUsed(node, nodes, tscPath.dir);

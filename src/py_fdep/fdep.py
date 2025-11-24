@@ -34,34 +34,58 @@ class ProjectAnalyzer:
             self._walk_defs(tree, relpath, src, parent_stack=[])
 
     def _walk_defs(self, node, relpath, src, parent_stack):
+        # Only consider top-level assignments as globals
+        is_top_level = len(parent_stack) == 0
+
         for child in ast.iter_child_nodes(node):
             if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                # Build hierarchical name
                 parts = parent_stack + [child.name]
                 node_id = f"{relpath}::" + "::".join(parts)
 
-                # Extract source code
                 start_line = child.lineno - 1
                 end_line = child.end_lineno
                 lines = src.splitlines()
                 extracted = "\n".join(lines[start_line:end_line])
 
-                # Store
+                node_type = "class" if isinstance(child, ast.ClassDef) else "function"
+
                 self.defs[node_id] = {
                     "file": str(relpath),
                     "name": child.name,
                     "node": child,
-                    "source": extracted
+                    "source": extracted,
+                    "nodeType": node_type,
                 }
 
                 self._walk_defs(child, relpath, src, parent_stack + [child.name])
+
+            elif is_top_level and isinstance(child, (ast.Assign, ast.AnnAssign)):
+                targets = []
+                if isinstance(child, ast.Assign):
+                    targets = child.targets
+                else: # AnnAssign
+                    targets = [child.target]
+
+                for target in targets:
+                    if isinstance(target, ast.Name):
+                        node_id = f"{relpath}::{target.id}"
+                        start_line = child.lineno - 1
+                        end_line = child.end_lineno
+                        lines = src.splitlines()
+                        extracted = "\n".join(lines[start_line:end_line]) if start_line < end_line else lines[start_line]
+
+                        self.defs[node_id] = {
+                            "file": str(relpath),
+                            "name": target.id,
+                            "node": child,
+                            "source": extracted,
+                            "nodeType": "variable",
+                        }
+
             elif isinstance(child, (ast.Import, ast.ImportFrom)):
                 import_name = child.module if (hasattr(child, "module") and child.module is not None) else child.names[0].name
-                # if import_name is None:
-                #     print(child.module, child.names[0].name)
                 self.import_map[str(relpath)].append(import_name)
-                # if str(relpath) == "gnns/pipelines.py":
-                #     print(ast.dump(child, indent=4))
+
             else:
                 self._walk_defs(child, relpath, src, parent_stack)
 
@@ -71,7 +95,8 @@ class ProjectAnalyzer:
                 node_id,
                 file=data["file"],
                 name=data["name"],
-                source=data["source"]
+                source=data["source"],
+                nodeType=data.get("nodeType", "unknown")
             )
 
         name_index = {}
@@ -82,42 +107,70 @@ class ProjectAnalyzer:
         for caller_id, data in self.defs.items():
             node = data["node"]
             file_name = data["file"]
-            for called_name in self._find_calls(node):
-                if called_name not in name_index:
-                    continue  # external call
+            for dep_name in self._find_dependencies(node):
+                if dep_name not in name_index:
+                    continue  # external call or built-in
 
-                for callee_id in name_index[called_name]:
-                    callee_file = callee_id.split("::")[0]
-                    callee_file_import_part = callee_file.split("/")
-                    callee_file_import_part[-1] = callee_file_import_part[-1].split(".")[0]
-                    caller_imports = self.import_map.get(file_name, [])
-                    is_valid_import = (callee_file in caller_imports) | (callee_file == file_name)
-                    if not is_valid_import:
-                        for callee_part in callee_file_import_part:
-                            for called in caller_imports:
-                                if match_x(called, callee_part):
-                                    is_valid_import = True
-                                    break
+                # Resolution logic
+                possible_callees = name_index[dep_name]
+                
+                # 1. Prioritize definitions within the same file
+                same_file_callees = [cid for cid in possible_callees if self.defs[cid]['file'] == file_name]
+                if same_file_callees:
+                    for callee_id in same_file_callees:
+                        self.graph.add_edge(caller_id, callee_id)
+                    continue
+
+                # 2. Check for imported definitions
+                caller_imports = self.import_map.get(file_name, [])
+                for callee_id in possible_callees:
+                    callee_file = self.defs[callee_id]['file']
+                    callee_module_path = callee_file.replace('/', '.').replace('.py', '')
+
+                    is_valid_import = False
+                    if callee_module_path in caller_imports:
+                        is_valid_import = True
+                    else:
+                        # Handle relative imports and from-imports (e.g. from a.b import c)
+                        for imp in caller_imports:
+                            if imp and callee_module_path.endswith(imp):
+                                is_valid_import = True
+                                break
+                    
                     if is_valid_import:
                         self.graph.add_edge(caller_id, callee_id)
 
         return self.graph
 
-    def _find_calls(self, node):
-        calls = set()
-        for child in ast.walk(node):
-            if isinstance(child, ast.Call):
-                # foo(...)
-                if isinstance(child.func, ast.Name):
-                    calls.add(child.func.id)
-                # obj.foo(...)
-                elif isinstance(child.func, ast.Attribute):
-                    calls.add(child.func.attr)
-        return calls
+    def _find_dependencies(self, node):
+        deps = set()
+        # We need to skip the name of the function/class itself
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            nodes_to_walk = node.body
+            # Also consider decorators
+            if hasattr(node, 'decorator_list'):
+                nodes_to_walk.extend(node.decorator_list)
+        else:
+            nodes_to_walk = [node]
+
+        for n in nodes_to_walk:
+            for child in ast.walk(n):
+                # Find function calls
+                if isinstance(child, ast.Call):
+                    if isinstance(child.func, ast.Name):
+                        deps.add(child.func.id)
+                    elif isinstance(child.func, ast.Attribute):
+                        deps.add(child.func.attr)
+                # Find global variable usage
+                elif isinstance(child, ast.Name) and isinstance(child.ctx, ast.Load):
+                     deps.add(child.id)
+        return deps
 
 
 
-def build_project_graph(project_path):
+def build_project_graph(project_path, graph_output_path: str):
     analyzer = ProjectAnalyzer(project_path)
     analyzer.collect_defs()
-    return analyzer.build_graph()
+    graph = analyzer.build_graph()
+    nx.write_graphml(graph, graph_output_path)
+    return graph

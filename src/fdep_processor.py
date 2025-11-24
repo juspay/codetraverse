@@ -53,7 +53,8 @@ def process_ts_output(output_pth: Path):
                 node_type=node_dct.get("nodeType", "<NO-TYPE>")
             )
         for (src, dst) in ts_fdep.get("edges", []):
-            graph.add_edge(src, dst)
+            if src != dst:
+                graph.add_edge(src, dst)
         nx.write_graphml(graph, str(PICKLE_FILE_PATH))
         print(graph)
 
@@ -65,7 +66,7 @@ def create_python_fdep(codebase_dir: Path) -> bool:
         from py_fdep.fdep import build_project_graph
         import pickle
 
-        graph = build_project_graph(str(codebase_dir))
+        graph = build_project_graph(str(codebase_dir), str(Path(CUR_PATH).parent / "fdep.graphml"))
         print(graph)
         with open(PICKLE_FILE_PATH, "wb") as f:
             pickle.dump(graph, f)
