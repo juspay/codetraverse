@@ -6,7 +6,6 @@ import networkx as nx
 
 
 CUR_PATH = os.path.abspath(__file__)
-PICKLE_FILE_PATH = Path(CUR_PATH).parent / "graph.pickle"
 
 def check_node() -> bool:
     try:
@@ -18,18 +17,17 @@ def check_node() -> bool:
         print("Unable to check node version. Please ensure node is installed and set in path")
         return False
     
-def create_ts_fdep(js_path: str, tsconfig_path: str) -> tuple[bool, Path | None]:
+def create_ts_fdep(js_path: str, tsconfig_path: str, output_dir: str) -> tuple[bool, Path | None]:
     try:
-        output_path = Path(CUR_PATH).parent
-        result = subprocess.run(["node", js_path, tsconfig_path, "-o", str(output_path)], capture_output=True, text=True, check=True)
+        result = subprocess.run(["node", js_path, tsconfig_path, "-o", str(output_dir)], capture_output=True, text=True, check=True)
         if result.stdout:
-            return (True, output_path / "fdep-output.json")
+            return (True, output_dir / "fdep-output.json")
         return (False, None)
     except Exception as e:
         print(e)
         return (False, None)
     
-def process_ts_output(output_pth: Path):
+def process_ts_output(output_pth: Path, pickle_file_path: Path):
     if not output_pth.exists():
         print(output_pth, "doesn't exist")
         exit(1)
@@ -55,10 +53,10 @@ def process_ts_output(output_pth: Path):
         for (src, dst) in ts_fdep.get("edges", []):
             if src != dst:
                 graph.add_edge(src, dst)
-        nx.write_graphml(graph, str(PICKLE_FILE_PATH))
+        nx.write_graphml(graph, str(pickle_file_path))
         print(graph)
 
-def create_python_fdep(codebase_dir: Path) -> bool:
+def create_python_fdep(codebase_dir: Path, pickle_file_path: Path) -> bool:
     if not codebase_dir.exists():
         print(str(codebase_dir), "doesn't exist")
         exit(1)
@@ -66,9 +64,9 @@ def create_python_fdep(codebase_dir: Path) -> bool:
         from py_fdep.fdep import build_project_graph
         import pickle
 
-        graph = build_project_graph(str(codebase_dir), str(Path(CUR_PATH).parent / "fdep.graphml"))
+        graph = build_project_graph(str(codebase_dir), str(pickle_file_path.parent / "fdep.graphml"))
         print(graph)
-        with open(PICKLE_FILE_PATH, "wb") as f:
+        with open(pickle_file_path, "wb") as f:
             pickle.dump(graph, f)
         return True
     except Exception as e:
@@ -79,6 +77,8 @@ def main():
     parser = argparse.ArgumentParser(description="Simple FDEP CLI")
     parser.add_argument("-l", "--lang", dest="language", choices=["python", "typescript"], required=True, type=str, help="Language of repo")
     parser.add_argument("-s", "--src", dest="source", required=True, type=str, help="Path of the project dir")
+    parser.add_argument("-o", "--outputDir", dest="output_dir", type=str, help="Path of output dir")
+    parser.add_argument("-r", "--repoName", dest="repo_name", required=True, type=str, help="Name of the repo")
     args = parser.parse_args()
 
     pth = Path(args.source)
@@ -86,6 +86,8 @@ def main():
         print("No such path exists :", str(pth))
         exit(1)
     selected_language = args.language.lower()
+    output_dir = Path(args.output_dir) if args.output_dir else Path(CUR_PATH).parent
+    pickle_file_path = output_dir / f"{args.repo_name}_graph.pkl"
     if selected_language == "typescript":
         tsconfig_path = None
         for pth in pth.iterdir():
@@ -97,15 +99,15 @@ def main():
         if check_node():
             js_path = Path(CUR_PATH).parent / ".." / "dist" / "fdep.js"
             print(js_path)
-            result, output_pth = create_ts_fdep(str(js_path), tsconfig_path)
+            result, output_pth = create_ts_fdep(str(js_path), tsconfig_path, output_dir)
             if result:
-                process_ts_output(output_pth)
+                process_ts_output(output_pth, args.outputDir, pickle_file_path)
             else:
                 print("Unable to create TS FDEP data")
                 exit(1)
             
     elif selected_language == "python":
-        status = create_python_fdep(pth)
+        status = create_python_fdep(pth, pickle_file_path)
         if not status:
             print("Unable to create PY FDEP data")
             exit(1)
