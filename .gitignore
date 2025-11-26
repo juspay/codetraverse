@@ -5,3 +5,5 @@ __pycache__/
 *.json
 *.graphml
 .DS_Store
+
+.venv

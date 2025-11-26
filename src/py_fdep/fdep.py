@@ -12,18 +12,24 @@ def match_x(s: str, x: str) -> bool:
     return re.fullmatch(pattern, s) is not None
 
 class ProjectAnalyzer:
-    def __init__(self, root_dir):
+    def __init__(self, root_dir, excluded_dirs=None):
         self.root = Path(root_dir).resolve()
         self.graph = nx.DiGraph()
         self.file_names = []
         self.import_map = defaultdict(list)
         self.defs = {}
+        if excluded_dirs is None:
+            self.excluded_dirs = {'venv', '.venv', 'env', '.env'}
+        else:
+            self.excluded_dirs = set(excluded_dirs)
 
     def collect_defs(self):
         for file in self.root.rglob("*.py"):
+            if any(part in self.excluded_dirs for part in file.parts):
+                continue
             relpath = file.relative_to(self.root)
             self.file_names.append(relpath)
-            with open(file, "r", encoding="utf-8") as f:
+            with open(file, "r", encoding="utf-8", errors="ignore") as f:
                 src = f.read()
 
             try:
@@ -53,8 +59,8 @@ class ProjectAnalyzer:
                     "file": str(relpath),
                     "name": child.name,
                     "node": child,
-                    "source": extracted,
-                    "nodeType": node_type,
+                    "code": extracted,
+                    "node_type": node_type,
                 }
 
                 self._walk_defs(child, relpath, src, parent_stack + [child.name])
@@ -78,8 +84,8 @@ class ProjectAnalyzer:
                             "file": str(relpath),
                             "name": target.id,
                             "node": child,
-                            "source": extracted,
-                            "nodeType": "variable",
+                            "code": extracted,
+                            "node_type": "variable",
                         }
 
             elif isinstance(child, (ast.Import, ast.ImportFrom)):
@@ -95,8 +101,8 @@ class ProjectAnalyzer:
                 node_id,
                 file=data["file"],
                 name=data["name"],
-                source=data["source"],
-                nodeType=data.get("nodeType", "unknown")
+                code=data["code"],
+                node_type=data.get("node_type", "unknown")
             )
 
         name_index = {}
@@ -169,7 +175,7 @@ class ProjectAnalyzer:
 
 
 def build_project_graph(project_path, graph_output_path: str):
-    analyzer = ProjectAnalyzer(project_path)
+    analyzer = ProjectAnalyzer(project_path, excluded_dirs={'venv', '.venv', 'env', '.env'})
     analyzer.collect_defs()
     graph = analyzer.build_graph()
     nx.write_graphml(graph, graph_output_path)

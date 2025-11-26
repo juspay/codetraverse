@@ -266,6 +266,9 @@ export function buildGraph(tsconfigPath: string): Graph {
 
   /* 1. collect definitions */
   for (const sf of project.getSourceFiles()) {
+    if (sf.getFilePath().includes("/node_modules/")) {
+      continue;
+    }
     sf.forEachDescendant((node) => {
       if (!isDefinition(node)) return;
 
@@ -296,6 +299,9 @@ export function buildGraph(tsconfigPath: string): Graph {
 
   /* 2. compute call edges + typesUsed + dependsOn */
   for (const sf of project.getSourceFiles()) {
+    if (sf.getFilePath().includes("/node_modules/")) {
+      continue;
+    }
     sf.forEachDescendant((node) => {
       if (!isDefinition(node)) return;
 

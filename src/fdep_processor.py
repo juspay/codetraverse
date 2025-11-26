@@ -48,7 +48,7 @@ def process_ts_output(output_pth: Path, pickle_file_path: Path):
                 file=node_dct.get("file", "<NO-FILE-PATH>"),
                 label=node_dct.get("label", "<NO-LABEL>"),
                 code=node_dct.get("code", "<NO-CODE>"),
-                node_type=node_dct.get("nodeType", "<NO-TYPE>")
+                node_type=node_dct.get("node_type", "<NO-TYPE>")
             )
         for (src, dst) in ts_fdep.get("edges", []):
             if src != dst:
@@ -111,4 +111,6 @@ def main():
         if not status:
             print("Unable to create PY FDEP data")
             exit(1)
-    
+
+if __name__ == "__main__":
+    main()
