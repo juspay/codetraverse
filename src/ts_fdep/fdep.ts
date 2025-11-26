@@ -14,13 +14,13 @@ import { execSync } from "child_process";
 import * as fs from "fs";
 
 enum NodeType {
-  Function = "Function",
-  Class = "Class",
-  Type = "Type",
-  Enum = "Enum",
-  Interface = "Interface",
-  Variable = "Variable",
-  Unknown = "Unknown",
+  Function = "function",
+  Class = "class",
+  Type = "type",
+  Enum = "enum",
+  Interface = "interface",
+  Variable = "variable",
+  Unknown = "unknown",
 }
 
 interface GraphNode {
@@ -29,7 +29,7 @@ interface GraphNode {
   label: string;
   code: string;
   signature: string;
-  nodeType: NodeType;
+  node_type: NodeType;
   typesUsed: string[];
   dependsOn: string[];
 }
@@ -107,7 +107,7 @@ function register(nodes: Map<string, GraphNode>, node: Node, type: NodeType, tsc
     label: labelFor(node),
     code: node.getText(),
     signature: typeSig(node),
-    nodeType: type,
+    node_type: type,
     typesUsed: [],
     dependsOn: [],
   });
@@ -126,6 +126,10 @@ function isDefinition(node: Node): boolean {
   if (Node.isTypeAliasDeclaration(node)) return true;
   if (Node.isGetAccessorDeclaration(node)) return true;
   if (Node.isSetAccessorDeclaration(node)) return true;
+  if (Node.isPropertyDeclaration(node)) return true;
+  if (Node.isConstructorDeclaration(node)) return true;
+  if (Node.isFunctionExpression(node)) return true;
+  if (Node.isArrowFunction(node)) return true;
 
   if (Node.isVariableDeclaration(node)) {
     // any variable initialized at the top level of a file
@@ -141,6 +145,12 @@ function isDefinition(node: Node): boolean {
       init &&
       (Node.isFunctionExpression(init) || Node.isArrowFunction(init))
     ) {
+      return true;
+    }
+
+    // Also include variables without initializers in .d.ts files
+    const sourceFile = node.getSourceFile();
+    if (sourceFile && sourceFile.getFilePath().endsWith('.d.ts')) {
       return true;
     }
   }
@@ -281,6 +291,10 @@ export function buildGraph(tsconfigPath: string): Graph {
       else if (Node.isTypeAliasDeclaration(node)) t = NodeType.Type;
       else if (Node.isGetAccessorDeclaration(node)) t = NodeType.Function;
       else if (Node.isSetAccessorDeclaration(node)) t = NodeType.Function;
+      else if (Node.isPropertyDeclaration(node)) t = NodeType.Variable;
+      else if (Node.isConstructorDeclaration(node)) t = NodeType.Function;
+      else if (Node.isFunctionExpression(node)) t = NodeType.Function;
+      else if (Node.isArrowFunction(node)) t = NodeType.Function;
       else if (Node.isVariableDeclaration(node)) {
         const init = node.getInitializer();
         if (
@@ -289,7 +303,13 @@ export function buildGraph(tsconfigPath: string): Graph {
         ) {
           t = NodeType.Function;
         } else {
-          t = NodeType.Variable;
+          // Check if it's a function type in .d.ts files
+          const typeNode = node.getTypeNode();
+          if (typeNode && (Node.isFunctionTypeNode(typeNode) || typeNode.getText().includes('=>'))) {
+            t = NodeType.Function;
+          } else {
+            t = NodeType.Variable;
+          }
         }
       }
 
@@ -334,7 +354,7 @@ export function buildGraph(tsconfigPath: string): Graph {
               if (
                 !tid.includes("<anonymous>") &&
                 nodes.has(tid) &&
-                nodes.get(tid)!.nodeType === NodeType.Variable
+                nodes.get(tid)!.node_type === NodeType.Variable
               ) {
                 const key = `${id}|${tid}`;
                 if (!edgesSet.has(key)) {

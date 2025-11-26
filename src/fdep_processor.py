@@ -35,7 +35,6 @@ def process_ts_output(output_pth: Path, pickle_file_path: Path):
     import json
     from typing import Dict, Any
 
-    content = json.loads(output_pth.read_text())
     if output_pth.exists():
         content = output_pth.read_text()
         ts_fdep: Dict[Any, Any] = json.loads(content)
@@ -53,7 +52,10 @@ def process_ts_output(output_pth: Path, pickle_file_path: Path):
         for (src, dst) in ts_fdep.get("edges", []):
             if src != dst:
                 graph.add_edge(src, dst)
-        nx.write_graphml(graph, str(pickle_file_path))
+        import pickle
+        with open(pickle_file_path, "wb") as f:
+            pickle.dump(graph, f)
+        # nx.write_graphml(graph, str(pickle_file_path))
         print(graph)
 
 def create_python_fdep(codebase_dir: Path, pickle_file_path: Path) -> bool:
@@ -101,7 +103,7 @@ def main():
             print(js_path)
             result, output_pth = create_ts_fdep(str(js_path), tsconfig_path, output_dir)
             if result:
-                process_ts_output(output_pth, args.outputDir, pickle_file_path)
+                process_ts_output(output_pth, pickle_file_path)
             else:
                 print("Unable to create TS FDEP data")
                 exit(1)
