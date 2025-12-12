@@ -1,11 +1,11 @@
 [project]
-name = "fdep_cli"
+name = "codetraverse"
 version = "0.1.0"
 description = "A simple FDEP CLI tool"
 requires-python = ">=3.9"
 
 [project.scripts]
-fdep_cli = "fdep_processor:main"
+codetraverse = "fdep_processor:main"
 
 [build-system]
 requires = ["setuptools"]
