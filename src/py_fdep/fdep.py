@@ -175,7 +175,7 @@ class ProjectAnalyzer:
 
 
 
-def build_project_graph(project_path, graph_output_path: Optional[str]):
+def build_project_graph(project_path, graph_output_path: Optional[str] = None):
     analyzer = ProjectAnalyzer(project_path, excluded_dirs={'venv', '.venv', 'env', '.env'})
     analyzer.collect_defs()
     graph = analyzer.build_graph()
