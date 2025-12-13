@@ -5,7 +5,7 @@ description = "A simple FDEP CLI tool"
 requires-python = ">=3.9"
 
 [project.scripts]
-codetraverse = "fdep_processor:main"
+codetraverse = "codetraverse.fdep_processor:main"
 
 [build-system]
 requires = ["setuptools"]
@@ -14,6 +14,3 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 package-dir = {"" = "src"}
 include-package-data = true
-
-[tool.setuptools.packages.find]
-where = ["src"]
