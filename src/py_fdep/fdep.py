@@ -2,6 +2,7 @@ import ast
 from pathlib import Path
 import networkx as nx
 from collections import defaultdict
+from typing import Optional
 import re
 
 def match_x(s: str, x: str) -> bool:
@@ -174,9 +175,10 @@ class ProjectAnalyzer:
 
 
 
-def build_project_graph(project_path, graph_output_path: str):
+def build_project_graph(project_path, graph_output_path: Optional[str]):
     analyzer = ProjectAnalyzer(project_path, excluded_dirs={'venv', '.venv', 'env', '.env'})
     analyzer.collect_defs()
     graph = analyzer.build_graph()
-    nx.write_graphml(graph, graph_output_path)
+    if graph_output_path:
+        nx.write_graphml(graph, graph_output_path)
     return graph
