@@ -4,6 +4,9 @@ version = "0.1.0"
 description = "A simple FDEP CLI tool"
 requires-python = ">=3.9"
 
+[project.dependencies]
+networkx==3.4.2
+
 [project.scripts]
 fdep_cli = "fdep_processor:main"
 
