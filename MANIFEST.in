@@ -1,1 +1,3 @@
 graft dist
+graft src/ts_fdep
+include src/ts_fdep/*.ts
