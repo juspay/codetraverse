@@ -42,7 +42,7 @@ pub enum NodeType {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct GraphNode {
-    pub id: String,         // Now: relative/path/to/file.rs::function_name
+    pub id: String,         // relative/path.rs::function_name
     pub label: String,      
     pub relative_path: String,
     pub node_type: NodeType,
@@ -182,7 +182,7 @@ impl LspClient {
                     return Ok(resp.result.unwrap_or(Value::Null));
                 }
                 Some(Ok(RpcMessage::Notification(_))) => {
-                    // Ignore notifications (diagnostics, progress, etc)
+                    // Ignore notifications
                 }
                 Some(Ok(_)) => {} 
                 Some(Err(e)) => return Err(e),
@@ -296,6 +296,7 @@ async fn main() -> Result<()> {
     let mut files_to_scan = Vec::new();
     scan_files_recursive(&project_root, &mut files_to_scan);
     
+    // Filter out target/ and hidden files to ensure we only get user source code
     files_to_scan.retain(|p| {
         !p.components().any(|c| c.as_os_str() == "target" || c.as_os_str().to_string_lossy().starts_with('.'))
     });
@@ -326,7 +327,7 @@ async fn main() -> Result<()> {
     eprintln!("⏳ Waiting for RA to warm up...");
     sleep(Duration::from_secs(2)).await;
 
-    // 8. Build Graph
+    // 8. Build Graph (Nodes)
     let mut graph = FdepGraph::new();
     let mut call_hierarchy_candidates = Vec::new();
 
@@ -339,8 +340,6 @@ async fn main() -> Result<()> {
         eprint!("\r   [{}/{}] Analyzing: {}", idx + 1, files_to_scan.len(), relative_name);
         
         let mut attempts = 0;
-        let mut found_symbols = false;
-        
         let current_file_content = file_map.get(&uri).expect("File content missing from map");
 
         while attempts < 3 {
@@ -377,7 +376,6 @@ async fn main() -> Result<()> {
                                     current_file_content 
                                 );
                             }
-                            found_symbols = true;
                             break; 
                         }
                         Err(_) => { break; }
@@ -408,7 +406,7 @@ async fn main() -> Result<()> {
              if let Some(items) = items {
                  if let Some(root_item) = items.first() {
                      
-                     // INCOMING
+                     // INCOMING CALLS
                      let in_params = CallHierarchyIncomingCallsParams {
                          item: root_item.clone(),
                          work_done_progress_params: Default::default(),
@@ -418,15 +416,18 @@ async fn main() -> Result<()> {
                          let calls: Option<Vec<CallHierarchyIncomingCall>> = serde_json::from_value(in_val).unwrap_or(None);
                          if let Some(calls) = calls {
                              for call in calls {
-                                 // NEW ID LOGIC: relative_path::function_name
                                  let caller_id = generate_relative_id(&call.from.uri, &call.from.name, &project_root);
-                                 graph.edges.push((caller_id, node_id.clone()));
-                                 edges_count += 1;
+                                 
+                                 // FILTER: Only add edge if the Caller is in our filtered node list (User Code)
+                                 if graph.nodes.contains_key(&caller_id) {
+                                     graph.edges.push((caller_id, node_id.clone()));
+                                     edges_count += 1;
+                                 }
                              }
                          }
                      }
                      
-                     // OUTGOING
+                     // OUTGOING CALLS
                      let out_params = CallHierarchyOutgoingCallsParams {
                          item: root_item.clone(),
                          work_done_progress_params: Default::default(),
@@ -436,10 +437,14 @@ async fn main() -> Result<()> {
                          let calls: Option<Vec<CallHierarchyOutgoingCall>> = serde_json::from_value(out_val).unwrap_or(None);
                          if let Some(calls) = calls {
                              for call in calls {
-                                 // NEW ID LOGIC: relative_path::function_name
                                  let callee_id = generate_relative_id(&call.to.uri, &call.to.name, &project_root);
-                                 graph.edges.push((node_id.clone(), callee_id));
-                                 edges_count += 1;
+                                 
+                                 // FILTER: Only add edge if the Callee is in our filtered node list (User Code)
+                                 // This excludes std lib (e.g. println, Vec::push) and external crates
+                                 if graph.nodes.contains_key(&callee_id) {
+                                     graph.edges.push((node_id.clone(), callee_id));
+                                     edges_count += 1;
+                                 }
                              }
                          }
                      }
@@ -513,7 +518,7 @@ fn process_symbol(
     graph.nodes.insert(id.clone(), GraphNode {
         id: id.clone(),
         label: sym.name.clone(),
-        relative_path: relative, // Kept this
+        relative_path: relative, 
         node_type: kind.clone(),
         range: sym.selection_range,
         code: extracted_code, 
@@ -541,12 +546,14 @@ fn extract_code(content: &str, range: Range) -> String {
         .join("\n")
 }
 
-// Updated Helper: Uses Project Root to calculate relative path
 fn generate_relative_id(uri: &Url, name: &str, root: &Path) -> String {
     if let Ok(path) = uri.to_file_path() {
-        let relative = path.strip_prefix(root).unwrap_or(&path).to_string_lossy();
-        format!("{}::{}", relative, name)
-    } else {
-        format!("unknown::{}", name)
+        // If path is inside root, make it relative
+        if let Ok(relative) = path.strip_prefix(root) {
+             return format!("{}::{}", relative.to_string_lossy(), name);
+        }
     }
+    // If external or failure, return a unique but explicitly "external" ID.
+    // This ID will NOT be in `graph.nodes`, so it will be filtered out by the loop.
+    format!("EXTERNAL::{}", name)
 }
