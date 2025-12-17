@@ -124,21 +124,34 @@ def process_rust_output(output_pth: Path, pickle_file_path: Path):
     from typing import Dict, Any
 
     if output_pth.exists():
-        content = output_pth.read_text()
-        rust_fdep: Dict[Any, Any] = json.loads(content)
+        print("output path: ", output_pth)
+        with open(output_pth, "r") as f:
+            rust_fdep = json.load(f)
+
         graph = nx.DiGraph()
         nodes_dct = rust_fdep.get("nodes", {})
+        nodes_list = []
         for node_id, node_data in nodes_dct.items():
+            nodes_list.append(node_id)
+            # print("id: ",node_id)
             graph.add_node(
                 node_id,
-                file=node_data.get("file", "<NO-FILE-PATH>"),
-                label=node_data.get("label", "<NO-LABEL>"),
+                file=node_data.get("relative_path", "<NO-FILE-PATH>"),
+                name=node_data.get("label", "<NO-LABEL>"),
                 code=node_data.get("code", "<NO-CODE>"),
-                node_type=node_data.get("node_type", "<NO-TYPE>")
+                node_type=node_data.get("node_type", "<NO-TYPE>").lower()
             )
+        new_edges = []
         for (src, dst) in rust_fdep.get("edges", []):
-            if src != dst:
-                graph.add_edge(src, dst)
+            if src in nodes_list and dst in nodes_list:
+                if src != dst:
+                    graph.add_edge(src, dst)
+                    new_edges.append((src, dst))
+
+        rust_fdep["edges"] = new_edges
+        with open(output_pth, "w") as f:
+            json.dump(rust_fdep, f, indent=4)
+            
         import pickle
         with open(pickle_file_path, "wb") as f:
             pickle.dump(graph, f)
