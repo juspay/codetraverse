@@ -336,7 +336,7 @@ async fn main() -> Result<()> {
     }
 
     eprintln!("⏳ Waiting for RA to warm up...");
-    sleep(Duration::from_secs(2)).await;
+    sleep(Duration::from_secs(3)).await;
 
     //5. Build Nodes (Robust Version)
     let mut graph = FdepGraph::new();

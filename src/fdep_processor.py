@@ -133,13 +133,16 @@ def process_rust_output(output_pth: Path, pickle_file_path: Path):
         nodes_list = []
         for node_id, node_data in nodes_dct.items():
             nodes_list.append(node_id)
-            # print("id: ",node_id)
+            node_type = node_data.get("node_type", "<NO-TYPE>")
+            if node_type == "Struct" or node_type == "TypeAlias":
+                node_type = "type"
+
             graph.add_node(
                 node_id,
                 file=node_data.get("relative_path", "<NO-FILE-PATH>"),
                 name=node_data.get("label", "<NO-LABEL>"),
                 code=node_data.get("code", "<NO-CODE>"),
-                node_type=node_data.get("node_type", "<NO-TYPE>").lower()
+                node_type=node_type.lower()
             )
         new_edges = []
         for (src, dst) in rust_fdep.get("edges", []):
@@ -214,9 +217,9 @@ def main():
             exit(1)
             
     elif selected_language == "rust":
-        print("Rust choosen")
+        print("Language: RUST")
         if check_rust_toolchain():
-            print("TOol chain done")
+            print("TOOl chain check done")
             result, output_pth = create_rust_fdep(pth, output_dir)
             if result:
                 process_rust_output(output_pth, pickle_file_path)
