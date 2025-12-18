@@ -14,7 +14,7 @@ use lsp_types::{
     DidOpenTextDocumentParams, DocumentSymbol, DocumentSymbolClientCapabilities,
     DocumentSymbolParams, InitializeParams, InitializedParams, Position,
     Range, SymbolKind, TextDocumentClientCapabilities, TextDocumentIdentifier, TextDocumentItem,
-    Url, WorkspaceFolder,
+    Url, WorkspaceFolder, ReferenceParams, ReferenceContext, Location
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -27,7 +27,7 @@ use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite};
 // 1. Data Structures
 // ==========================================
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum NodeType {
     Function,
     Struct,
@@ -37,12 +37,14 @@ pub enum NodeType {
     Variable,
     Interface, 
     Impl,
+    TypeAlias, 
+    Field,     
     Unknown,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct GraphNode {
-    pub id: String,         // relative/path.rs::function_name
+    pub id: String,         
     pub label: String,      
     pub relative_path: String,
     pub node_type: NodeType,
@@ -181,9 +183,7 @@ impl LspClient {
                     }
                     return Ok(resp.result.unwrap_or(Value::Null));
                 }
-                Some(Ok(RpcMessage::Notification(_))) => {
-                    // Ignore notifications
-                }
+                Some(Ok(RpcMessage::Notification(_))) => {} 
                 Some(Ok(_)) => {} 
                 Some(Err(e)) => return Err(e),
                 None => return Err(anyhow!("Server closed connection")),
@@ -222,7 +222,6 @@ async fn main() -> Result<()> {
     
     eprintln!("📍 Resolved Project Root: {:?}", project_root);
 
-    // 2. Resolve Output Path
     let output_path = if raw_output_path.is_dir() {
         raw_output_path.join("fdep-output.json")
     } else {
@@ -236,7 +235,7 @@ async fn main() -> Result<()> {
 
     let root_uri = Url::from_directory_path(&project_root).map_err(|_| anyhow!("Invalid root URI"))?;
 
-    // 3. Start Rust Analyzer
+    // 2. Start Rust Analyzer
     eprintln!("🚀 Spawning rust-analyzer...");
     let mut process = Command::new("rust-analyzer")
         .stdin(Stdio::piped())
@@ -249,9 +248,7 @@ async fn main() -> Result<()> {
     tokio::spawn(async move {
         let reader = BufReader::new(stderr);
         let mut lines = reader.lines();
-        while let Ok(Some(_line)) = lines.next_line().await {
-            // Optional logging
-        }
+        while let Ok(Some(_line)) = lines.next_line().await { }
     });
 
     let stdin = process.stdin.take().unwrap();
@@ -263,8 +260,21 @@ async fn main() -> Result<()> {
         req_id: AtomicUsize::new(1),
     };
 
-    // 4. Initialize LSP
+    // 3. Initialize LSP
     eprintln!("🤝 Initializing LSP...");
+
+    let supported_symbol_kinds = vec![
+        SymbolKind::FILE, SymbolKind::MODULE, SymbolKind::NAMESPACE,
+        SymbolKind::PACKAGE, SymbolKind::CLASS, SymbolKind::METHOD,
+        SymbolKind::PROPERTY, SymbolKind::FIELD, SymbolKind::CONSTRUCTOR,
+        SymbolKind::ENUM, SymbolKind::INTERFACE, SymbolKind::FUNCTION,
+        SymbolKind::VARIABLE, SymbolKind::CONSTANT, SymbolKind::STRING,
+        SymbolKind::NUMBER, SymbolKind::BOOLEAN, SymbolKind::ARRAY,
+        SymbolKind::OBJECT, SymbolKind::KEY, SymbolKind::NULL,
+        SymbolKind::ENUM_MEMBER, SymbolKind::STRUCT, SymbolKind::EVENT,
+        SymbolKind::OPERATOR, SymbolKind::TYPE_PARAMETER,
+    ];
+
     let init_params = InitializeParams {
         process_id: Some(std::process::id()),
         root_uri: Some(root_uri.clone()),
@@ -272,9 +282,15 @@ async fn main() -> Result<()> {
             text_document: Some(TextDocumentClientCapabilities {
                 document_symbol: Some(DocumentSymbolClientCapabilities {
                     hierarchical_document_symbol_support: Some(true),
+                    symbol_kind: Some(lsp_types::SymbolKindCapability {
+                        value_set: Some(supported_symbol_kinds)
+                    }),
                     ..Default::default()
                 }),
                 call_hierarchy: Some(lsp_types::CallHierarchyClientCapabilities {
+                    dynamic_registration: Some(false),
+                }),
+                references: Some(lsp_types::DynamicRegistrationClientCapabilities {
                     dynamic_registration: Some(false),
                 }),
                 ..Default::default()
@@ -291,26 +307,21 @@ async fn main() -> Result<()> {
     let _ = client.send_request("initialize", init_params).await?;
     client.send_notification("initialized", InitializedParams {}).await?;
 
-    // 5. Gather Files & Content
+    // 4. Gather Files
     eprintln!("📂 Scanning for .rs files...");
     let mut files_to_scan = Vec::new();
     scan_files_recursive(&project_root, &mut files_to_scan);
     
-    // Filter out target/ and hidden files to ensure we only get user source code
     files_to_scan.retain(|p| {
         !p.components().any(|c| c.as_os_str() == "target" || c.as_os_str().to_string_lossy().starts_with('.'))
     });
 
     eprintln!("   Found {} rust files to analyze.", files_to_scan.len());
-    
     let mut file_map: HashMap<Url, String> = HashMap::new();
 
-    // 6. Open Files
     for path in &files_to_scan {
         let content = tokio::fs::read_to_string(path).await?;
         let uri = Url::from_file_path(path).map_err(|_| anyhow!("Invalid file path"))?;
-        
-        // Store for extraction
         file_map.insert(uri.clone(), content.clone());
 
         let params = DidOpenTextDocumentParams {
@@ -327,9 +338,10 @@ async fn main() -> Result<()> {
     eprintln!("⏳ Waiting for RA to warm up...");
     sleep(Duration::from_secs(2)).await;
 
-    // 8. Build Graph (Nodes)
+    //5. Build Nodes (Robust Version)
     let mut graph = FdepGraph::new();
-    let mut call_hierarchy_candidates = Vec::new();
+    let mut function_candidates = Vec::new(); 
+    let mut type_candidates = Vec::new();     
 
     eprintln!("🏗️  Building Symbol Graph...");
 
@@ -339,36 +351,53 @@ async fn main() -> Result<()> {
         
         eprint!("\r   [{}/{}] Analyzing: {}", idx + 1, files_to_scan.len(), relative_name);
         
+        // Increase retries to handle Macro Expansion lag
         let mut attempts = 0;
-        let current_file_content = file_map.get(&uri).expect("File content missing from map");
+        let max_attempts = 10; 
+        let current_file_content = file_map.get(&uri).expect("File content missing");
 
-        while attempts < 3 {
+        loop {
             attempts += 1;
-            
             let params = DocumentSymbolParams {
                 text_document: TextDocumentIdentifier { uri: uri.clone() },
                 work_done_progress_params: Default::default(),
                 partial_result_params: Default::default(),
             };
 
-            match client.send_request("textDocument/documentSymbol", params).await {
+            let response = client.send_request("textDocument/documentSymbol", params).await;
+
+            match response {
                 Ok(val) => {
+                    // Case A: Result is Null (Server not ready)
                     if val.is_null() {
-                        sleep(Duration::from_millis(500)).await;
+                        if attempts >= max_attempts {
+                            eprintln!("\n⚠️  Timeout waiting for symbols in {}", relative_name);
+                            break;
+                        }
+                        sleep(Duration::from_millis(300 * attempts as u64)).await; // Exponential backoff
                         continue;
                     }
 
-                    let symbols: Result<Vec<DocumentSymbol>, _> = serde_json::from_value(val.clone());
-                    match symbols {
+                    // Case B: Try to parse as Hierarchical Document Symbols
+                    let symbols_res: Result<Vec<DocumentSymbol>, _> = serde_json::from_value(val.clone());
+
+                    match symbols_res {
                         Ok(syms) => {
+                            // Case B.1: Valid list, but empty. Might be indexing, might be empty file.
                             if syms.is_empty() {
-                                sleep(Duration::from_millis(200)).await;
-                                continue;
+                                if attempts < 5 {
+                                    // Give it a bit more time if it looks empty (macro expansion takes time)
+                                    sleep(Duration::from_millis(300)).await;
+                                    continue;
+                                }
                             }
+
+                            // SUCCESS: Process the symbols
                             for sym in syms {
                                 process_symbol(
                                     &mut graph, 
-                                    &mut call_hierarchy_candidates, 
+                                    &mut function_candidates,
+                                    &mut type_candidates,
                                     sym, 
                                     path, 
                                     &uri, 
@@ -376,27 +405,39 @@ async fn main() -> Result<()> {
                                     current_file_content 
                                 );
                             }
-                            break; 
+                            break; // Done with this file
                         }
-                        Err(_) => { break; }
+                        Err(e) => {
+                            // Case B.2: JSON mismatch. This is likely the "Silent Failure" you were having.
+                            // Sometimes RA returns "SymbolInformation" (flat) instead of "DocumentSymbol" (tree)
+                            // if it's confused or configured differently.
+                            eprintln!("\n❌ JSON Parse Error in {}: {}", relative_name, e);
+                            
+                            // Debugging tip: Uncomment next line to see what RA actually sent
+                            // eprintln!("   Raw JSON: {}", val); 
+                            break;
+                        }
                     }
                 }
-                Err(_) => { break; }
+                Err(e) => {
+                    eprintln!("\n❌ LSP Request Error in {}: {}", relative_name, e);
+                    break;
+                }
             }
         }
     }
 
-    eprintln!("\n🔗 Calculating Edges (Call Hierarchy)...");
-    let total = call_hierarchy_candidates.len();
     let mut edges_count = 0;
 
-    for (i, (node_id, uri, pos)) in call_hierarchy_candidates.into_iter().enumerate() {
-        if i % 10 == 0 { eprint!("\r   {}/{}...", i, total); }
+    // 6. PHASE A: Calculate Function Call Edges
+    eprintln!("\n🔗 Phase A: Calculating Call Graph...");
+    for (i, (node_id, uri, pos)) in function_candidates.iter().enumerate() {
+        if i % 10 == 0 { eprint!("\r   {}/{}...", i, function_candidates.len()); }
 
         let prep_params = lsp_types::CallHierarchyPrepareParams {
             text_document_position_params: lsp_types::TextDocumentPositionParams {
                 text_document: TextDocumentIdentifier { uri: uri.clone() },
-                position: pos,
+                position: *pos,
             },
             work_done_progress_params: Default::default(),
         };
@@ -405,29 +446,6 @@ async fn main() -> Result<()> {
              let items: Option<Vec<CallHierarchyItem>> = serde_json::from_value(val).unwrap_or(None);
              if let Some(items) = items {
                  if let Some(root_item) = items.first() {
-                     
-                     // INCOMING CALLS
-                     let in_params = CallHierarchyIncomingCallsParams {
-                         item: root_item.clone(),
-                         work_done_progress_params: Default::default(),
-                         partial_result_params: Default::default(),
-                     };
-                     if let Ok(in_val) = client.send_request("callHierarchy/incomingCalls", in_params).await {
-                         let calls: Option<Vec<CallHierarchyIncomingCall>> = serde_json::from_value(in_val).unwrap_or(None);
-                         if let Some(calls) = calls {
-                             for call in calls {
-                                 let caller_id = generate_relative_id(&call.from.uri, &call.from.name, &project_root);
-                                 
-                                 // FILTER: Only add edge if the Caller is in our filtered node list (User Code)
-                                 if graph.nodes.contains_key(&caller_id) {
-                                     graph.edges.push((caller_id, node_id.clone()));
-                                     edges_count += 1;
-                                 }
-                             }
-                         }
-                     }
-                     
-                     // OUTGOING CALLS
                      let out_params = CallHierarchyOutgoingCallsParams {
                          item: root_item.clone(),
                          work_done_progress_params: Default::default(),
@@ -438,9 +456,6 @@ async fn main() -> Result<()> {
                          if let Some(calls) = calls {
                              for call in calls {
                                  let callee_id = generate_relative_id(&call.to.uri, &call.to.name, &project_root);
-                                 
-                                 // FILTER: Only add edge if the Callee is in our filtered node list (User Code)
-                                 // This excludes std lib (e.g. println, Vec::push) and external crates
                                  if graph.nodes.contains_key(&callee_id) {
                                      graph.edges.push((node_id.clone(), callee_id));
                                      edges_count += 1;
@@ -450,6 +465,58 @@ async fn main() -> Result<()> {
                      }
                  }
              }
+        }
+    }
+
+    // 7. PHASE B: Calculate Type Usage Edges
+    eprintln!("\n🔗 Phase B: Calculating Type Dependency Graph...");
+    eprintln!("   Candidates to analyze for type usage: {}", type_candidates.len());
+
+    // Spatial Map
+    let mut function_spatial_map: HashMap<String, Vec<(&Range, &String)>> = HashMap::new();
+    for node in graph.nodes.values() {
+        if matches!(node.node_type, NodeType::Function) {
+            function_spatial_map.entry(node.relative_path.clone())
+                .or_default()
+                .push((&node.range, &node.id));
+        }
+    }
+
+    // Type References
+    for (i, (type_node_id, uri, pos)) in type_candidates.iter().enumerate() {
+        if i % 5 == 0 { eprint!("\r   {}/{}...", i, type_candidates.len()); }
+
+        let params = ReferenceParams {
+            text_document_position: lsp_types::TextDocumentPositionParams {
+                text_document: TextDocumentIdentifier { uri: uri.clone() },
+                position: *pos,
+            },
+            work_done_progress_params: Default::default(),
+            partial_result_params: Default::default(),
+            context: ReferenceContext { include_declaration: false }, 
+        };
+
+        if let Ok(res) = client.send_request("textDocument/references", params).await {
+            let locations: Option<Vec<Location>> = serde_json::from_value(res).unwrap_or(None);
+            
+            if let Some(locs) = locations {
+                for loc in locs {
+                    if let Ok(path) = loc.uri.to_file_path() {
+                        if let Ok(relative_path) = path.strip_prefix(&project_root) {
+                            let rel_str = relative_path.to_string_lossy().to_string();
+                            
+                            if let Some(funcs_in_file) = function_spatial_map.get(&rel_str) {
+                                for (range, func_id) in funcs_in_file {
+                                    if is_inside(loc.range.start, range) {
+                                        graph.edges.push((func_id.to_string(), type_node_id.clone()));
+                                        edges_count += 1;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -468,7 +535,6 @@ async fn main() -> Result<()> {
 fn find_cargo_toml(start_path: &Path) -> Option<PathBuf> {
     let mut current = start_path.to_path_buf();
     if current.is_file() { current.pop(); }
-
     loop {
         let candidate = current.join("Cargo.toml");
         if candidate.exists() { return Some(current); }
@@ -480,35 +546,54 @@ fn scan_files_recursive(dir: &Path, list: &mut Vec<PathBuf>) {
     if let Ok(entries) = std::fs::read_dir(dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.is_dir() {
-                scan_files_recursive(&path, list);
-            } else if path.extension().map_or(false, |e| e == "rs") {
-                list.push(path);
-            }
+            if path.is_dir() { scan_files_recursive(&path, list); } 
+            else if path.extension().map_or(false, |e| e == "rs") { list.push(path); }
         }
     }
 }
 
 fn process_symbol(
     graph: &mut FdepGraph, 
-    candidates: &mut Vec<(String, Url, Position)>,
+    func_candidates: &mut Vec<(String, Url, Position)>,
+    type_candidates: &mut Vec<(String, Url, Position)>,
     sym: DocumentSymbol, 
     file_path: &PathBuf, 
     uri: &Url,
     root: &PathBuf,
     content: &str
 ) {
-    // Generate ID: relative_path::function_name
     let id = generate_relative_id(uri, &sym.name, root);
     
+    // Enable this temporarily to debug exactly what RA sees your types as
+    // eprintln!("[DEBUG] Symbol: {:<20} Kind: {:<15} ({:?})", sym.name, format!("{:?}", sym.kind), sym.kind);
+
     let kind = match sym.kind {
+        // Functions
         SymbolKind::FUNCTION | SymbolKind::METHOD | SymbolKind::CONSTRUCTOR => NodeType::Function,
+        
+        // Structures & Data
         SymbolKind::STRUCT => NodeType::Struct,
         SymbolKind::ENUM => NodeType::Enum,
-        SymbolKind::INTERFACE => NodeType::Interface,
+        SymbolKind::INTERFACE => NodeType::Interface, // Traits often appear here
+        
+        // Type Aliases (e.g., type AppGraph = ...)
+        // Rust Analyzer notoriously maps `type` aliases to TypeParameter or Interface
+        SymbolKind::TYPE_PARAMETER => NodeType::TypeAlias, 
+        
+        // Fallbacks for Structs/Types if RA downgrades them
+        SymbolKind::CLASS => NodeType::Struct, 
+        SymbolKind::OBJECT => NodeType::Struct, 
+
+        // Variables/Constants
         SymbolKind::CONSTANT => NodeType::Constant,
         SymbolKind::VARIABLE => NodeType::Variable,
-        SymbolKind::MODULE => NodeType::Module,
+        SymbolKind::FIELD => NodeType::Field, 
+        SymbolKind::ENUM_MEMBER => NodeType::Field, 
+
+        // Modules
+        SymbolKind::MODULE | SymbolKind::NAMESPACE => NodeType::Module,
+        
+        // Catch-all
         _ => NodeType::Unknown,
     };
 
@@ -524,13 +609,26 @@ fn process_symbol(
         code: extracted_code, 
     });
 
-    if matches!(kind, NodeType::Function) {
-        candidates.push((id, uri.clone(), sym.selection_range.start));
+    match kind {
+        NodeType::Function => {
+            func_candidates.push((id, uri.clone(), sym.selection_range.start));
+        },
+        NodeType::Module => {
+            // Keep recursing, but don't add to candidates
+        },
+        // We want to find references for Structs, Enums, TypeAliases, Fields, and Constants
+        _ => {
+            // Only search for references if it's not "Unknown" to save time, 
+            // unless you specifically want to track unknown symbols too.
+            if kind != NodeType::Unknown {
+                type_candidates.push((id, uri.clone(), sym.selection_range.start));
+            }
+        }
     }
 
     if let Some(children) = sym.children {
         for child in children {
-            process_symbol(graph, candidates, child, file_path, uri, root, content);
+            process_symbol(graph, func_candidates, type_candidates, child, file_path, uri, root, content);
         }
     }
 }
@@ -538,22 +636,21 @@ fn process_symbol(
 fn extract_code(content: &str, range: Range) -> String {
     let start_line = range.start.line as usize;
     let end_line = range.end.line as usize;
-    
-    content.lines()
-        .skip(start_line)
-        .take(end_line - start_line + 1)
-        .collect::<Vec<&str>>()
-        .join("\n")
+    content.lines().skip(start_line).take(end_line - start_line + 1).collect::<Vec<&str>>().join("\n")
 }
 
 fn generate_relative_id(uri: &Url, name: &str, root: &Path) -> String {
     if let Ok(path) = uri.to_file_path() {
-        // If path is inside root, make it relative
         if let Ok(relative) = path.strip_prefix(root) {
              return format!("{}::{}", relative.to_string_lossy(), name);
         }
     }
-    // If external or failure, return a unique but explicitly "external" ID.
-    // This ID will NOT be in `graph.nodes`, so it will be filtered out by the loop.
     format!("EXTERNAL::{}", name)
+}
+
+fn is_inside(pos: Position, range: &Range) -> bool {
+    if pos.line < range.start.line || pos.line > range.end.line { return false; }
+    if pos.line == range.start.line && pos.character < range.start.character { return false; }
+    if pos.line == range.end.line && pos.character > range.end.character { return false; }
+    true
 }
