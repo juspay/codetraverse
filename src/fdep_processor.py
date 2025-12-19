@@ -48,11 +48,11 @@ def create_ts_fdep(js_path: str, tsconfig_path: str, output_dir: str) -> tuple[b
 
 def create_rust_fdep(codebase_dir: Path, output_dir: Path) -> tuple[bool, Path | None]:
     try:
-        # Assuming fdep-ra binary is built and located at src/rust_fdep/fdep-ra/target/release/fdep-ra
-        rust_binary_path = Path(CUR_PATH).parent.parent / "src" / "rust_fdep" / "fdep-ra" / "target" / "release" / "fdep-ra"
+        # Assuming fdep-ra binary is built and located at src/rust_fdep/target/release/rust_fdep
+        rust_binary_path = Path(CUR_PATH).parent.parent / "src" / "rust_fdep" / "target" / "release" / "rust_fdep"
         if not rust_binary_path.exists():
             print(f"Error: Rust binary not found at {rust_binary_path}")
-            print("Please ensure you have built the Rust client: `cd src/rust_fdep/fdep-ra && cargo build --release`")
+            print("Please ensure you have built the Rust client: `cd src/rust_fdep/rust_fdep && cargo build --release`")
             return (False, None)
         
         print("rust_binary: ", rust_binary_path)
