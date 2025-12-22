@@ -1,11 +1,12 @@
-from pathlib import Path
-import argparse
 import os
+import argparse
 import subprocess
 import networkx as nx
-
+from pathlib import Path
+from importlib.resources import files
 
 CUR_PATH = os.path.abspath(__file__)
+print(CUR_PATH)
 
 def check_node() -> bool:
     try:
@@ -48,7 +49,6 @@ def create_ts_fdep(js_path: str, tsconfig_path: str, output_dir: str) -> tuple[b
 
 def create_rust_fdep(codebase_dir: Path, output_dir: Path) -> tuple[bool, Path | None]:
     try:
-        # Assuming fdep-ra binary is built and located at src/rust_fdep/target/release/rust_fdep
         rust_binary_path = Path(CUR_PATH).parent.parent / "src" / "rust_fdep" / "target" / "release" / "rust_fdep"
         if not rust_binary_path.exists():
             print(f"Error: Rust binary not found at {rust_binary_path}")
@@ -84,36 +84,37 @@ def create_rust_fdep(codebase_dir: Path, output_dir: Path) -> tuple[bool, Path |
         print(f"An unexpected error occurred while creating Rust FDEP data: {e}")
         return (False, None)
 
-def process_ts_output(output_pth: Path, pickle_file_path: Path):
-    if not output_pth.exists():
-        print(output_pth, "doesn't exist")
+def process_ts_output(output_path: Path, pickle_file_path: Path):
+    if not output_path.exists():
+        print(output_path, "doesn't exist")
         exit(1)
 
     import json
     from typing import Dict, Any
 
-    if output_pth.exists():
-        content = output_pth.read_text()
-        ts_fdep: Dict[Any, Any] = json.loads(content)
-        graph = nx.DiGraph()
-        nodes_dct = ts_fdep.get("nodes", {})
-        for node in nodes_dct:
-            node_dct = nodes_dct[node]
-            graph.add_node(
-                node,
-                file=node_dct.get("file", "<NO-FILE-PATH>"),
-                label=node_dct.get("label", "<NO-LABEL>"),
-                code=node_dct.get("code", "<NO-CODE>"),
-                node_type=node_dct.get("node_type", "<NO-TYPE>")
-            )
-        for (src, dst) in ts_fdep.get("edges", []):
-            if src != dst:
-                graph.add_edge(src, dst)
-        import pickle
-        with open(pickle_file_path, "wb") as f:
-            pickle.dump(graph, f)
-        # nx.write_graphml(graph, str(pickle_file_path))
-        print(graph)
+    content = output_path.read_text()
+    ts_fdep: Dict[Any, Any] = json.loads(content)
+    graph = nx.DiGraph()
+    nodes_dct = ts_fdep.get("nodes", {})
+
+    for node in nodes_dct:
+        node_dct = nodes_dct[node]
+        graph.add_node(
+            node,
+            file=node_dct.get("file", "<NO-FILE-PATH>"),
+            name=node_dct.get("label", "<NO-LABEL>"),
+            code=node_dct.get("code", "<NO-CODE>"),
+            node_type=node_dct.get("node_type", "<NO-TYPE>").lower()
+        )
+
+    for (src, dst) in ts_fdep.get("edges", []):
+        if src != dst:
+            graph.add_edge(src, dst)
+
+    import pickle
+    with open(pickle_file_path, "wb") as f:
+        pickle.dump(graph, f)
+    print(f"Generated {pickle_file_path} with {graph.number_of_nodes()} nodes and {graph.number_of_edges()} edges.")
 
 def process_rust_output(output_pth: Path, pickle_file_path: Path):
     if not output_pth.exists():
@@ -123,42 +124,40 @@ def process_rust_output(output_pth: Path, pickle_file_path: Path):
     import json
     from typing import Dict, Any
 
-    if output_pth.exists():
-        print("output path: ", output_pth)
-        with open(output_pth, "r") as f:
-            rust_fdep = json.load(f)
+    with open(output_pth, "r") as f:
+        rust_fdep = json.load(f)
 
-        graph = nx.DiGraph()
-        nodes_dct = rust_fdep.get("nodes", {})
-        nodes_list = []
-        for node_id, node_data in nodes_dct.items():
-            nodes_list.append(node_id)
-            node_type = node_data.get("node_type", "<NO-TYPE>")
-            if node_type == "Struct" or node_type == "TypeAlias":
-                node_type = "type"
+    graph = nx.DiGraph()
+    nodes_dct = rust_fdep.get("nodes", {})
+    nodes_list = []
+    for node_id, node_data in nodes_dct.items():
+        nodes_list.append(node_id)
+        node_type = node_data.get("node_type", "<NO-TYPE>")
+        if node_type == "Struct" or node_type == "TypeAlias":
+            node_type = "type"
 
-            graph.add_node(
-                node_id,
-                file=node_data.get("relative_path", "<NO-FILE-PATH>"),
-                name=node_data.get("label", "<NO-LABEL>"),
-                code=node_data.get("code", "<NO-CODE>"),
-                node_type=node_type.lower()
-            )
-        new_edges = []
-        for (src, dst) in rust_fdep.get("edges", []):
-            if src in nodes_list and dst in nodes_list:
-                if src != dst:
-                    graph.add_edge(src, dst)
-                    new_edges.append((src, dst))
+        graph.add_node(
+            node_id,
+            file=node_data.get("relative_path", "<NO-FILE-PATH>"),
+            name=node_data.get("label", "<NO-LABEL>"),
+            code=node_data.get("code", "<NO-CODE>"),
+            node_type=node_type.lower()
+        )
+    new_edges = []
+    for (src, dst) in rust_fdep.get("edges", []):
+        if src in nodes_list and dst in nodes_list:
+            if src != dst:
+                graph.add_edge(src, dst)
+                new_edges.append((src, dst))
 
-        rust_fdep["edges"] = new_edges
-        with open(output_pth, "w") as f:
-            json.dump(rust_fdep, f, indent=4)
-            
-        import pickle
-        with open(pickle_file_path, "wb") as f:
-            pickle.dump(graph, f)
-        print(f"Generated Rust graph with {graph.number_of_nodes()} nodes and {graph.number_of_edges()} edges.")
+    rust_fdep["edges"] = new_edges
+    with open(output_pth, "w") as f:
+        json.dump(rust_fdep, f, indent=4)
+        
+    import pickle
+    with open(pickle_file_path, "wb") as f:
+        pickle.dump(graph, f)
+    print(f"Generated {pickle_file_path} with {graph.number_of_nodes()} nodes and {graph.number_of_edges()} edges.")
 
 def create_python_fdep(codebase_dir: Path, pickle_file_path: Path) -> bool:
     if not codebase_dir.exists():
@@ -168,10 +167,12 @@ def create_python_fdep(codebase_dir: Path, pickle_file_path: Path) -> bool:
         from py_fdep.fdep import build_project_graph
         import pickle
 
-        graph = build_project_graph(str(codebase_dir), str(pickle_file_path.parent / "fdep.graphml"))
-        print(graph)
+        graph = build_project_graph(str(codebase_dir))
+
         with open(pickle_file_path, "wb") as f:
             pickle.dump(graph, f)
+
+        print(f"Generated {pickle_file_path} with {graph.number_of_nodes()} nodes and {graph.number_of_edges()} edges.")
         return True
     except Exception as e:
         print(e)
@@ -189,37 +190,41 @@ def main():
     if not pth.exists():
         print("No such path exists :", str(pth))
         exit(1)
+
     selected_language = args.language.lower()
     output_dir = Path(args.output_dir) if args.output_dir else Path(CUR_PATH).parent
     pickle_file_path = output_dir / f"{args.repo_name}_graph.pkl"
+
     if selected_language == "typescript":
+        print("Language: TYPESCRIPT")
         tsconfig_path = None
         for pth in pth.iterdir():
             if pth.name == "tsconfig.json":
                 tsconfig_path = pth
         if tsconfig_path is None:
             print("No tsconfig file found in ", str(pth))
-        print(tsconfig_path)
+            exit(1)
+        print("tsconfig path: ",tsconfig_path)
         if check_node():
-            js_path = Path(CUR_PATH).parent / ".." / "dist" / "fdep.js"
-            print(js_path)
+            js_path = files("ts_fdep") / "fdep.js"
+            print("js path: ",js_path)
             result, output_pth = create_ts_fdep(str(js_path), tsconfig_path, output_dir)
             if result:
                 process_ts_output(output_pth, pickle_file_path)
             else:
-                print("Unable to create TS FDEP data")
+                print("Unable to create TS FDEP")
                 exit(1)
-            
+
     elif selected_language == "python":
+        print("Language: PYTHON")
         status = create_python_fdep(pth, pickle_file_path)
         if not status:
-            print("Unable to create PY FDEP data")
+            print("Unable to create PY FDEP")
             exit(1)
             
     elif selected_language == "rust":
         print("Language: RUST")
         if check_rust_toolchain():
-            print("TOOl chain check done")
             result, output_pth = create_rust_fdep(pth, output_dir)
             if result:
                 process_rust_output(output_pth, pickle_file_path)
