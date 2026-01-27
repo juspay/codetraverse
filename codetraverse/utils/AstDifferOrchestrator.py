@@ -1,28 +1,26 @@
 import os
+import sys
 import json
+import argparse
 import traceback
 from typing import Dict, List, Optional, Union, Any
-from tree_sitter import Language, Parser, Node
+from tree_sitter import Parser
 # import tree_sitter_rescript
 from tree_sitter_language_pack import get_language
 from codetraverse.ast_diff.haskelldiff import HaskellFileDiff
-from codetraverse.ast_diff.resdiffer import RescriptFileDiff
+# from codetraverse.ast_diff.resdiffer import RescriptFileDiff
 from codetraverse.ast_diff.TSdiff import TypeScriptFileDiff
 from codetraverse.ast_diff.godiff import GoFileDiff
 from codetraverse.ast_diff.rustdiff import RustFileDiff
-from codetraverse.ast_diff.purescriptdiff import PureScriptFileDiff
+# from codetraverse.ast_diff.purescriptdiff import PureScriptFileDiff
 from codetraverse.ast_diff.pythondiff import PythonFileDiff
 from codetraverse.ast_diff.gitwrapper import GitWrapper
-from codetraverse.ast_diff.bitbucket import BitBucket
-from git import Repo
-from unidiff import PatchSet
-import argparse
-import sys
+from codetraverse.ast_diff.bitbucket import BitBucket 
 
 class AstDiffOrchestrator:
 
     EXT_MAP = {
-        "rescript":   ['.res'],
+        # "rescript":   ['.res'],
         "haskell":    ['.hs', '.lhs', '.hs-boot'],
         "typescript": ['.ts', '.tsx'],
         "go":         ['.go'],
@@ -49,7 +47,6 @@ class AstDiffOrchestrator:
         
         # Special handling for TSX which uses a different language object but the same differ
         self.parsers['.tsx'] = Parser(get_language('tsx'))
-
 
     def _get_extension(self, filename: str) -> str:
         """Gets the primary extension for a given filename."""
@@ -78,7 +75,6 @@ class AstDiffOrchestrator:
         if handler:
             return handler['differ_class'](filename)
         return None
-
 
 def extract_components_from_file(file_path: str) -> Dict[str, Any]:
     """
@@ -177,7 +173,6 @@ def extract_components_from_file(file_path: str) -> Dict[str, Any]:
     except Exception as e:
         return {"error": f"Error processing file {file_path}: {str(e)}"}
 
-
 def extract_components_from_files(file_paths: List[str]) -> List[Dict[str, Any]]:
     """
     Extract top-level components from multiple files.
@@ -203,130 +198,153 @@ def extract_components_from_files(file_paths: List[str]) -> List[Dict[str, Any]]
     
     return results
 
-
 def generate_ast_diff(
     git_provider: Union[BitBucket, GitWrapper],
-    output_dir: str = "./",
     quiet: bool = True,
     pr_id: str = None,
-    from_branch: str = None,
-    to_branch: str = None,
-    from_commit: str = None,
-    to_commit: str = None,
-    write_to_file: bool = True,
+    from_branch: str = None, #branch of the source (child)
+    to_branch: str = None, #branch of destination (parent)
+    from_commit: str = None, #initial commit of the source branch (child)
+    to_commit: str = None, #latest commit of the destination branch (parent)
 ) -> List[Dict[str, Any]]:
     orchestrator = AstDiffOrchestrator()
     all_changes = []
+    # proper naming we have to give parent-commit (base commit of A and B) child commit (Head commit of B) 
+    parent_commit = to_commit
+    chil_commit = from_commit
+
     try:
         # --- 1. Determine Commits ---
-        if not from_commit or not to_commit:
+        if parent_commit is None and chil_commit is None:
             if isinstance(git_provider, BitBucket):
                 if pr_id:
                     pull_request = git_provider.get_pr_bitbucket(pr_id)
-                    to_commit, from_commit = pull_request["fromRef"]["latestCommit"], pull_request["toRef"]["latestCommit"]
+                    if not pull_request:
+                        raise ValueError(f"Could not find PR {pr_id}")
+                    
+                    source_ref = pull_request["fromRef"]["id"]
+                    target_ref = pull_request["toRef"]["id"]
+
+                    chil_commit = pull_request["fromRef"]["latestCommit"]
+                    parent_commit = pull_request["toRef"]["latestCommit"]
+                    # parent_commit = git_provider.get_pr_merge_base(source_ref=source_ref,target_ref=target_ref)
                 else:
-                    to_commit = git_provider.get_latest_commit_from_branch(from_branch)
-                    from_commit = git_provider.get_latest_commit_from_branch(to_branch)
+                    if not from_branch or not to_branch:
+                        raise ValueError("from_branch and to_branch are required when pr_id is not provided")
+                    
+                    source_ref = f"refs/heads/{from_branch}"
+                    target_ref = f"refs/heads/{to_branch}"
+
+                    chil_commit = git_provider.get_latest_commit_from_branch(from_branch)
+                    parent_commit = git_provider.get_latest_commit_from_branch(to_branch)
+                    # parent_commit = git_provider.get_pr_merge_base(source_ref=source_ref,target_ref=target_ref)
             elif isinstance(git_provider, GitWrapper):
-                if pr_id: raise ValueError("PR IDs only supported for BitBucket.")
-                to_commit = git_provider.get_latest_commit_from_branch(from_branch)
-                from_commit = git_provider.get_common_ancestor(from_branch, to_branch)
+                if pr_id:
+                    raise ValueError("PR IDs only supported for BitBucket.")
+                if not from_branch or not to_branch:
+                    raise ValueError("from_branch and to_branch are required when pr_id is not provided")
+                
+                chil_commit = git_provider.get_latest_commit_from_branch(from_branch) # head commit of source Branch or from Branch
+                parent_commit = git_provider.get_common_ancestor(from_branch, to_branch) # base commit of source Branch and target Branch
             else:
                 raise TypeError("Unsupported git_provider object.")
 
-        print(f"Comparing commits: {from_commit[:7]} (old) -> {to_commit[:7]} (new)")
+        print(f"Comparing commits: {chil_commit[:7]} (new) -> {parent_commit[:7]} (old)")
 
         # --- 2. Get Changed Files ---
-        changed_files = git_provider.get_changed_files_from_commits(to_commit, from_commit)
+        changed_files = git_provider.get_changed_files_from_commits(from_commit=chil_commit, to_commit=parent_commit)
         
-        # --- 2.5 Get Structured Diff for fallback ---
-        # structured_diff_added, structured_diff_removed = git_provider.get_structured_diff(from_commit, to_commit)
-
         # print("files",changed_files)
         # --- 3. Process Files ---
         for category in ["modified", "added", "deleted"]:
             for file_path in changed_files.get(category, []):
-                if not orchestrator.is_supported(file_path):
-                    continue
-                parser = orchestrator.get_parser(file_path)
-                differ = orchestrator.get_differ(file_path)
-                
-                print(parser)
-                if not parser or not differ:
-                    if category == "modified":
-                        structured_diff_added, structured_diff_removed = git_provider.get_structured_diff(from_commit, to_commit)
-                        added_lines = structured_diff_added.get(file_path, [])
-                        removed_lines = structured_diff_removed.get(file_path, [])
+                try:
+                    if not orchestrator.is_supported(file_path):
+                        continue
+                    parser = orchestrator.get_parser(file_path)
+                    differ = orchestrator.get_differ(file_path)
+                    
+                    if not parser or not differ:
+                        if category == "modified":
+                            structured_diff_added, structured_diff_removed = git_provider.get_structured_diff(chil_commit, parent_commit)
+                            added_lines = structured_diff_added.get(file_path, [])
+                            removed_lines = structured_diff_removed.get(file_path, [])
 
-                        if added_lines or removed_lines:
-                            removed_str = "\n".join([line for _, line in removed_lines])
-                            added_str = "\n".join([line for _, line in added_lines])
+                            if added_lines or removed_lines:
+                                removed_str = "\n".join([line for _, line in removed_lines])
+                                added_str = "\n".join([line for _, line in added_lines])
 
+                                change_dict = {
+                                    "moduleName": file_path,
+                                    "modifiedFunctions": [
+                                        [
+                                            file_path,
+                                            removed_str,
+                                            added_str,
+                                            {}
+                                        ]
+                                    ]
+                                }
+                                all_changes.append(change_dict)
+                        else: # added or deleted
+                            content = git_provider.get_file_content(file_path, parent_commit if category == "added" else chil_commit)
+                            if content is None:
+                                continue
+                            
                             change_dict = {
                                 "moduleName": file_path,
-                                "modifiedFunctions": [
+                                "addedFunctions" if category == "added" else "deletedFunctions": [
                                     [
                                         file_path,
-                                        removed_str,
-                                        added_str,
+                                        content,
                                         {}
                                     ]
                                 ]
                             }
                             all_changes.append(change_dict)
-                    else: # added or deleted
-                        content = git_provider.get_file_content(file_path, to_commit if category == "added" else from_commit)
-                        if content is None: continue
-                        
-                        change_dict = {
-                            "moduleName": file_path,
-                            "addedFunctions" if category == "added" else "deletedFunctions": [
-                                [
-                                    file_path,
-                                    content,
-                                    {}
-                                ]
-                            ]
-                        }
-                        all_changes.append(change_dict)
 
-                    if not quiet: print(f"PROCESSED UNSUPPORTED {category.upper()} FILE ({file_path}) using text diff")
-                    continue
-
-                if category == "modified":
-                    old_content = None
-                    new_content = None
-                    try:
-                        old_content = git_provider.get_file_content(file_path, from_commit)
-                    except FileNotFoundError:
-                        pass
-                    try:
-                        new_content = git_provider.get_file_content(file_path, to_commit)
-                    except FileNotFoundError:
-                        pass
-
-                    if old_content and new_content:
-                        old_ast = parser.parse(old_content.encode())
-                        new_ast = parser.parse(new_content.encode())
-                        changes = differ.compare_two_files(old_ast, new_ast)
-                    elif new_content: # old_content is None
-                        ast = parser.parse(new_content.encode())
-                        changes = differ.process_single_file(ast, mode='added')
-                    elif old_content: # new_content is None
-                        ast = parser.parse(old_content.encode())
-                        changes = differ.process_single_file(ast, mode='deleted')
-                    else:
+                        if not quiet: print(f"PROCESSED UNSUPPORTED {category.upper()} FILE ({file_path}) using text diff")
                         continue
-                else: # added or deleted
-                    commit = to_commit if category == "added" else from_commit
-                    content = git_provider.get_file_content(file_path, commit)
-                    if content is None: continue
-                    ast = parser.parse(content.encode())
-                    changes = differ.process_single_file(ast, mode=category)
-                
-                if changes:
-                    all_changes.append(changes.to_dict())
-                if not quiet: print(f"PROCESSED {category.upper()} FILE ({file_path})")
+
+                    changes = None
+                    if category == "modified":
+                        old_content = None
+                        new_content = None
+                        try:
+                            old_content = git_provider.get_file_content(file_path, chil_commit)
+                        except Exception:
+                            pass
+                        try:
+                            new_content = git_provider.get_file_content(file_path, parent_commit)
+                        except Exception:
+                            pass
+
+                        if old_content and new_content:
+                            old_ast = parser.parse(old_content.encode())
+                            new_ast = parser.parse(new_content.encode())
+                            changes = differ.compare_two_files(old_ast, new_ast)
+                        elif new_content: # old_content is None
+                            ast = parser.parse(new_content.encode())
+                            changes = differ.process_single_file(ast, mode='added')
+                        elif old_content: # new_content is None
+                            ast = parser.parse(old_content.encode())
+                            changes = differ.process_single_file(ast, mode='deleted')
+                        else:
+                            continue
+                    else: # added or deleted
+                        commit = parent_commit if category == "added" else chil_commit
+                        content = git_provider.get_file_content(file_path, commit)
+                        if content is None:
+                            continue
+                        ast = parser.parse(content.encode())
+                        changes = differ.process_single_file(ast, mode=category)
+                    
+                    if changes:
+                        all_changes.append(changes.to_dict())
+                    if not quiet: print(f"PROCESSED {category.upper()} FILE ({file_path})")
+                except Exception as e:
+                    print(f"Error Occured: {str(e)}")
+                    pass
         
         return all_changes
 
@@ -334,7 +352,6 @@ def generate_ast_diff(
         print(f"ERROR - {e}")
         traceback.print_exc()
         return [] # Return empty list on error
-
 
 def generate_ast_diff_for_commits(
     from_commit: str,
