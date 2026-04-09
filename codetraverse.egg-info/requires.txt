@@ -33,6 +33,7 @@ tree-sitter-python==0.23.6
 tree-sitter-rescript
 tree-sitter-rust==0.24.0
 tree-sitter-typescript==0.23.2
+tree-sitter-java==0.23.2
 unidiff==0.7.5
 urllib3==2.5.0
 uv==0.7.19

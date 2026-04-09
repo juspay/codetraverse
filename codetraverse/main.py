@@ -9,6 +9,7 @@ from codetraverse.adapters.rescript_adapter import adapt_rescript_components
 from codetraverse.adapters.rust_adapter import adapt_rust_components
 from codetraverse.adapters.go_adapter import adapt_go_components
 from codetraverse.adapters.typescript_adapter import adapt_typescript_components
+from codetraverse.adapters.java_adapter import adapt_java_components
 from functools import reduce
 import shutil
 import traceback
@@ -26,7 +27,8 @@ adapter_map = {
     "rescript": adapt_rescript_components,
     "rust": adapt_rust_components,
     "golang": adapt_go_components,
-    "typescript": adapt_typescript_components
+    "typescript": adapt_typescript_components,
+    "java": adapt_java_components
 }
 
 EXT_MAP = {
@@ -35,7 +37,8 @@ EXT_MAP = {
     "rescript": [".res"],
     "golang": [".go"],
     "rust": [".rs"],
-    "typescript": [".ts"]
+    "typescript": [".ts"],
+    "java": [".java"]
 }
 
 INVERSE_EXTS = {ext: lang for lang, exts in EXT_MAP.items() for ext in exts}
