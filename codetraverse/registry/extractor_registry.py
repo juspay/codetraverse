@@ -6,6 +6,8 @@ from codetraverse.extractors.go_extractor import GoComponentExtractor
 from codetraverse.extractors.typescript_extractor import TypeScriptComponentExtractor
 from codetraverse.extractors.purescript_extractor import PureScriptComponentExtractor
 from codetraverse.extractors.javascript_extractor import JavascriptExtractor
+from codetraverse.extractors.java_extractor import JavaComponentExtractor
+from codetraverse.extractors.cucumber_extractor import CucumberComponentExtractor
 
 def get_extractor(language: str):
     lang = language.lower()
@@ -25,4 +27,8 @@ def get_extractor(language: str):
         return PureScriptComponentExtractor()
     if lang == "javascript":
         return JavascriptExtractor()
+    if lang == "java":
+        return JavaComponentExtractor()
+    if lang == "cucumber":
+        return CucumberComponentExtractor()
     raise ValueError(f"No extractor for language: {language}")
